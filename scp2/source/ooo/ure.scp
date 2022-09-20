@@ -18,7 +18,7 @@
 
 #include "macros.inc"
 
-#include "AutoInstall/ure"
+//#include "AutoInstall/ure"
 
 #if defined MACOSX
 Directory gid_Dir_Ure_Share_Misc
@@ -204,24 +204,7 @@ Module gid_Module_Root_Ure_Hidden
 	Default = YES;
 	Styles = (HIDDEN_ROOT);
     Dirs = (gid_Dir_Ure_Share_Misc);
-    Files = (auto_ure_ALL,
-            gid_File_Dl_Cli_Ure_Assembly,
-            gid_File_Dl_Policy_Cli_Ure_Assembly,
-            gid_File_Dl_Policy_Cli_Ure_Config,
-            gid_File_Dl_Cli_Basetypes_Assembly,
-            gid_File_Dl_Policy_Cli_Basetypes_Assembly,
-            gid_File_Dl_Policy_Cli_Basetypes_Config,
-            gid_File_Dl_Cli_Uretypes_Assembly,
-            gid_File_Dl_Policy_Cli_Uretypes_Assembly,
-            gid_File_Dl_Policy_Cli_Uretypes_Config,
-            gid_File_Dl_Cli_Cppuhelper_Assembly,
-            gid_File_Dl_Policy_Cli_Cppuhelper_Assembly,
-            gid_File_Dl_Policy_Cli_Cppuhelper_Config,
-            gid_File_Lib_Cli_Cppuhelper_Assembly,
-            gid_File_Lib_Policy_Cli_Cppuhelper_Assembly,
-            gid_File_Lib_Policy_Cli_Cppuhelper_Config,
-            gid_File_Misc_TypesRdb,
-            gid_File_Misc_ServicesRdb);
+    Files = ();
 End
 
 // Windows Registry:

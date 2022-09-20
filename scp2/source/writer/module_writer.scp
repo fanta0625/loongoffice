@@ -18,8 +18,8 @@
 
 #include "macros.inc"
 
-#include "AutoInstall/writer"
-#include "AutoInstall/writer_brand"
+//#include "AutoInstall/writer"
+//#include "AutoInstall/writer_brand"
 
 Module gid_Module_Prg_Wrt
     MOD_NAME_DESC(MODULE_PRG_WRT);
@@ -35,9 +35,7 @@ Module gid_Module_Prg_Wrt_Bin
     Sortkey = "100";
     Default = YES;
     Styles = (HIDDEN_ROOT);
-    Files = (auto_writer_ALL,
-    gid_File_Share_Registry_Writer_Xcd,
-    gid_File_Tmp_Userinstall_Wrt_Inf);
+    Files = ();
 End
 
 Module gid_Module_Brand_Prg_Wrt
@@ -49,7 +47,7 @@ Module gid_Module_Brand_Prg_Wrt
     InstallOrder = "1040";
     Default = YES;
     Styles = (HIDDEN_ROOT);
-    Files = (auto_writer_brand_ALL);
+    Files = ();
 End
 
 Module gid_Module_Langpack_Writer_Template

@@ -40,14 +40,14 @@ solarispackagename = "%BASISPACKAGEPREFIX%WITHOUTDOTPRODUCTVERSION-%LANGUAGESTRI
 solarisrequires = "%BASISPACKAGEPREFIX%WITHOUTDOTPRODUCTVERSION-core"
 packagename = "%BASISPACKAGEPREFIX-%LANGUAGESTRING"
 provides = "%BASISPACKAGEPREFIX-%LANGUAGESTRING"
-requires = "%BASISPACKAGEPREFIX-core %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION"
+requires = "%UNIXPACKAGENAME %PACKAGEVERSION %PACKAGEVERSION-%PACKAGEREVISION"
 copyright = "2026 The Document Foundation"
 solariscopyright = "solariscopyrightfile"
 vendor = "The Document Foundation"
 description = "Language module for %PRODUCTNAME, language %LANGUAGESTRING"
 destpath = "/opt"
 packageversion = "%PACKAGEVERSION"
-pkg_list_entry = "%BASISPACKAGEPREFIX%WITHOUTDOTPRODUCTVERSION-core"
+pkg_list_entry = "%UNIXPACKAGENAME%WITHOUTDOTPRODUCTVERSION"
 End
 
 Start
