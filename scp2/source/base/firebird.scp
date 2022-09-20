@@ -26,7 +26,7 @@ Module gid_Module_Optional_Firebird
     Name = "Firebird";
     Description = "Firebird embedded database";
     PackageInfo = "packinfo_office.txt";
-    ParentID = gid_Module_Root_Brand;
+    ParentID = gid_Module_Root;
     Files = (auto_firebirdsdbc_ALL);
     Styles = (HIDDEN_ROOT);
 End

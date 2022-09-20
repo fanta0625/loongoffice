@@ -30,7 +30,7 @@ Module gid_Module_Pdfimport
     Name = "PDF Import";
     Description = "PDF Import";
     PackageInfo = "packinfo_office.txt";
-    ParentID = gid_Module_Root_Brand;
+    ParentID = gid_Module_Root;
     Styles = (HIDDEN_ROOT);
     Dirs = (gid_Dir_Share_Xpdfimport);
     Files = (auto_pdfimport_ALL,

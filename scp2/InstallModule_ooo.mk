@@ -58,7 +58,6 @@ $(eval $(call gb_InstallModule_add_templates,scp2/ooo,\
 ))
 
 $(eval $(call gb_InstallModule_add_scpfiles,scp2/ooo,\
-    scp2/source/ooo/common_brand \
     scp2/source/ooo/directory_ooo \
     scp2/source/ooo/directory_ooo_macosx \
     scp2/source/ooo/file_extra_ooo \

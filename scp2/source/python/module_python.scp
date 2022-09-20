@@ -29,7 +29,7 @@ Module gid_Module_Pyuno
 #else
     PackageInfo = "packinfo_librelogo_disabled.txt";
 #endif
-    ParentID = gid_Module_Root_Brand;
+    ParentID = gid_Module_Root;
     Name = "PyUNO";
     Description = "Python-UNO bridge";
     Dirs = (gid_Dir_PythonFramework,
@@ -73,7 +73,7 @@ Module gid_Module_Script_Provider_For_Python
     Name = "Script Provider For Python";
     Description = "Script Provider For Python";
     PackageInfo = "packinfo_office.txt";
-    ParentID = gid_Module_Root_Brand;
+    ParentID = gid_Module_Root;
     Files = (auto_python_scriptprovider_ALL);
     Default = YES;
     Styles = (HIDDEN_ROOT);
