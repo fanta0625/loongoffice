@@ -46,12 +46,17 @@ $(eval $(call gb_StaticLibrary_add_generated_cobjects,libpng,\
 	    UnpackedTarball/libpng/intel/intel_init \
 	    UnpackedTarball/libpng/intel/filter_sse2_intrinsics \
 	) \
+	$(if $(filter LOONGARCH64,$(CPUNAME)), \
+	    UnpackedTarball/libpng/loongarch/loongarch_lsx_init \
+	    UnpackedTarball/libpng/loongarch/filter_lsx_intrinsics \
+	) \
 ))
 
 $(eval $(call gb_StaticLibrary_add_defs,libpng,\
 	$(if $(filter ARM AARCH64,$(CPUNAME)), -DPNG_ARM_NEON) \
 	$(if $(filter POWERPC POWERPC64,$(CPUNAME)), -DPNG_POWERPC_VSX ) \
 	$(if $(filter INTEL X86_64,$(CPUNAME)), -DPNG_INTEL_SSE_OPT) \
+	$(if $(filter LOONGARCH64,$(CPUNAME)), -DPNG_LOONGARCH_LSX_OPT) \
 ))
 
 # At least on Linux, with --enable-lto, when building both this external/libpng and external/skia,
