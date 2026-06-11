@@ -24,6 +24,7 @@ Categories=Office;Database;X-Red-Hat-Base;
 Exec=${UNIXBASISROOTNAME} --base %%FILE%%
 MimeType=application/vnd.oasis.opendocument.base;application/vnd.sun.xml.base;
 Name=%PRODUCTNAME Base
+Name[zh_CN]=%PRODUCTNAME 数据库
 GenericName=Database Development
 Comment=Manage databases, create queries and reports to track and manage your information.
 StartupNotify=true

@@ -25,6 +25,7 @@ Categories=Office;Education;Science;Math;X-Red-Hat-Base;
 Exec=${UNIXBASISROOTNAME} --math %%FILE%%
 MimeType=application/mathml+xml;application/vnd.oasis.opendocument.formula;application/vnd.oasis.opendocument.formula-template;application/vnd.stardivision.math;application/vnd.sun.xml.math;application/x-starmath;text/mathml;
 Name=%PRODUCTNAME Math
+Name[zh_CN]=%PRODUCTNAME 公式
 GenericName=Formula Editor
 Comment=Create and edit scientific formulas and equations.
 StartupNotify=true
