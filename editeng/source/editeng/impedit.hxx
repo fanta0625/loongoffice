@@ -710,6 +710,7 @@ private:
     void                RecalcFormatterFontMetrics( FormatterFontMetric& rCurMetrics, SvxFont& rFont );
     void                CheckAutoPageSize();
 
+    sal_Int32           HandleLineHeadForbiddenChar(ParaPortion& rParaPortion, EditLine& rLine,sal_Int32 nBreakPos, tools::Long nRemainingWidth);
     void                ImpBreakLine(ParaPortion& rParaPortion, EditLine& rLine, TextPortion const * pPortion, sal_Int32 nPortionStart, tools::Long nRemainingWidth, bool bCanHyphenate);
     void                ImpAdjustBlocks(ParaPortion& rParaPortion, EditLine& rLine, tools::Long nRemainingSpace );
     EditPaM             ImpConnectParagraphs(ContentNode* pLeft, ContentNode* pRight, bool bBackward = false, bool isUpdateCursors = true);
