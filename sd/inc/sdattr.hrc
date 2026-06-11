@@ -56,8 +56,11 @@ class XColorItem;
 #define ATTR_PRESENT_SHOW_PAUSELOGO          ATTR_PRESENT_START + 14
 #define ATTR_PRESENT_DISPLAY                 TypedWhichId<SfxInt32Item>(ATTR_PRESENT_START + 15)
 #define ATTR_PRESENT_INTERACTIVE             ATTR_PRESENT_START + 16
+#define ATTR_PRESENT_TIMER_GLOBAL_SETTING    TypedWhichId<SfxBoolItem>(ATTR_PRESENT_START + 17)
+#define ATTR_PRESENT_TIMING_MODE             TypedWhichId<SfxInt32Item>(ATTR_PRESENT_START + 18)
+#define ATTR_PRESENT_TIMER_POSITION          TypedWhichId<SfxInt32Item>(ATTR_PRESENT_START + 19)
 
-#define ATTR_PRESENT_END                ATTR_PRESENT_INTERACTIVE
+#define ATTR_PRESENT_END                ATTR_PRESENT_TIMER_POSITION
 
 // animation attributes
 #define ATTR_ANIMATION_START            ATTR_PRESENT_END + 1

@@ -17,7 +17,6 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-
 #include <config_features.h>
 #include <comphelper/diagnose_ex.hxx>
 
@@ -368,6 +367,9 @@ private:
     /// stops the current slide transition sound
     void stopSlideTransitionSound();
 
+    // Create RehearseTimingsActivity
+    void createRehearseTimingsActivity();
+
     /** Prepare a slide transition
 
         This method registers all necessary events and
@@ -484,6 +486,11 @@ private:
     bool                                    mbSlideShowIdle;
     bool                                    mbDisableAnimationZOrder;
     bool                                    mbMovingForward;
+    bool                                    mbRehearseTimings; // Rehearse timings feature switch
+    sal_Int32                               mnTimerMode;      // Timer display mode
+    sal_Int32                               mnTimerPosition;   // Timer position
+    bool                                    mbTimerPositionSet; // Flag indicating whether the timer position is set
+    bool                                    mbTimerModeSet;  // Flag indicating whether the timer display mode is set
 
     EffectRewinder                          maEffectRewinder;
     FrameSynchronization                    maFrameSynchronization;
@@ -596,6 +603,11 @@ SlideShowImpl::SlideShowImpl(
       mbSlideShowIdle( true ),
       mbDisableAnimationZOrder( false ),
       mbMovingForward( true ),
+      mbRehearseTimings( false ), // Default rehearsal timings off
+      mnTimerMode( 0 ),      // Default display current/total time
+      mnTimerPosition( 0 ),    // Default position: top left
+      mbTimerPositionSet(false),  // Default timer position not changed
+      mbTimerModeSet(false), // Default timer mode not changed
       maEffectRewinder(maEventMultiplexer, maEventQueue, maUserEventQueue),
       maFrameSynchronization(1.0 / FrameRate::PreferredFramesPerSecond)
 
@@ -1782,28 +1794,49 @@ sal_Bool SlideShowImpl::setProperty( beans::PropertyValue const& rProperty )
         return (rProperty.Value >>= mbForceManualAdvance);
     }
 
+    if ( rProperty.Name == "TimingMode" )
+    {
+        sal_Int32 nTimingMode = 0;
+        if (! (rProperty.Value >>= nTimingMode))
+            return false;
+
+        mnTimerMode = nTimingMode;
+        mbTimerModeSet = true;
+
+        // Unified call to a helper
+        createRehearseTimingsActivity();
+
+        return true;
+    }
+
+    if ( rProperty.Name == "TimerPosition" )
+    {
+        sal_Int32 nTimerPosition = 0;
+        if (! (rProperty.Value >>= nTimerPosition))
+            return false;
+
+        mnTimerPosition = nTimerPosition;
+        mbTimerPositionSet = true;
+
+        // Unified call to a helper
+        createRehearseTimingsActivity();
+
+        return true;
+    }
+
     if ( rProperty.Name == "RehearseTimings" )
     {
         bool bRehearseTimings = false;
         if (! (rProperty.Value >>= bRehearseTimings))
             return false;
 
+        mbRehearseTimings = bRehearseTimings;
+
         if (bRehearseTimings)
         {
-            // TODO(Q3): Move to slide
-            mpRehearseTimingsActivity = RehearseTimingsActivity::create(
-                SlideShowContext(
-                    mpDummyPtr,
-                    maEventQueue,
-                    maEventMultiplexer,
-                    maScreenUpdater,
-                    maActivitiesQueue,
-                    maUserEventQueue,
-                    *this,
-                    *this,
-                    maViewContainer,
-                    mxComponentContext,
-                    mpBox2DDummyPtr ) );
+            // Enable rehearsal timings, but don't create directly, let helper decide based on current parameters
+            createRehearseTimingsActivity();
+
         }
         else if (mpRehearseTimingsActivity)
         {
@@ -1945,6 +1978,37 @@ sal_Bool SlideShowImpl::setProperty( beans::PropertyValue const& rProperty )
     }
 
     return false;
+}
+
+void SlideShowImpl::createRehearseTimingsActivity()
+{
+    // Don't create if rehearsal timings is not enabled
+    if (!mbRehearseTimings)
+        return;
+
+    // Both parameters must have been set at least once
+    if (!mbTimerModeSet || !mbTimerPositionSet)
+        return;
+
+    // If not created yet, create it once
+    if (!mpRehearseTimingsActivity)
+    {
+        mpRehearseTimingsActivity = RehearseTimingsActivity::create(
+            SlideShowContext(
+                mpDummyPtr,
+                maEventQueue,
+                maEventMultiplexer,
+                maScreenUpdater,
+                maActivitiesQueue,
+                maUserEventQueue,
+                *this,
+                *this,
+                maViewContainer,
+                mxComponentContext,
+                mpBox2DDummyPtr ),
+            mnTimerMode,
+            mnTimerPosition );
+    }
 }
 
 void SlideShowImpl::addSlideShowListener(

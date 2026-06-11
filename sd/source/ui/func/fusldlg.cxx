@@ -108,6 +108,9 @@ void FuSlideShowDlg::DoExecute( SfxRequest& )
     aDlgSet.Put( SfxUInt32Item( ATTR_PRESENT_PAUSE_TIMEOUT, rPresentationSettings.mnPauseTimeout ) );
     aDlgSet.Put( SfxBoolItem( ATTR_PRESENT_SHOW_PAUSELOGO, rPresentationSettings.mbShowPauseLogo ) );
     aDlgSet.Put( SfxBoolItem( ATTR_PRESENT_INTERACTIVE, rPresentationSettings.mbInteractive ) );
+    aDlgSet.Put( SfxBoolItem( ATTR_PRESENT_TIMER_GLOBAL_SETTING, rPresentationSettings.mbRehearseTimerGlobalSetting ) );
+    aDlgSet.Put( SfxInt32Item( ATTR_PRESENT_TIMING_MODE, rPresentationSettings.mnTimerMode ) );
+    aDlgSet.Put( SfxInt32Item( ATTR_PRESENT_TIMER_POSITION, rPresentationSettings.mnTimerPosition ) );
 
     SdOptions* pOptions = SdModule::get()->GetSdOptions(DocumentType::Impress);
     aDlgSet.Put( SfxInt32Item( ATTR_PRESENT_DISPLAY, pOptions->GetDisplay() ) );
@@ -218,6 +221,27 @@ void FuSlideShowDlg::DoExecute( SfxRequest& )
     {
         bValuesChanged = true;
         rPresentationSettings.mbInteractive = bValue;
+    }
+
+    bValue = ITEMVALUE( aDlgSet, ATTR_PRESENT_TIMER_GLOBAL_SETTING, SfxBoolItem );
+    if ( bValue != rPresentationSettings.mbRehearseTimerGlobalSetting ) {
+        bValuesChanged = true;
+        rPresentationSettings.mbRehearseTimerGlobalSetting = bValue;
+    }
+
+    // Handle timing mode setting
+    nValue32 = ITEMVALUE( aDlgSet, ATTR_PRESENT_TIMING_MODE, SfxInt32Item );
+    if ( nValue32 != rPresentationSettings.mnTimerMode )
+    {
+        bValuesChanged = true;
+        rPresentationSettings.mnTimerMode = nValue32;
+    }
+
+    nValue32 = ITEMVALUE( aDlgSet, ATTR_PRESENT_TIMER_POSITION, SfxInt32Item );
+    if ( nValue32 != rPresentationSettings.mnTimerPosition )
+    {
+        bValuesChanged = true;
+        rPresentationSettings.mnTimerPosition = nValue32;
     }
 
     bValue = ITEMVALUE( aDlgSet, ATTR_PRESENT_PEN, SfxBoolItem );

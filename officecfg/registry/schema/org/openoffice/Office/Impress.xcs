@@ -639,6 +639,44 @@
        </info>
        <value>false</value>
      </prop>
+        <prop oor:name="RehearseTimingsMode" oor:type="xs:int" oor:nillable="false">
+          <info>
+            <desc>Specifies the timing display mode for rehearsal: 0=Current slide/Total time, 1=Current slide only, 2=Total time only.</desc>
+            <label>Rehearse timings display mode</label>
+          </info>
+          <constraints>
+            <minInclusive oor:value="0">
+              <info>
+                <desc>Minimum value is 0 (Current slide/Total time).</desc>
+              </info>
+            </minInclusive>
+            <maxInclusive oor:value="2">
+              <info>
+                <desc>Maximum value is 2 (Total time only).</desc>
+              </info>
+            </maxInclusive>
+          </constraints>
+          <value>0</value>
+        </prop>
+        <prop oor:name="RehearseTimingsPosition" oor:type="xs:int" oor:nillable="false">
+          <info>
+            <desc>Specifies the position where the rehearsal timer will be displayed: 0=Top left, 1=Bottom left, 2=Top center, 3=Bottom center, 4=Top right, 5=Bottom right.</desc>
+            <label>Rehearse timings timer position</label>
+          </info>
+          <constraints>
+            <minInclusive oor:value="0">
+              <info>
+                <desc>Minimum value is 0 (Top left).</desc>
+              </info>
+            </minInclusive>
+            <maxInclusive oor:value="5">
+              <info>
+                <desc>Maximum value is 5 (Bottom right).</desc>
+              </info>
+            </maxInclusive>
+          </constraints>
+          <value>0</value>
+        </prop>
       </group>
       <group oor:name="Compatibility">
         <info>

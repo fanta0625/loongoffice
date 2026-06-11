@@ -72,6 +72,11 @@ private:
     std::unique_ptr<weld::Label> m_xMonitorExternal;
     std::unique_ptr<weld::Label> m_xExternal;
 
+    // Rehearse timings controls
+    std::unique_ptr<weld::CheckButton> m_xCbxTimerGlobalSettings;
+    std::unique_ptr<weld::ComboBox> m_xLbTimerMode;
+    std::unique_ptr<weld::ComboBox> m_xLbTimerPosition;
+
     DECL_LINK(ChangeRemoteHdl, weld::Toggleable&, void);
     DECL_LINK(ChangeRangeHdl, weld::Toggleable&, void);
     DECL_LINK(ClickWindowPresentationHdl, weld::Toggleable&, void);
