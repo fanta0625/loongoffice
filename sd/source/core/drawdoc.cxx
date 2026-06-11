@@ -112,8 +112,35 @@ PresentationSettings::PresentationSettings()
     mnPauseTimeout( 0 ),
     mbShowPauseLogo( false ),
     mbStartCustomShow( false ),
-    mbInteractive( true )
+    mbInteractive( true ),
+    mbRehearseTimerGlobalSetting(true), // Default global timer settings to True
+    mnTimerMode( 0 ),      // Default to display current/total time
+    mnTimerPosition( 0 )    // Default position: top left
 {
+    // Read rehearsal timer settings from global configuration file
+    if (mbRehearseTimerGlobalSetting)
+    {
+        try
+        {
+            mnTimerMode = officecfg::Office::Impress::Misc::Start::RehearseTimingsMode::get();
+            mnTimerPosition = officecfg::Office::Impress::Misc::Start::RehearseTimingsPosition::get();
+
+            // Validate range to prevent configuration file from being manually modified to invalid values
+            if (mnTimerMode < 0 || mnTimerMode > 2)
+            {
+                mnTimerMode = 0;
+            }
+
+            if (mnTimerPosition < 0 || mnTimerPosition > 5)
+            {
+                mnTimerPosition = 0;
+            }
+        }
+        catch (const css::uno::Exception& e)
+        {
+            // Keep default values 0, 0
+        }
+    }
 }
 
 SdDrawDocument::SdDrawDocument(DocumentType eType, SfxObjectShell* pDrDocSh)

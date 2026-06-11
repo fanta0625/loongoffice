@@ -17,7 +17,6 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-
 #include <rtl/ustrbuf.hxx>
 #include <vcl/svapp.hxx>
 #include <vcl/gdimtf.hxx>
@@ -134,12 +133,17 @@ private:
 const sal_Int32 LEFT_BORDER_SPACE  = 10;
 const sal_Int32 LOWER_BORDER_SPACE = 30;
 
-RehearseTimingsActivity::RehearseTimingsActivity( const SlideShowContext& rContext ) :
+RehearseTimingsActivity::RehearseTimingsActivity( const SlideShowContext& rContext,
+                                                     sal_Int32 nTimingMode,
+                                                     sal_Int32 nTimerPosition ) :
     mrEventQueue(rContext.mrEventQueue),
     mrScreenUpdater(rContext.mrScreenUpdater),
     mrEventMultiplexer(rContext.mrEventMultiplexer),
     mrActivitiesQueue(rContext.mrActivitiesQueue),
     maElapsedTime( rContext.mrEventQueue.getTimer() ),
+    maTotalElapsedTime( rContext.mrEventQueue.getTimer() ), // Add a total timer
+    mnTimerMode( nTimingMode ),      // Timer display mode
+    mnTimerPosition( nTimerPosition ), // Timer position
     maViews(),
     maSpriteRectangle(),
     maFont( Application::GetSettings().GetStyleSettings().GetLabelFont() ),
@@ -155,15 +159,38 @@ RehearseTimingsActivity::RehearseTimingsActivity( const SlideShowContext& rConte
     maFont.SetAlignment( ALIGN_BASELINE );
     maFont.SetColor( COL_BLACK );
 
-    // determine sprite size (in pixel):
+    // determine sprite size (in pixel) for dual timing display:
     ScopedVclPtrInstance< VirtualDevice > blackHole;
     blackHole->EnableOutput(false);
     blackHole->SetFont( maFont );
     blackHole->SetMapMode(MapMode(MapUnit::MapPixel));
     tools::Rectangle rect;
     const FontMetric metric( blackHole->GetFontMetric() );
-    blackHole->GetTextBoundRect( rect, u"XX:XX:XX"_ustr );
-    maSpriteSizePixel.setX( rect.getOpenWidth() * 12 / 10 );
+    // Select different sample strings based on timer display mode to calculate width
+    OUString aSampleText;
+    sal_Int32 nWidthFactor; // Width factor (numerator, denominator fixed at 10)
+
+    switch (mnTimerMode)
+    {
+        case 1: // Show current slide timing only
+        case 2: // Show total timing only
+            // Single timer display: "XX:XX:XX"
+            aSampleText = u"XX:XX:XX"_ustr;
+            nWidthFactor = 12; // 1.2x
+            break;
+        case 0: // Show current slide/total time (dual timer display)
+        default:
+            // Dual timer display: "XX:XX:XX / XX:XX:XX"
+            aSampleText = u"XX:XX:XX / XX:XX:XX"_ustr;
+            nWidthFactor = 11; // 1.1x
+            break;
+    }
+
+    // Calculate text boundary first
+    blackHole->GetTextBoundRect( rect, aSampleText );
+
+    // Then set width based on calculation result and corresponding factor
+    maSpriteSizePixel.setX( rect.getOpenWidth() * nWidthFactor / 10 );
     maSpriteSizePixel.setY( metric.GetLineHeight() * 11 / 10 );
     mnYOffset = (metric.GetAscent() + (metric.GetLineHeight() / 20));
 
@@ -184,10 +211,12 @@ RehearseTimingsActivity::~RehearseTimingsActivity()
 }
 
 std::shared_ptr<RehearseTimingsActivity> RehearseTimingsActivity::create(
-    const SlideShowContext& rContext )
+    const SlideShowContext& rContext,
+    sal_Int32 nTimingMode,
+    sal_Int32 nTimerPosition )
 {
     std::shared_ptr<RehearseTimingsActivity> pActivity(
-        new RehearseTimingsActivity( rContext ));
+        new RehearseTimingsActivity( rContext, nTimingMode, nTimerPosition ));
 
     pActivity->mpMouseHandler =
         std::make_shared<MouseHandler>(*pActivity);
@@ -204,6 +233,11 @@ std::shared_ptr<RehearseTimingsActivity> RehearseTimingsActivity::create(
 void RehearseTimingsActivity::start()
 {
     maElapsedTime.reset();
+    // Reset total timer when total time is 0
+    if (maTotalElapsedTime.getElapsedTime() == 0.0)
+    {
+        maTotalElapsedTime.reset();
+    }
     mbDrawPressed = false;
     mbActive = true;
 
@@ -306,11 +340,50 @@ basegfx::B2DRange RehearseTimingsActivity::calcSpriteRectangle( UnoViewSharedPtr
         return basegfx::B2DRange();
 
     const geometry::IntegerSize2D realSize( xBitmap->getSize() );
-    // pixel:
-    basegfx::B2DPoint spritePos(
-        std::min<sal_Int32>( realSize.Width, LEFT_BORDER_SPACE ),
-        std::max<sal_Int32>( 0, realSize.Height - maSpriteSizePixel.getY()
-                                                - LOWER_BORDER_SPACE ) );
+
+    // Calculate display position based on timer position setting
+    basegfx::B2DPoint spritePos;
+
+    switch (mnTimerPosition)
+    {
+        case 0: // Top left
+            spritePos = basegfx::B2DPoint(
+                std::min<sal_Int32>( realSize.Width, LEFT_BORDER_SPACE ),
+                std::min<sal_Int32>( realSize.Height, LOWER_BORDER_SPACE ) );
+            break;
+        case 1: // Bottom left
+            spritePos = basegfx::B2DPoint(
+                std::min<sal_Int32>( realSize.Width, LEFT_BORDER_SPACE ),
+                std::max<sal_Int32>( 0, realSize.Height - maSpriteSizePixel.getY()
+                                                    - LOWER_BORDER_SPACE ) );
+            break;
+        case 2: // Top center
+            spritePos = basegfx::B2DPoint(
+                std::max<sal_Int32>( 0, (realSize.Width - maSpriteSizePixel.getX()) / 2 ),
+                std::min<sal_Int32>( realSize.Height, LOWER_BORDER_SPACE ) );
+            break;
+        case 3: // Bottom center
+            spritePos = basegfx::B2DPoint(
+                std::max<sal_Int32>( 0, (realSize.Width - maSpriteSizePixel.getX()) / 2 ),
+                std::max<sal_Int32>( 0, realSize.Height - maSpriteSizePixel.getY()
+                                                    - LOWER_BORDER_SPACE ) );
+            break;
+        case 4: // Top right
+            spritePos = basegfx::B2DPoint(
+                std::max<sal_Int32>( 0, realSize.Width - maSpriteSizePixel.getX()
+                                                    - LEFT_BORDER_SPACE ),
+                std::min<sal_Int32>( realSize.Height, LOWER_BORDER_SPACE ) );
+            break;
+        case 5: // Bottom right
+        default:
+            spritePos = basegfx::B2DPoint(
+                std::max<sal_Int32>( 0, realSize.Width - maSpriteSizePixel.getX()
+                                                    - LEFT_BORDER_SPACE ),
+                std::max<sal_Int32>( 0, realSize.Height - maSpriteSizePixel.getY()
+                                                    - LOWER_BORDER_SPACE ) );
+            break;
+    }
+
     basegfx::B2DHomMatrix transformation( rView->getTransformation() );
     transformation.invert();
     spritePos *= transformation;
@@ -406,25 +479,52 @@ void RehearseTimingsActivity::paintAllSprites() const
         { return this->paint( pSprite->getContentCanvas() ); } );
 }
 
+namespace
+{
+OUString formatRehearseTime(sal_Int32 nTotalSecs)
+{
+    OUStringBuffer buf;
+    sal_Int32 n = nTotalSecs / 3600;
+    if (n < 10)
+        buf.append('0');
+    buf.append(OUString::number(n) + ":");
+    n = ((nTotalSecs % 3600) / 60);
+    if (n < 10)
+        buf.append('0');
+    buf.append(OUString::number(n) + ":");
+    n = (nTotalSecs % 60);
+    if (n < 10)
+        buf.append('0');
+    buf.append(n);
+    return buf.makeStringAndClear();
+}
+}
+
 void RehearseTimingsActivity::paint( cppcanvas::CanvasSharedPtr const & canvas ) const
 {
-    // build timer string:
-    const sal_Int32 nTimeSecs =
-        static_cast<sal_Int32>(maElapsedTime.getElapsedTime());
-    OUStringBuffer buf;
-    sal_Int32 n = nTimeSecs / 3600;
-    if (n < 10)
-        buf.append( '0' );
-    buf.append( OUString::number(n) + ":" );
-    n = ((nTimeSecs % 3600) / 60);
-    if (n < 10)
-        buf.append( '0' );
-    buf.append( OUString::number(n) + ":" );
-    n = (nTimeSecs % 60);
-    if (n < 10)
-        buf.append( '0' );
-    buf.append( n );
-    const OUString time = buf.makeStringAndClear();
+    // build timer strings based on timing mode setting
+    const sal_Int32 nCurrentSlideTimeSecs
+        = static_cast<sal_Int32>(maElapsedTime.getElapsedTime());
+    const sal_Int32 nTotalTimeSecs
+        = static_cast<sal_Int32>(maTotalElapsedTime.getElapsedTime());
+
+    OUString time;
+
+    // Display different timing information based on timer display mode
+    switch (mnTimerMode)
+    {
+        case 1: // Show current slide timing only
+            time = formatRehearseTime(nCurrentSlideTimeSecs);
+            break;
+        case 2: // Show total timing only
+            time = formatRehearseTime(nTotalTimeSecs);
+            break;
+        case 0: // Show current slide/total time (dual timer display)
+        default:
+            time = formatRehearseTime(nCurrentSlideTimeSecs) + " / "
+                   + formatRehearseTime(nTotalTimeSecs);
+            break;
+    }
 
     // create the MetaFile:
     GDIMetaFile metaFile;

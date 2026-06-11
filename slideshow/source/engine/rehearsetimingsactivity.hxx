@@ -46,7 +46,9 @@ public:
     /** Creates the activity.
      */
     static std::shared_ptr<RehearseTimingsActivity> create(
-        const SlideShowContext& rContext );
+        const SlideShowContext& rContext,
+        sal_Int32 nTimingMode = 0,      // Timer display mode
+        sal_Int32 nTimerPosition = 0 ); // Timer position
 
     virtual ~RehearseTimingsActivity() override;
     RehearseTimingsActivity(const RehearseTimingsActivity&) = delete;
@@ -83,7 +85,9 @@ public:
 private:
     class WakeupEvent;
 
-    explicit RehearseTimingsActivity( const SlideShowContext& rContext );
+    explicit RehearseTimingsActivity( const SlideShowContext& rContext,
+                                     sal_Int32 nTimingMode = 0,      // Timer display mode
+                                     sal_Int32 nTimerPosition = 0 ); // Timer position
 
     void paint( ::cppcanvas::CanvasSharedPtr const & canvas ) const;
     void paintAllSprites() const;
@@ -112,6 +116,9 @@ private:
     EventMultiplexer&               mrEventMultiplexer;
     ActivitiesQueue&                mrActivitiesQueue;
     canvas::tools::ElapsedTime      maElapsedTime;
+    canvas::tools::ElapsedTime      maTotalElapsedTime; // Add total timer
+    sal_Int32                       mnTimerMode;      // Timer display mode
+    sal_Int32                       mnTimerPosition;   // Timer position
 
     ViewsVecT                       maViews;
 

@@ -113,6 +113,9 @@ namespace sd
         bool mbShowPauseLogo;
         bool mbStartCustomShow;
         bool mbInteractive;
+        bool mbRehearseTimerGlobalSetting;  // Whether to use global timer settings
+        sal_Int32 mnTimerMode;      // Timer display mode: 0=Current/Total time, 1=Current slide, 2=Total time
+        sal_Int32 mnTimerPosition;   // Timer position: 0=Top left, 1=Bottom left, 2=Top center, 3=Bottom center, 4=Top right, 5=Bottom right
 
         PresentationSettings();
     };

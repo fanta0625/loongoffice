@@ -786,6 +786,142 @@
                 <property name="top-attach">2</property>
               </packing>
             </child>
+                        <child>
+              <object class="GtkFrame" id="framerehearsetimings">
+                <property name="visible">True</property>
+                <property name="can-focus">False</property>
+                <property name="hexpand">True</property>
+                <property name="vexpand">True</property>
+                <property name="label-xalign">0</property>
+                <property name="shadow-type">none</property>
+                <child>
+                  <!-- n-columns=2 n-rows=3 -->
+                  <object class="GtkGrid" id="grid11">
+                    <property name="visible">True</property>
+                    <property name="can-focus">False</property>
+                    <property name="margin-start">12</property>
+                    <property name="margin-top">6</property>
+                    <property name="hexpand">True</property>
+                    <property name="vexpand">True</property>
+                    <property name="row-spacing">6</property>
+                    <property name="column-spacing">12</property>
+                    <!-- Global Settings Checkbox -->
+                    <child>
+                      <object class="GtkCheckButton" id="globalrehearsetimings">
+                        <property name="label" translatable="yes" context="presentationdialog|globalrehearsetimings">_Global Settings</property>
+                        <property name="visible">True</property>
+                        <property name="can-focus">True</property>
+                        <property name="receives-default">False</property>
+                        <property name="use-underline">True</property>
+                        <property name="draw-indicator">True</property>
+                        <child internal-child="accessible">
+                          <object class="AtkObject" id="globalrehearsetimings-atkobject">
+                            <property name="AtkObject::accessible-description" translatable="yes" context="presentationdialog|extended_tip|globalrehearsetimings">Apply rehearsal timing settings globally to all presentations.</property>
+                          </object>
+                        </child>
+                      </object>
+                      <packing>
+                        <property name="left-attach">0</property>
+                        <property name="top-attach">0</property>
+                        <property name="width">2</property>
+                      </packing>
+                    </child>
+                    <!-- Timing Mode Label -->
+                    <child>
+                      <object class="GtkLabel" id="timingmode_label">
+                        <property name="visible">True</property>
+                        <property name="can-focus">False</property>
+                        <property name="label" translatable="yes" context="presentationdialog|timingmode_label">_Timing mode:</property>
+                        <property name="use-underline">True</property>
+                        <property name="mnemonic-widget">timingmode_cb</property>
+                        <property name="xalign">0</property>
+                      </object>
+                      <packing>
+                        <property name="left-attach">0</property>
+                        <property name="top-attach">1</property>
+                      </packing>
+                    </child>
+                    <!-- Timing Mode ComboBox -->
+                    <child>
+                      <object class="GtkComboBoxText" id="timingmode_cb">
+                        <property name="visible">True</property>
+                        <property name="can-focus">False</property>
+                        <property name="hexpand">True</property>
+                        <items>
+                          <item id="0" translatable="yes" context="presentationdialog|timingmode_cb">Current slide / Total time</item>
+                          <item id="1" translatable="yes" context="presentationdialog|timingmode_cb">Current slide only</item>
+                          <item id="2" translatable="yes" context="presentationdialog|timingmode_cb">Total time only</item>
+                        </items>
+                        <child internal-child="accessible">
+                          <object class="AtkObject" id="timingmode_cb-atkobject">
+                            <property name="AtkObject::accessible-description" translatable="yes" context="presentationdialog|extended_tip|timingmode_cb">Select the timing display mode for rehearsal. Choose to display current slide time, total time, or both.</property>
+                          </object>
+                        </child>
+                      </object>
+                      <packing>
+                        <property name="left-attach">1</property>
+                        <property name="top-attach">1</property>
+                      </packing>
+                    </child>
+                    <!-- Timer Position Label -->
+                    <child>
+                      <object class="GtkLabel" id="timerposition_label">
+                        <property name="visible">True</property>
+                        <property name="can-focus">False</property>
+                        <property name="label" translatable="yes" context="presentationdialog|timerposition_label">Timer _position:</property>
+                        <property name="use-underline">True</property>
+                        <property name="mnemonic-widget">timerposition_cb</property>
+                        <property name="xalign">0</property>
+                      </object>
+                      <packing>
+                        <property name="left-attach">0</property>
+                        <property name="top-attach">2</property>
+                      </packing>
+                    </child>
+                    <!-- Timer Position ComboBox -->
+                    <child>
+                      <object class="GtkComboBoxText" id="timerposition_cb">
+                        <property name="visible">True</property>
+                        <property name="can-focus">False</property>
+                        <property name="hexpand">True</property>
+                        <items>
+                          <item id="0" translatable="yes" context="presentationdialog|timerposition_cb">Top left</item>
+                          <item id="1" translatable="yes" context="presentationdialog|timerposition_cb">Bottom left</item>
+                          <item id="2" translatable="yes" context="presentationdialog|timerposition_cb">Top center</item>
+                          <item id="3" translatable="yes" context="presentationdialog|timerposition_cb">Bottom center</item>
+                          <item id="4" translatable="yes" context="presentationdialog|timerposition_cb">Top right</item>
+                          <item id="5" translatable="yes" context="presentationdialog|timerposition_cb">Bottom right</item>
+                        </items>
+                        <child internal-child="accessible">
+                          <object class="AtkObject" id="timerposition_cb-atkobject">
+                            <property name="AtkObject::accessible-description" translatable="yes" context="presentationdialog|extended_tip|timerposition_cb">Select the screen position where the rehearsal timer will be displayed during presentation.</property>
+                          </object>
+                        </child>
+                      </object>
+                      <packing>
+                        <property name="left-attach">1</property>
+                        <property name="top-attach">2</property>
+                      </packing>
+                    </child>
+                  </object>
+                </child>
+                <!-- Frame Label -->
+                <child type="label">
+                  <object class="GtkLabel" id="label6">
+                    <property name="visible">True</property>
+                    <property name="can-focus">False</property>
+                    <property name="label" translatable="yes" context="presentationdialog|label6">Rehearse Timings</property>
+                    <attributes>
+                      <attribute name="weight" value="bold"/>
+                    </attributes>
+                  </object>
+                </child>
+              </object>
+              <packing>
+                <property name="left-attach">0</property>
+                <property name="top-attach">3</property>
+              </packing>
+            </child>
             <child>
               <object class="GtkFrame" id="frameremote">
                 <property name="visible">True</property>
@@ -867,7 +1003,7 @@
               </object>
               <packing>
                 <property name="left-attach">0</property>
-                <property name="top-attach">3</property>
+                <property name="top-attach">4</property>
               </packing>
             </child>
           </object>

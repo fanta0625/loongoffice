@@ -123,6 +123,8 @@ static std::span<const SfxItemPropertyMapEntry> ImplGetPresentationPropertyMap()
         { u"Pause"_ustr,                    ATTR_PRESENT_PAUSE_TIMEOUT,           ::cppu::UnoType<sal_Int32>::get(),    0, 0 },
         { u"StartWithNavigator"_ustr,       ATTR_PRESENT_NAVIGATOR,               cppu::UnoType<bool>::get(),                0, 0 },
         { u"UsePen"_ustr,                   ATTR_PRESENT_PEN,                     cppu::UnoType<bool>::get(),                0, 0 },
+        { u"TimingMode"_ustr,               ATTR_PRESENT_TIMING_MODE,             ::cppu::UnoType<sal_Int32>::get(),    0, 0 },
+        { u"TimerPosition"_ustr,           ATTR_PRESENT_TIMER_POSITION,          ::cppu::UnoType<sal_Int32>::get(),    0, 0 },
     };
 
     return aPresentationPropertyMap_Impl;
@@ -529,6 +531,37 @@ void SAL_CALL SlideShow::setPropertyValue( const OUString& aPropertyName, const 
         }
         break;
     }
+    // Add timer mode setting
+    case ATTR_PRESENT_TIMING_MODE:
+    {
+        sal_Int32 nValue = 0;
+        if( (aValue >>= nValue) && (nValue >= 0 && nValue <= 2) )
+        {
+            bIllegalArgument = false;
+            if( rPresSettings.mnTimerMode != nValue )
+            {
+                bValuesChanged = true;
+                rPresSettings.mnTimerMode = nValue;
+            }
+        }
+        break;
+    }
+
+    // Add timer position setting
+    case ATTR_PRESENT_TIMER_POSITION:
+    {
+        sal_Int32 nValue = 0;
+        if( (aValue >>= nValue) && (nValue >= 0 && nValue <= 5) )
+        {
+            bIllegalArgument = false;
+            if( rPresSettings.mnTimerPosition != nValue )
+            {
+                bValuesChanged = true;
+                rPresSettings.mnTimerPosition = nValue;
+            }
+        }
+        break;
+    }
 
     default:
         throw UnknownPropertyException( OUString::number(pEntry ? pEntry->nWID : -1), static_cast<cppu::OWeakObject*>(this));
@@ -601,6 +634,10 @@ Any SAL_CALL SlideShow::getPropertyValue( const OUString& PropertyName )
         SdOptions* pOptions = SdModule::get()->GetSdOptions(DocumentType::Impress);
         return Any(pOptions->GetDisplay());
     }
+    case ATTR_PRESENT_TIMING_MODE:
+        return Any( rPresSettings.mnTimerMode );
+    case ATTR_PRESENT_TIMER_POSITION:
+        return Any( rPresSettings.mnTimerPosition );
 
     default:
         throw UnknownPropertyException( OUString::number(pEntry ? pEntry->nWID : -1), static_cast<cppu::OWeakObject*>(this));
@@ -835,7 +872,16 @@ void SAL_CALL SlideShow::end()
 
 void SAL_CALL SlideShow::rehearseTimings()
 {
-    Sequence< PropertyValue > aArguments{ comphelper::makePropertyValue(u"RehearseTimings"_ustr, true) };
+    // Get the presentation settings to retrieve timing mode and timer position
+    const PresentationSettings& rSettings = mpDoc->getPresentationSettings();
+
+    // Create arguments array with RehearseTimings, TimingMode, and TimerPosition
+    Sequence< PropertyValue > aArguments{
+        comphelper::makePropertyValue(u"RehearseTimings"_ustr, true),
+        comphelper::makePropertyValue(u"TimingMode"_ustr, rSettings.mnTimerMode),
+        comphelper::makePropertyValue(u"TimerPosition"_ustr, rSettings.mnTimerPosition)
+    };
+
     startWithArguments( aArguments );
 }
 

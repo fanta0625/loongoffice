@@ -58,6 +58,8 @@ struct PresentationSettingsEx : public PresentationSettings
     VclPtr<vcl::Window> mpParentWindow;
     css::uno::Reference< css::drawing::XDrawPage > mxStartPage;
     css::uno::Reference< css::animations::XAnimationNode > mxAnimationNode;
+    sal_Int32 mnTimerMode;
+    sal_Int32 mnTimerPosition;
 
     PresentationSettingsEx( const PresentationSettingsEx& );
     explicit PresentationSettingsEx( PresentationSettings const & );
@@ -340,6 +342,8 @@ private:
     bool            mbWasPaused;        // used to cache pause state during context menu
     bool            mbInputFreeze;
     bool            mbActive;
+    sal_Int32       mnTimerMode;      // Timer display mode
+    sal_Int32       mnTimerPosition;   // Timer position
 
     PresentationSettings maPresSettings;
     sal_Int32       mnUserPaintColor;

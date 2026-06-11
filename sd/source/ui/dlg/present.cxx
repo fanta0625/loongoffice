@@ -79,6 +79,9 @@ SdStartPresentationDlg::SdStartPresentationDlg(weld::Window* pWindow, const SfxI
     , m_xAllMonitors(m_xBuilder->weld_label(u"allmonitors_str"_ustr))
     , m_xMonitorExternal(m_xBuilder->weld_label(u"externalmonitor_str"_ustr))
     , m_xExternal(m_xBuilder->weld_label(u"external_str"_ustr))
+    , m_xCbxTimerGlobalSettings(m_xBuilder->weld_check_button(u"globalrehearsetimings"_ustr) )
+    , m_xLbTimerMode(m_xBuilder->weld_combo_box(u"timingmode_cb"_ustr))
+    , m_xLbTimerPosition(m_xBuilder->weld_combo_box(u"timerposition_cb"_ustr))
 {
     m_xFormatter->SetExtFormat(ExtTimeFieldFormat::LongDuration);
     m_xFormatter->EnableEmptyField(false);
@@ -180,6 +183,31 @@ SdStartPresentationDlg::SdStartPresentationDlg(weld::Window* pWindow, const SfxI
 
     m_xCbxInteractiveMode->set_active( static_cast<const SfxBoolItem&>( rOutAttrs.Get( ATTR_PRESENT_INTERACTIVE ) ).GetValue() );
 
+    // Initialize global settings checkbox state
+    bool bGlobalSettings = static_cast<const SfxBoolItem&>( rOutAttrs.Get( ATTR_PRESENT_TIMER_GLOBAL_SETTING ) ).GetValue();
+    m_xCbxTimerGlobalSettings->set_active(bGlobalSettings);
+
+    // Initialize timer settings
+    sal_Int32 nTimerMode = 0;
+    sal_Int32 nTimerPosition = 0;
+
+    if (bGlobalSettings) {
+        nTimerMode = officecfg::Office::Impress::Misc::Start::RehearseTimingsMode::get();
+        nTimerPosition = officecfg::Office::Impress::Misc::Start::RehearseTimingsPosition::get();
+    } else {
+        nTimerMode = static_cast<const SfxInt32Item&>(rOutAttrs.Get(ATTR_PRESENT_TIMING_MODE)).GetValue();
+        nTimerPosition = static_cast<const SfxInt32Item&>(rOutAttrs.Get(ATTR_PRESENT_TIMER_POSITION)).GetValue();
+    }
+
+    // Validate timer settings range, reset to default if out of range
+    if (nTimerMode < 0 || nTimerMode > 2)
+        nTimerMode = 0;
+    if (nTimerPosition < 0 || nTimerPosition > 5)
+        nTimerPosition = 0;
+
+    m_xLbTimerMode->set_active(nTimerMode);
+    m_xLbTimerPosition->set_active(nTimerPosition);
+
     InitMonitorSettings();
 
     ChangeRangeHdl(*m_xRbtCustomshow);
@@ -211,6 +239,13 @@ short SdStartPresentationDlg::run()
             m_xCbxShowNavigationButton->get_active(), batch);
         officecfg::Office::Impress::Layout::Display::NavigationBtnScale::set(
             m_xLbNavigationButtonsSize->get_active(), batch);
+        bool bGlobalSettings = m_xCbxTimerGlobalSettings->get_active();
+        if (bGlobalSettings){
+            officecfg::Office::Impress::Misc::Start::RehearseTimingsMode::set(
+                m_xLbTimerMode->get_active(), batch);
+            officecfg::Office::Impress::Misc::Start::RehearseTimingsPosition::set(
+                m_xLbTimerPosition->get_active(), batch);
+        }
 
 #ifdef ENABLE_SDREMOTE
         officecfg::Office::Impress::Misc::Start::EnableSdremote::set(m_xCbxEnableRemote->get_active(), batch);
@@ -340,6 +375,20 @@ void SdStartPresentationDlg::GetAttr( SfxItemSet& rAttr )
     rAttr.Put( SfxUInt32Item ( ATTR_PRESENT_PAUSE_TIMEOUT, m_xFormatter->GetTime().GetMSFromTime() / 1000 ) );
     rAttr.Put( SfxBoolItem ( ATTR_PRESENT_SHOW_PAUSELOGO, m_xCbxAutoLogo->get_active() ) );
     rAttr.Put( SfxBoolItem ( ATTR_PRESENT_INTERACTIVE, m_xCbxInteractiveMode->get_active() ) );
+    rAttr.Put( SfxBoolItem ( ATTR_PRESENT_TIMER_GLOBAL_SETTING, m_xCbxTimerGlobalSettings->get_active() ) );
+
+    // Save timer property values
+    sal_Int32 nTimingMode = m_xLbTimerMode->get_active();
+    sal_Int32 nTimerPosition = m_xLbTimerPosition->get_active();
+
+    // Validate timer property values
+    if (nTimingMode < 0 || nTimingMode > 2)
+        nTimingMode = 0; // Reset to default if invalid
+    if (nTimerPosition < 0 || nTimerPosition > 5)
+        nTimerPosition = 0; // Reset to default if invalid
+
+    rAttr.Put( SfxInt32Item ( ATTR_PRESENT_TIMING_MODE, nTimingMode ) );
+    rAttr.Put( SfxInt32Item ( ATTR_PRESENT_TIMER_POSITION, nTimerPosition ) );
 
     int nPos = m_xLBMonitor->get_active();
     if (nPos != -1)
