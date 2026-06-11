@@ -48,13 +48,13 @@ $(deb_WORKDIR)/%/DEBIAN/control: $(deb_SRCDIR)/control $(gb_CustomTarget_workdir
 		PREFIXDIR=/usr \
 		./create_tree.sh
 	sed $(deb_SRCDIR)/openoffice.org-debian-menus \
-		-e 's/%PRODUCTNAME/$(PRODUCTNAME.$*) $(PRODUCTVERSION)/' \
+		-e 's/%PRODUCTNAME/$(PRODUCTNAME.$*)/' \
 		-e 's/%PREFIX/$(UNIXFILENAME.$*)/' \
 		-e 's/%ICONPREFIX/$(UNIXFILENAME.$*)/' \
 		> $(deb_WORKDIR)/$*/usr/lib/menu/$*$(PKGVERSIONSHORT)
 	echo "Package: $*$(PKGVERSIONSHORT)-debian-menus" >$@
 	cat $< | tr -d "\015" | \
-		sed 's/%productname/$(PRODUCTNAME.$*) $(PRODUCTVERSION)/' \
+		sed 's/%productname/$(PRODUCTNAME.$*)/' \
 		>> $@
 	echo "Version: $(PKGVERSION)-$(LIBO_VERSION_PATCH)" >>$@
 	du -k -s $(deb_WORKDIR)/$* | $(gb_AWK) -F ' ' '{ printf "Installed-Size: %s\n", $$1 ; }' >>$@

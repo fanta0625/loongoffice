@@ -205,7 +205,7 @@ $(share_WORKDIR)/%/build.flag: $(share_SRCDIR)/share/brand.pl $(LAUNCHERS) \
 	mkdir -p $(dir $@)
 	$(call gb_Output_announce,$(subst $(WORKDIR)/,,$@),$(true),PRL,1)
 	$(call gb_Trace_StartRange,$(subst $(WORKDIR)/,,$@),PRL)
-	$(PERL) $(share_SRCDIR)/share/brand.pl -p '$${PRODUCTNAME} $${PRODUCTVERSION}' -u $(UNIXFILENAME.$*) \
+	$(PERL) $(share_SRCDIR)/share/brand.pl -p '$${PRODUCTNAME}' -u $(UNIXFILENAME.$*) \
 		$(brand_URIPARAM) \
 		--iconprefix '$${UNIXBASISROOTNAME}-' $(LAUNCHERS) $(share_WORKDIR)/$*
 	$(call gb_ExternalExecutable_get_command,python) $(share_TRANSLATE) -p $(PRODUCTNAME.$*)$(PRODUCTVERSION) -d $(share_WORKDIR)/$* \
