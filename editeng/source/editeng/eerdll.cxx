@@ -95,7 +95,7 @@ ItemInfoPackage& getItemInfoPackageEditEngine()
             { EE_PARA_XMLATTRIBS, new SvXMLAttrContainerItem( EE_PARA_XMLATTRIBS ), 0, SFX_ITEMINFOFLAG_SUPPORT_SURROGATE  },
             { EE_PARA_HANGINGPUNCTUATION, new SvxHangingPunctuationItem(false, EE_PARA_HANGINGPUNCTUATION), SID_ATTR_PARA_HANGPUNCTUATION, SFX_ITEMINFOFLAG_NONE  },
             { EE_PARA_FORBIDDENRULES, new SvxForbiddenRuleItem(true, EE_PARA_FORBIDDENRULES), SID_ATTR_PARA_FORBIDDEN_RULES, SFX_ITEMINFOFLAG_NONE  },
-            { EE_PARA_ASIANCJKSPACING, new SvxScriptSpaceItem( true, EE_PARA_ASIANCJKSPACING ), SID_ATTR_PARA_SCRIPTSPACE, SFX_ITEMINFOFLAG_NONE  },
+            { EE_PARA_ASIANCJKSPACING, new SvxScriptSpaceItem( false, EE_PARA_ASIANCJKSPACING ), SID_ATTR_PARA_SCRIPTSPACE, SFX_ITEMINFOFLAG_NONE  },
 
             // need to use dynamic default for this Item, the office tends to crash at shutdown
             // due to static stuff/cleanup at ~SvxNumRule (pStdNumFmt/pStdOutlineNumFmt)
