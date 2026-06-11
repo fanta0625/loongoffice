@@ -1718,48 +1718,7 @@
       </object>
     </child>
     <child>
-      <object class="GtkMenuItem" id="ExtendedHelpD">
-        <property name="visible">True</property>
-        <property name="can_focus">False</property>
-        <property name="action_name">.uno:ExtendedHelp</property>
-      </object>
-    </child>
-    <child>
-      <object class="GtkMenuItem" id="DocumentationD">
-        <property name="visible">True</property>
-        <property name="can_focus">False</property>
-        <property name="action_name">.uno:Documentation</property>
-      </object>
-    </child>
-    <child>
       <object class="GtkSeparatorMenuItem" id="separator72">
-        <property name="visible">True</property>
-        <property name="can_focus">False</property>
-      </object>
-    </child>
-    <child>
-      <object class="GtkMenuItem" id="QuestionAnswersD1">
-        <property name="visible">True</property>
-        <property name="can_focus">False</property>
-        <property name="action_name">.uno:QuestionAnswers</property>
-      </object>
-    </child>
-    <child>
-      <object class="GtkMenuItem" id="SendFeedbackD1">
-        <property name="visible">True</property>
-        <property name="can_focus">False</property>
-        <property name="action_name">.uno:SendFeedback</property>
-      </object>
-    </child>
-    <child>
-      <object class="GtkMenuItem" id="DonationD1">
-        <property name="visible">True</property>
-        <property name="can_focus">False</property>
-        <property name="action_name">.uno:Donation</property>
-      </object>
-    </child>
-    <child>
-      <object class="GtkSeparatorMenuItem" id="separator2">
         <property name="visible">True</property>
         <property name="can_focus">False</property>
       </object>
