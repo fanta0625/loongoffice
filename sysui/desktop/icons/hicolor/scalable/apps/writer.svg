@@ -1,3 +1,37 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<!-- Created with Inkscape (http://www.inkscape.org/) -->
-<svg width="32" height="32" version="1.1" viewBox="0 0 32 32" xml:space="preserve" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"><defs><linearGradient id="linearGradient3898" x1="4" x2="28" y1="31" y2="1" gradientUnits="userSpaceOnUse"><stop stop-color="#083fa6" offset="0"/><stop stop-color="#2dcbfd" offset="1"/></linearGradient></defs><g fill-rule="evenodd" stroke-linecap="square"><path d="m7 0c-2.216 0-4 1.784-4 4v24c0 2.216 1.784 4 4 4h18c2.216 0 4-1.784 4-4v-16l-12-12h-10zm13 0 9 9v-9h-9z" fill="url(#linearGradient3898)"/><g><path d="m3 27v1c0 2.216 1.784 4 4 4h18c2.216 0 4-1.784 4-4v-1c0 2.216-1.784 4-4 4h-18c-2.216 0-4-1.784-4-4z" fill-opacity=".19862"/><path d="m20 0h1.4l7.6 7.6v1.4z" fill-opacity=".20149"/></g><g><g fill="#fafafa"><rect x="8" y="13" width="7" height="1" ry=".5"/><rect x="8" y="15" width="7" height="1" ry=".5"/><rect x="8" y="17" width="7" height="1" ry=".5"/><rect x="8" y="20" width="16" height="1" ry=".5"/><rect x="8" y="22" width="16" height="1" ry=".5"/><rect x="8" y="24" width="7" height="1" ry=".5"/></g><path d="m18 13c-0.554 0-1 0.446-1 1v3c0 0.554 0.446 1 1 1h5c0.554 0 1-0.446 1-1v-3c0-0.554-0.446-1-1-1h-5zm4.5 1a0.5 0.5 0 0 1 0.5 0.5 0.5 0.5 0 0 1-0.5 0.5 0.5 0.5 0 0 1-0.5-0.5 0.5 0.5 0 0 1 0.5-0.5zm-3.1641 0.5293a0.61803 0.61803 0 0 1 0.37109 0.17773l2.293 2.293h-4l0.68359-2.0508a0.61803 0.61803 0 0 1 0.65234-0.41992z" fill="#9ae9f9"/></g></g></svg>
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Generator: Adobe Illustrator 21.0.0, SVG Export Plug-In . SVG Version: 6.00 Build 0)  -->
+<svg version="1.1" id="图层_1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px"
+	 viewBox="0 0 128 128" style="enable-background:new 0 0 128 128;" xml:space="preserve">
+<style type="text/css">
+	.st0{fill:#FFFFFF;stroke:#3D92D8;stroke-width:5;stroke-miterlimit:10;}
+	.st1{fill:#FFFFFF;stroke:#3D92D8;stroke-width:2.5;stroke-miterlimit:10;}
+	.st2{fill:#3D92D8;}
+	.st3{fill:none;stroke:#A5A5A5;stroke-width:2;stroke-miterlimit:10;}
+	.st4{fill:#FFEF5C;stroke:#A5A5A5;stroke-width:2;stroke-miterlimit:10;}
+</style>
+<title>画板 1</title>
+<path class="st0" d="M20.7,2.5h86.6c3.4,0,6.1,2.7,6.1,6.1v110.7c0,3.4-2.7,6.1-6.1,6.1H20.7c-3.4,0-6.1-2.7-6.1-6.1V8.7
+	C14.6,5.3,17.3,2.5,20.7,2.5z"/>
+<path class="st1" d="M89.4,92.9v6.4c0,1.5-1.2,2.8-2.8,2.8H34c-1.6,0-2.8-1.3-2.8-2.8V54.3c0-1.6,1.3-2.8,2.8-2.8h52.7
+	c1.6,0,2.8,1.3,2.8,2.8v22.9"/>
+<g id="图层_3">
+	<polygon class="st2" points="61.4,97.9 61.4,104.2 63.2,106.3 70.2,106.6 100.2,106.4 102.2,104.2 101.9,97.5 101.5,94.7 97.8,93 
+		94.6,92.2 89.2,92.7 85,94.9 82.7,96.7 80.7,98.2 78.7,99.8 78,100.6 76.5,100.6 74.5,98.4 71,96.6 66.6,96.1 63.1,96.8 	"/>
+</g>
+<path class="st3" d="M64.2,77.1h35.1c1.6,0,2.8,1.3,2.8,2.8v24.3c0,1.6-1.3,2.8-2.8,2.8H64.2c-1.6,0-2.8-1.3-2.8-2.8V80
+	C61.4,78.4,62.7,77.1,64.2,77.1z"/>
+<path class="st2" d="M40.7,57.1h38.5c0.8,0,1.4,0.6,1.4,1.4v0c0,0.8-0.6,1.4-1.4,1.4H40.7c-0.8,0-1.4-0.6-1.4-1.4v0
+	C39.3,57.8,39.9,57.1,40.7,57.1z"/>
+<path class="st2" d="M40.7,66.2h38.5c0.8,0,1.4,0.6,1.4,1.4v0c0,0.8-0.6,1.4-1.4,1.4H40.7c-0.8,0-1.4-0.6-1.4-1.4v0
+	C39.3,66.8,39.9,66.2,40.7,66.2z"/>
+<path class="st2" d="M40.7,75.2h14.2c0.8,0,1.4,0.6,1.4,1.4l0,0l0,0c0,0.8-0.6,1.4-1.4,1.4l0,0H40.7c-0.8,0-1.4-0.6-1.4-1.4l0,0l0,0
+	C39.3,75.9,39.9,75.2,40.7,75.2L40.7,75.2z"/>
+<path class="st2" d="M40.7,84.2h14.2c0.8,0,1.4,0.6,1.4,1.4l0,0l0,0c0,0.8-0.6,1.4-1.4,1.4l0,0H40.7c-0.8,0-1.4-0.6-1.4-1.4l0,0l0,0
+	C39.3,84.9,39.9,84.2,40.7,84.2L40.7,84.2z"/>
+<path class="st2" d="M40.7,93.3h14.2c0.8,0,1.4,0.6,1.4,1.4v0c0,0.8-0.6,1.4-1.4,1.4H40.7c-0.8,0-1.4-0.6-1.4-1.4v0
+	C39.3,93.9,39.9,93.3,40.7,93.3z"/>
+<g id="图层_2">
+	<path class="st3" d="M102,95.3c-12-10.1-23.4,5.6-23.4,5.6c-0.7,1.1-1.2,0.1-1.2,0.1c-4.5-8.2-16.2-4.1-16.2-4.1"/>
+</g>
+<circle class="st4" cx="71.7" cy="85.5" r="4.2"/>
+</svg>

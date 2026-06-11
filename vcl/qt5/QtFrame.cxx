@@ -344,19 +344,19 @@ void QtFrame::SetIcon(sal_uInt16 nIcon)
     QString appicon;
 
     if (nIcon == SV_ICON_ID_TEXT)
-        appicon = "libreoffice-writer";
+        appicon = "loongoffice-writer";
     else if (nIcon == SV_ICON_ID_SPREADSHEET)
-        appicon = "libreoffice-calc";
+        appicon = "loongoffice-calc";
     else if (nIcon == SV_ICON_ID_DRAWING)
-        appicon = "libreoffice-draw";
+        appicon = "loongoffice-draw";
     else if (nIcon == SV_ICON_ID_PRESENTATION)
-        appicon = "libreoffice-impress";
+        appicon = "loongoffice-impress";
     else if (nIcon == SV_ICON_ID_DATABASE)
-        appicon = "libreoffice-base";
+        appicon = "loongoffice-base";
     else if (nIcon == SV_ICON_ID_FORMULA)
-        appicon = "libreoffice-math";
+        appicon = "loongoffice-math";
     else
-        appicon = "libreoffice-startcenter";
+        appicon = "loongoffice-startcenter";
 
     QIcon aIcon = QIcon::fromTheme(appicon);
     m_pQWidget->window()->setWindowIcon(aIcon);

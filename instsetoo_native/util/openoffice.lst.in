@@ -8,13 +8,13 @@ Globals
             UREPACKAGEVERSION @LIBO_VERSION_MAJOR@.@LIBO_VERSION_MINOR@.@LIBO_VERSION_MICRO@.@LIBO_VERSION_PATCH@@LIBO_VERSION_SUFFIX@
             URELAYERVERSION 1
             REFERENCEOOOMAJORMINOR 4.1
-            WINDOWSBASISROOTNAME LibreOffice
-            UNIXBASISROOTNAME libreoffice@LIBO_VERSION_MAJOR@.@LIBO_VERSION_MINOR@
+            WINDOWSBASISROOTNAME LoongOffice
+            UNIXBASISROOTNAME loongoffice
             HIDELICENSEDIALOG 1
             PACKAGEPREFIX
-            BASISPACKAGEPREFIX libobasis
-            UREPACKAGEPREFIX libreoffice
-            SOLSUREPACKAGEPREFIX libreoffice
+            BASISPACKAGEPREFIX loongofficebasis
+            UREPACKAGEPREFIX loongoffice
+            SOLSUREPACKAGEPREFIX loongoffice
             PROGRESSBARCOLOR 0,0,0
             PROGRESSFRAMECOLOR 102,102,102
             PROGRESSPOSITION 30,145
@@ -37,7 +37,7 @@ Globals
     }
 }
 
-LibreOffice
+LoongOffice
 {
     Settings
     {
@@ -73,26 +73,26 @@ LibreOffice
     }
 }
 
-LibreOfficeDev
+LoongOfficeDev
 {
     Settings
     {
         variables
         {
-            PRODUCTNAME LibreOfficeDev
+            PRODUCTNAME LoongOfficeDev
             PRODUCTVERSION @LIBO_VERSION_MAJOR@.@LIBO_VERSION_MINOR@
             PRODUCTEXTENSION .@LIBO_VERSION_MICRO@.@LIBO_VERSION_PATCH@@LIBO_VERSION_SUFFIX@
-            WINDOWSBASISROOTNAME LibreOfficeDev @LIBO_VERSION_MAJOR@
-            UNIXBASISROOTNAME libreofficedev@LIBO_VERSION_MAJOR@.@LIBO_VERSION_MINOR@
+            WINDOWSBASISROOTNAME LoongOfficeDev @LIBO_VERSION_MAJOR@
+            UNIXBASISROOTNAME loongofficedev
             POSTVERSIONEXTENSION
             BUNDLEIDENTIFIER @MACOSX_BUNDLE_IDENTIFIER@
             BRANDPACKAGEVERSION @LIBO_VERSION_MAJOR@.@LIBO_VERSION_MINOR@
             USERDIRPRODUCTVERSION 4
             BASEPRODUCTVERSION @LIBO_VERSION_MAJOR@.@LIBO_VERSION_MINOR@
             DEVELOPMENTPRODUCT 1
-            BASISPACKAGEPREFIX lodevbasis
-            UREPACKAGEPREFIX libreofficedev
-            SOLSUREPACKAGEPREFIX libreofficedev
+            BASISPACKAGEPREFIX loongofficedevbasis
+            UREPACKAGEPREFIX loongofficedev
+            SOLSUREPACKAGEPREFIX loongofficedev
             REGISTRYLAYERNAME LayerDev
             UPDATEURL https://update.libreoffice.org/check.php
             ADD_INCLUDE_FILES cli_ure/version/version.txt,unoil/climaker/version.txt
@@ -118,14 +118,14 @@ LibreOfficeDev
     }
 }
 
-LibreOffice_SDK
+LoongOffice_SDK
 {
     Settings
     {
         downloadname LibreOffice-SDK_{packageversion}_{os}_install_{languages}
         variables
         {
-            PRODUCTNAME LibreOffice
+            PRODUCTNAME LoongOffice
             PRODUCTVERSION @LIBO_VERSION_MAJOR@.@LIBO_VERSION_MINOR@
             PRODUCTEXTENSION .@LIBO_VERSION_MICRO@.@LIBO_VERSION_PATCH@@LIBO_VERSION_SUFFIX@
             POSTVERSIONEXTENSION SDK
@@ -135,7 +135,7 @@ LibreOffice_SDK
             PACKAGEREVISION {buildid}
             PACK_INSTALLED 1
             DMG_VOLUMEEXTENSION SDK
-            DATABASENAME libreoffice40sdk
+            DATABASENAME loongoffice40sdk
             NO_README_IN_ROOTDIR 1
             LICENSENAME @LICENSE@
             IGNOREDIRECTORYLAYER 1
@@ -152,31 +152,31 @@ LibreOffice_SDK
     }
 }
 
-LibreOfficeDev_SDK
+LoongOfficeDev_SDK
 {
     Settings
     {
         downloadname LibreOfficeDev-SDK_{packageversion}_{os}_install_{languages}
         variables
         {
-            PRODUCTNAME LibreOfficeDev
+            PRODUCTNAME LoongOfficeDev
             PRODUCTVERSION @LIBO_VERSION_MAJOR@.@LIBO_VERSION_MINOR@
             PRODUCTEXTENSION .@LIBO_VERSION_MICRO@.@LIBO_VERSION_PATCH@@LIBO_VERSION_SUFFIX@
-            WINDOWSBASISROOTNAME LibreOfficeDev @LIBO_VERSION_MAJOR@
-            UNIXBASISROOTNAME libreofficedev@LIBO_VERSION_MAJOR@.@LIBO_VERSION_MINOR@
+            WINDOWSBASISROOTNAME LoongOfficeDev @LIBO_VERSION_MAJOR@
+            UNIXBASISROOTNAME loongofficedev
             POSTVERSIONEXTENSION SDK
             BUNDLEIDENTIFIER @MACOSX_BUNDLE_IDENTIFIER@.SDK
             BRANDPACKAGEVERSION @LIBO_VERSION_MAJOR@.@LIBO_VERSION_MINOR@
             PACKAGEVERSION @LIBO_VERSION_MAJOR@.@LIBO_VERSION_MINOR@.@LIBO_VERSION_MICRO@.@LIBO_VERSION_PATCH@@LIBO_VERSION_SUFFIX@
             PACKAGEREVISION {buildid}
-            BASISPACKAGEPREFIX lodevbasis
-            UREPACKAGEPREFIX libreofficedev
-            SOLSUREPACKAGEPREFIX libreofficedev
+            BASISPACKAGEPREFIX loongofficedevbasis
+            UREPACKAGEPREFIX loongofficedev
+            SOLSUREPACKAGEPREFIX loongofficedev
             REGISTRYLAYERNAME LayerDev
             DEVELOPMENTPRODUCT 1
             PACK_INSTALLED 1
             DMG_VOLUMEEXTENSION SDK
-            DATABASENAME libreoffice40devsdk
+            DATABASENAME loongoffice40devsdk
             NO_README_IN_ROOTDIR 1
             LICENSENAME @LICENSE@
             IGNOREDIRECTORYLAYER 1

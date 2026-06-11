@@ -1919,19 +1919,19 @@ void GtkSalFrame::SetIcon( sal_uInt16 nIcon )
     gchar* appicon;
 
     if (nIcon == SV_ICON_ID_TEXT)
-        appicon = g_strdup ("libreoffice-writer");
+        appicon = g_strdup ("loongoffice-writer");
     else if (nIcon == SV_ICON_ID_SPREADSHEET)
-        appicon = g_strdup ("libreoffice-calc");
+        appicon = g_strdup ("loongoffice-calc");
     else if (nIcon == SV_ICON_ID_DRAWING)
-        appicon = g_strdup ("libreoffice-draw");
+        appicon = g_strdup ("loongoffice-draw");
     else if (nIcon == SV_ICON_ID_PRESENTATION)
-        appicon = g_strdup ("libreoffice-impress");
+        appicon = g_strdup ("loongoffice-impress");
     else if (nIcon == SV_ICON_ID_DATABASE)
-        appicon = g_strdup ("libreoffice-base");
+        appicon = g_strdup ("loongoffice-base");
     else if (nIcon == SV_ICON_ID_FORMULA)
-        appicon = g_strdup ("libreoffice-math");
+        appicon = g_strdup ("loongoffice-math");
     else
-        appicon = g_strdup ("libreoffice-startcenter");
+        appicon = g_strdup ("loongoffice-startcenter");
 
     SetIcon(appicon);
 
@@ -2016,7 +2016,7 @@ void GtkSalFrame::Show( bool bVisible, bool /*bNoActivate*/ )
         if (bAppIdImmutable)
         {
             OString sOrigName(g_get_prgname());
-            g_set_prgname("libreoffice-startcenter");
+            g_set_prgname("loongoffice-startcenter");
             gtk_widget_set_visible(m_pWindow, true);
             g_set_prgname(sOrigName.getStr());
         }
