@@ -2063,6 +2063,71 @@ bool ImpEditEngine::FinishCreateLines(ParaPortion& rParaPortion)
     return bRet;
 }
 
+sal_Int32 ImpEditEngine::HandleLineHeadForbiddenChar(ParaPortion& rParaPortion, EditLine& rLine,
+                                                     sal_Int32 nBreakPos,
+                                                     tools::Long nRemainingWidth)
+{
+    // Calculate current line width up to break position
+    ContentNode* const pNode = rParaPortion.GetNode();
+    const sal_Int32 nTextLen = pNode->Len();
+    tools::Long nCurrentWidth = 0;
+    for (sal_Int32 i = rLine.GetStart(); i < nBreakPos; ++i)
+    {
+        nCurrentWidth += GetRefDevice()->GetTextWidth(OUString(pNode->GetChar(i)));
+    }
+
+    // Check if break position is valid
+    if (nBreakPos >= nTextLen || nBreakPos <= rLine.GetStart())
+        return nBreakPos;
+
+
+    // Get forbidden characters for line beginning based on locale
+    lang::Locale aLocale = GetLocale(EditPaM(pNode, nBreakPos));
+    const i18n::ForbiddenCharacters* pForbidden = GetForbiddenCharsTable()->GetForbiddenCharacters(
+        LanguageTag::convertToLanguageType(aLocale), true);
+    if (!pForbidden || pForbidden->beginLine.isEmpty())
+        return nBreakPos;
+
+    OUString aForbiddenBegin = pForbidden->beginLine;
+
+    // Check if next two characters contain line beginning forbidden characters
+    sal_Int32 nForbiddenOffset = -1;
+    for (sal_Int32 offset = 0; offset < 2 && (nBreakPos + offset) < nTextLen; ++offset)
+    {
+        sal_Unicode c = pNode->GetChar(nBreakPos + offset);
+        if (aForbiddenBegin.indexOf(c) != -1)
+        {
+            nForbiddenOffset = offset;
+            break;
+        }
+    }
+    if (nForbiddenOffset == -1)
+        return nBreakPos;
+
+    // Adjust break point to keep forbidden character in current line
+    sal_Int32 nNewBreakPos = nBreakPos + nForbiddenOffset + 1;
+    if (nNewBreakPos > nTextLen)
+        nNewBreakPos = nTextLen;
+
+    // Calculate total width from line start to new break point
+    SvxFont aTmpFont;
+    SeekCursor(pNode, rLine.GetStart(), aTmpFont);
+    aTmpFont.SetPhysFont(*GetRefDevice());
+
+    tools::Long nTotalWidth = 0;
+    for (sal_Int32 i = rLine.GetStart(); i < nNewBreakPos; ++i)
+    {
+        nTotalWidth += GetRefDevice()->GetTextWidth(OUString(pNode->GetChar(i)));
+    }
+
+    // Only adjust if there's enough space in current line
+    if (nTotalWidth < nRemainingWidth + nCurrentWidth)
+    {
+        return nNewBreakPos;
+    }
+    return nBreakPos;
+}
+
 void ImpEditEngine::ImpBreakLine(ParaPortion& rParaPortion, EditLine& rLine, TextPortion const * pPortion, sal_Int32 nPortionStart, tools::Long nRemainingWidth, bool bCanHyphenate)
 {
     ContentNode* const pNode = rParaPortion.GetNode();
@@ -2298,6 +2363,10 @@ void ImpEditEngine::ImpBreakLine(ParaPortion& rParaPortion, EditLine& rLine, Tex
                 nBreakPos = rLine.GetStart() + 1;  // Otherwise infinite loop!
         }
     }
+
+    // Check if the first character of the next line is an avoidance character,
+    // and decide whether to adjust the line break position based on the remaining space
+    nBreakPos = HandleLineHeadForbiddenChar(rParaPortion, rLine, nBreakPos, nRemainingWidth);
 
     // the dickey portion is the end portion
     rLine.SetEnd( nBreakPos );
