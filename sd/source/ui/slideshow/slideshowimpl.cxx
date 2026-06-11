@@ -558,6 +558,8 @@ SlideshowImpl::SlideshowImpl( const Reference< XPresentation2 >& xPresentation, 
 , mbWasPaused(false)
 , mbInputFreeze(false)
 , mbActive(false)
+, mnTimerMode(0)      // Default display current/total time
+, mnTimerPosition(0)   // Default position top-left
 , maPresSettings( pDoc->getPresentationSettings() )
 , mnUserPaintColor( 0x80ff0000L )
 , mbUsePen(false)
@@ -1065,6 +1067,8 @@ bool SlideshowImpl::startShow( PresentationSettingsEx const * pPresSettings )
         {
             maPresSettings = *pPresSettings;
             mbRehearseTimings = pPresSettings->mbRehearseTimings;
+            mnTimerMode = pPresSettings->mnTimerMode;
+            mnTimerPosition = pPresSettings->mnTimerPosition;
         }
 
         OUString  aPresSlide( maPresSettings.maPresPage );
@@ -1224,6 +1228,10 @@ bool SlideshowImpl::startShow( PresentationSettingsEx const * pPresSettings )
             if (mbRehearseTimings) {
                 aProperties.emplace_back( "RehearseTimings" ,
                         -1, Any(true), beans::PropertyState_DIRECT_VALUE );
+                aProperties.emplace_back( "TimingMode" ,
+                        -1, Any(mnTimerMode), beans::PropertyState_DIRECT_VALUE );
+                aProperties.emplace_back( "TimerPosition" ,
+                        -1, Any(mnTimerPosition), beans::PropertyState_DIRECT_VALUE );
             }
 
             bRet = startShowImpl( Sequence<beans::PropertyValue>(
@@ -3568,6 +3576,8 @@ PresentationSettingsEx::PresentationSettingsEx( const PresentationSettingsEx& r 
 , mbRehearseTimings(r.mbRehearseTimings)
 , mbPreview(r.mbPreview)
 , mpParentWindow( nullptr )
+, mnTimerMode(r.mnTimerMode)
+, mnTimerPosition(r.mnTimerPosition)
 {
 }
 
@@ -3576,14 +3586,16 @@ PresentationSettingsEx::PresentationSettingsEx( PresentationSettings const & r )
 , mbRehearseTimings(false)
 , mbPreview(false)
 , mpParentWindow(nullptr)
+, mnTimerMode(r.mnTimerMode)    // Get timer display mode from base settings
+, mnTimerPosition(r.mnTimerPosition) // Get timer position from base settings
 {
 }
 
 void PresentationSettingsEx::SetArguments( const Sequence< PropertyValue >& rArguments )
 {
-    for( const PropertyValue& rValue : rArguments )
+    for (const PropertyValue& rValue : rArguments)
     {
-        SetPropertyValue( rValue.Name, rValue.Value );
+        SetPropertyValue(rValue.Name, rValue.Value);
     }
 }
 
@@ -3672,6 +3684,16 @@ void PresentationSettingsEx::SetPropertyValue( std::u16string_view rProperty, co
     else if ( rProperty == u"UsePen" )
     {
         if( rValue >>= mbMouseAsPen )
+            return;
+    }
+    else if ( rProperty == u"TimingMode" )
+    {
+        if( rValue >>= mnTimerMode )
+            return;
+    }
+    else if ( rProperty == u"TimerPosition" )
+    {
+        if( rValue >>= mnTimerPosition )
             return;
     }
     throw IllegalArgumentException();
