@@ -708,3 +708,13 @@ ZXING_TARBALL := zxing-cpp-2.3.0.tar.gz
 # will not run into conflicts
 OPENSYMBOL_SHA256SUM := f543e6e2d7275557a839a164941c0a86e5f2c3f2a0042bfc434c88c6dde9e140
 OPENSYMBOL_TTF := f543e6e2d7275557a839a164941c0a86e5f2c3f2a0042bfc434c88c6dde9e140-opens___.ttf
+# three static lines
+# so that git cherry-pick
+# will not run into conflicts
+OFDREADER_SHA256SUM := 68c84e275e98f90fc2947c61ecb6559bff6462196d236ac5fb851fe25d8b7608
+OFDREADER_TARBALL := loongoffice-ofd-extension.oxt
+# three static lines
+# so that git cherry-pick
+# will not run into conflicts
+BATCHPRINT_SHA256SUM := 973d6434a2cd562b4b04f894b813663ddc9fda1386a585972328d71d3b011e61
+BATCHPRINT_TARBALL := loongbatchprint_1.0.0-1.lnd.1_loong64.deb
