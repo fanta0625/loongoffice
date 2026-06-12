@@ -59,6 +59,20 @@ Module gid_Module_Optional_Extensions_NLPSolver
 End
 #endif
 
+/* ** OFD Reader ** */
+
+#ifdef WITH_EXTENSION_OFDREADER
+Module gid_Module_Optional_Extensions_OFDReader
+    PackageInfo = "packinfo_extensions.txt";
+    MOD_NAME_DESC(MODULE_OPTIONAL_EXTENSIONS_OFDREADER);
+    ParentID = gid_Module_Optional_Extensions;
+    Files = (
+        gid_File_Oxt_OFDReader );
+    Default = YES;
+    Styles = ( );
+End
+#endif
+
 /* ** Script provider for BeanShell ** */
 
 #if defined ENABLE_JAVA && !defined WITHOUT_SCRIPTING_BEANSHELL

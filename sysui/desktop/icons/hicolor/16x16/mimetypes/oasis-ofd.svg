@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- OFD Document icon 16x16 -->
+<svg width="16" height="16" version="1.1" viewBox="0 0 16 16" xml:space="preserve" xmlns="http://www.w3.org/2000/svg">
+  <path d="m3 0c-1.108 0-2 0.892-2 2v12c0 1.108 0.892 2 2 2h10c1.108 0 2-0.892 2-2v-9l-5-5z" fill="#c0392b"/>
+  <text x="8" y="11" font-family="sans-serif" font-size="4" font-weight="bold" fill="#fafafa" text-anchor="middle">OFD</text>
+  <path d="m10 0v5h5z" fill="#e6a09a" fill-rule="evenodd" stroke-linecap="square"/>
+</svg>

@@ -49,6 +49,7 @@ sed '
 /application\/vnd\.sun/d
 /application\/vnd\.stardivision/d
 /application\/vnd\.openofficeorg/d
+/application\/ofd/d
 ' /etc/mime.types 2>/dev/null >> /etc/mime.types.tmp$$
 
 # now append our stuff to the temporary file
@@ -90,6 +91,7 @@ application/vnd.sun.xml.math sxm
 application/vnd.stardivision.math smf
 application/vnd.sun.xml.base odb
 application/vnd.openofficeorg.extension oxt
+application/ofd ofd
 END
 
 # and replace the original file
@@ -176,6 +178,7 @@ application/vnd.lotus-wordpro; %PREFIX -view %s
 application/wpwin; %PREFIX -view %s
 application/x-mswrite; %PREFIX -view %s
 application/vnd.openofficeorg.extension; %PREFIX %s
+application/ofd; %PREFIX -view %s
 END
 
   # and replace the original file

@@ -99,6 +99,7 @@ sub getMimedata {
     $desktop_file = $mimedir.'/'.$desktop_name.'.desktop';
     $mimetype = "";
     $glob = "";
+    $icon = "";
     open(DESKTOP_FILE, $desktop_file) || die "Cannot open desktop-file $desktop_file. ".$!;
     while (<DESKTOP_FILE>) {
         ## get mimetype
@@ -111,11 +112,20 @@ sub getMimedata {
             s/^Patterns=(.*)\n$/\1/;
             $glob = "$_";
         }
+        ## get icon
+        if (/^Icon=/) {
+            s/^Icon=(.*)\n$/$1/;
+            $icon = "$_";
+        }
     }
     close DESKTOP_FILE;
     # die if we cannot determine the glob-pattern or mimtetype
     die "Could not get mime-type from $desktop_file" if ($mimetype eq "");
     die "Could not get glob-pattern from $desktop_file" if ($glob eq "");
+    # icon is optional
+    if ($icon ne "") {
+        push(@{$mimehash{$desktop_name}}, '    <icon name="'.$icon.'"/>');
+    }
 }
 
 ## END vim: set ts=4:

@@ -1,0 +1,16 @@
+#!/bin/sh
+# LoongOffice prerm - clean up mailcap before remove
+
+set -e
+
+if [ "$1" = "remove" ]; then
+  # Remove loongoffice entries from /etc/mailcap
+  if [ -f /etc/mailcap ]; then
+    sed '/loongoffice/d' /etc/mailcap 2>/dev/null >> /etc/mailcap.tmp$$
+    mv -f /etc/mailcap.tmp$$ /etc/mailcap
+  fi
+fi
+
+#DEBHELPER#
+
+exit 0

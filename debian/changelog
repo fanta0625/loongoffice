@@ -1,0 +1,8 @@
+loongoffice (25.8.7.0.0-1.lnd.1.0.0001) unstable; urgency=medium
+
+  * Upgrade to LoongOffice 25.8
+  * Add OFD document reader extension support
+  * Add batch print extension support
+  * Add right-click context menu for creating new documents
+
+ -- Loongson <service@loongson.cn>  Fri, 17 Apr 2026 +0800

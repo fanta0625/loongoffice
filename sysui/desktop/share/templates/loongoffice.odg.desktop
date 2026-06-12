@@ -1,0 +1,10 @@
+[Desktop Entry]
+Name=LoongOffice Draw  ...
+Name[zh_CN]=LoongOffice 绘图  ...
+Comment=Enter LoongOffice Draw filename:
+Comment[zh_CN]=输入 LoongOffice 绘图文件名：
+Comment[de]=Name der LoongOffice Draw-Datei eingeben:
+Type=Link
+URL=.source/loongoffice.odg
+Icon=loongoffice-oasis-drawing
+

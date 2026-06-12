@@ -1,0 +1,10 @@
+[Desktop Entry]
+Name=LoongOffice Impress  ...
+Name[zh_CN]=LoongOffice 演示文稿  ...
+Comment=Enter LoongOffice Impress filename:
+Comment[zh_CN]=输入 LoongOffice 演示文稿文件名：
+Comment[de]=Name der LoongOffice Impress-Datei eingeben:
+Type=Link
+URL=.source/loongoffice.odp
+Icon=loongoffice-oasis-presentation
+

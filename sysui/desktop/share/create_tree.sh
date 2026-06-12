@@ -62,3 +62,13 @@ for i in base calc draw impress writer; do
 done
 cp "${APPDATA_SOURCE_DIR}/org.libreoffice.kde.metainfo.xml" "${DESTDIR}/${PREFIXDIR}/share/metainfo/org.${PREFIX}.kde.metainfo.xml"
 
+# KDE Plasma "Create New Document" templates
+mkdir -p "${DESTDIR}/${PREFIXDIR}/share/templates"
+for i in loongoffice.odt loongoffice.odp loongoffice.ods loongoffice.odg; do
+    cp "${SOURCE_DIR}/templates/${i}.desktop" "${DESTDIR}/${PREFIXDIR}/share/templates/${i}.desktop"
+done
+mkdir -p "${DESTDIR}/${PREFIXDIR}/share/templates/.source"
+for i in loongoffice.odt loongoffice.odp loongoffice.ods loongoffice.odg; do
+    cp "${SOURCE_DIR}/templates/.source/${i}" "${DESTDIR}/${PREFIXDIR}/share/templates/.source/${i}"
+done
+

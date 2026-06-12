@@ -157,6 +157,7 @@ do
   icon=${link_dir}/%iconprefix-text.png;                        test -f ${icon} && ln -sf ${icon} ${link_dir}/gnome-mime-application-vnd.sun.xml.writer.png
   icon=${link_dir}/%iconprefix-text-template.png;               test -f ${icon} && ln -sf ${icon} ${link_dir}/gnome-mime-application-vnd.sun.xml.writer.template.png
   icon=${link_dir}/%iconprefix-extension.png;                   test -f ${icon} && ln -sf ${icon} ${link_dir}/gnome-mime-application-vnd.openofficeorg.extension.png
+  icon=${link_dir}/%iconprefix-oasis-ofd.png;                    test -f ${icon} && ln -sf ${icon} ${link_dir}/gnome-mime-application-ofd.png
 done
 
 #run always
@@ -180,6 +181,7 @@ sed '
 /application\/vnd\.sun/d
 /application\/vnd\.stardivision/d
 /application\/vnd\.openofficeorg/d
+/application\/ofd/d
 ' /etc/mime.types 2>/dev/null >> /etc/mime.types.tmp$$
 
 # now append our stuff to the temporary file
@@ -220,6 +222,7 @@ application/vnd.sun.xml.math sxm
 application/vnd.sun.xml.base odb
 application/vnd.stardivision.math smf
 application/vnd.openofficeorg.extension oxt
+application/ofd ofd
 application/vnd.openxmlformats-officedocument.wordprocessingml.document docx
 application/vnd.ms-word.document.macroEnabled.12 docm
 application/vnd.openxmlformats-officedocument.wordprocessingml.template dotx
@@ -309,6 +312,7 @@ application/x-stardraw; %unixfilename -view %s
 application/vnd.oasis.opendocument.base; %unixfilename -view %s
 application/vnd.sun.xml.base; %unixfilename -view %s
 application/vnd.openofficeorg.extension; %unixfilename %s
+application/ofd; %unixfilename -view %s
 application/vnd.openxmlformats-officedocument.wordprocessingml.document; %unixfilename -view %s
 application/vnd.ms-word.document.macroEnabled.12;%unixfilename -view %s
 application/vnd.openxmlformats-officedocument.wordprocessingml.template; %unixfilename -view %s
@@ -388,6 +392,7 @@ fi
 /usr/share/applications/%unixfilename-writer.desktop
 /usr/share/applications/%unixfilename-startcenter.desktop
 /usr/share/applications/%unixfilename-xsltfilter.desktop
+/usr/share/applications/%unixfilename-ofd.desktop
 /usr/share/icons/hicolor/*/apps/*png
 /usr/share/icons/hicolor/*/apps/*svg
 /usr/share/icons/hicolor/*/mimetypes/*png

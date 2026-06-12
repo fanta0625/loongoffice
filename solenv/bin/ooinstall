@@ -104,7 +104,7 @@ if ($ENV{BUILD_TYPE} =~ m/ODK/) {
     print "Running SDK installer\n";
     system ("cd $ENV{SRC_ROOT}/instsetoo_native/util ; " .
             "perl -w $ENV{SRCDIR}/solenv/bin/make_installer.pl " .
-            "-f $ENV{BUILDDIR}/instsetoo_native/util/openoffice.lst -l en-US -p LibreOffice_SDK " .
+            "-f $ENV{BUILDDIR}/instsetoo_native/util/openoffice.lst -l en-US -p " . $PRODUCTNAME_no_spaces . "_SDK " .
             "-u $tmp_dir " .
             "-buildid $BUILD $destdir $strip $msi " .
             "-simple $path") && die "Failed to install: $!";

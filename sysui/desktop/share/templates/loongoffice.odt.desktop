@@ -1,0 +1,10 @@
+[Desktop Entry]
+Name=LoongOffice Writer  ...
+Name[zh_CN]=LoongOffice 文字  ...
+Comment=Enter LoongOffice Writer filename:
+Comment[zh_CN]=输入 LoongOffice 文字文件名：
+Comment[de]=Name der LoongOffice Writer-Datei eingeben:
+Type=Link
+URL=.source/loongoffice.odt
+Icon=loongoffice-oasis-text
+

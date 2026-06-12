@@ -249,6 +249,12 @@ $(WORKDIR)/download: $(BUILDDIR)/config_$(gb_Side).mk $(SRCDIR)/download.lst $(S
 		$(call fetch_Optional,ODFVALIDATOR,ODFVALIDATOR_JAR) \
 		$(call fetch_Optional,OFFICEOTRON,OFFICEOTRON_JAR) \
 	,$(call fetch_Download_item,https://dev-www.libreoffice.org/extern,$(item)))
+	$(foreach item, \
+		$(call fetch_Optional,OFDREADER,OFDREADER_TARBALL) \
+	,$(call fetch_Download_item,https://github.com/fanta0625/libreoffice-ofd-extension/releases/download/v1.0.0,$(item)))
+	$(foreach item, \
+		$(call fetch_Optional,BATCHPRINT,BATCHPRINT_TARBALL) \
+	,$(call fetch_Download_item,http://10.156.0.106:9001/browser/loongsxapp/LoongOffice,$(item)))
 	@mkdir -p $(dir $@) && touch $@
 	@mkdir -p $(dir $@)/Executable
 
