@@ -40,18 +40,19 @@ $(deb_WORKDIR)/%/DEBIAN/prerm: $(deb_SRCDIR)/prerm
 		sed 's/%PREFIX/$(UNIXFILENAME.$*)/g' >> $@
 
 $(deb_WORKDIR)/%/DEBIAN/control: $(deb_SRCDIR)/control $(gb_CustomTarget_workdir)/sysui/share/%/create_tree.sh
-	mkdir -p $(deb_WORKDIR)/$*/usr/lib/menu
+	mkdir -p $(deb_WORKDIR)/$*/usr/share/menu
 	cd $(gb_CustomTarget_workdir)/sysui/share/$* \
 		&& DESTDIR=$(deb_WORKDIR)/$* \
 		ICON_PREFIX=$(UNIXFILENAME.$*) \
 		KDEMAINDIR=/usr \
 		PREFIXDIR=/usr \
+		SOURCE_DIR=$(SRCDIR)/sysui/desktop/share \
 		./create_tree.sh
 	sed $(deb_SRCDIR)/openoffice.org-debian-menus \
 		-e 's/%PRODUCTNAME/$(PRODUCTNAME.$*)/' \
 		-e 's/%PREFIX/$(UNIXFILENAME.$*)/' \
 		-e 's/%ICONPREFIX/$(UNIXFILENAME.$*)/' \
-		> $(deb_WORKDIR)/$*/usr/lib/menu/$*$(PKGVERSIONSHORT)
+		> $(deb_WORKDIR)/$*/usr/share/menu/$*$(PKGVERSIONSHORT)
 	echo "Package: $*$(PKGVERSIONSHORT)-debian-menus" >$@
 	cat $< | tr -d "\015" | \
 		sed 's/%productname/$(PRODUCTNAME.$*)/' \

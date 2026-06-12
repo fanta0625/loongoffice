@@ -200,3 +200,6 @@ gdbtrace.log
 
 # xml unit tests sometimes leave these lying around
 **/secmod.db
+
+# Java Language Server / Eclipse build output
+/qadevOOo/bin/
