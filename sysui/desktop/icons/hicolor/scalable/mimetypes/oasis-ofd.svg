@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- OFD Document icon for LoongOffice - based on oasis-drawing.svg with red tone -->
+<svg width="32" height="32" version="1.1" viewBox="0 0 32 32" xml:space="preserve" xmlns="http://www.w3.org/2000/svg">
+  <g fill-rule="evenodd">
+    <!-- Document body -->
+    <path d="m7 0c-2.216 0-4 1.784-4 4v24c0 2.216 1.784 4 4 4h18c2.216 0 4-1.784 4-4v-17l-11-11z" fill="#c0392b" stroke-linecap="square"/>
+    <!-- OFD text -->
+    <text x="16" y="20" font-family="sans-serif" font-size="8" font-weight="bold" fill="#fafafa" text-anchor="middle" letter-spacing="0.5">OFD</text>
+    <!-- Fold corner -->
+    <path d="m18 0 11 11h-11z" fill="#e6a09a" fill-rule="evenodd" stroke-linecap="round" stroke-width="2"/>
+  </g>
+</svg>

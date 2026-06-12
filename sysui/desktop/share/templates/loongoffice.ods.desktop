@@ -1,0 +1,10 @@
+[Desktop Entry]
+Name=LoongOffice Calc  ...
+Name[zh_CN]=LoongOffice 电子表格  ...
+Comment=Enter LoongOffice Calc filename:
+Comment[zh_CN]=输入 LoongOffice 电子表格文件名：
+Comment[de]=Name der LoongOffice Calc-Datei eingeben:
+Type=Link
+URL=.source/loongoffice.ods
+Icon=loongoffice-oasis-spreadsheet
+

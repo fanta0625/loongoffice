@@ -1,0 +1,45 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: LoongOffice
+Upstream-Contact: loongoffice@lists.loongson.cn
+Source: https://github.com/loongson/loongoffice
+
+Files: *
+Copyright: Copyright 2000, 2010 Oracle and/or its affiliates.
+           Copyright (c) 2000, 2010 LibreOffice contributors and/or their affiliates.
+           Copyright (c) 2024 Loongson.
+License: MPL-2.0
+ On Debian systems the full text of the MPL-2.0 can be found in
+ /usr/share/common-licenses/MPL-2.0.
+ .
+ Some files include Apache-2.0 licensed material:
+ .
+ # This file incorporates work covered by the following license notice:
+ #
+ #   Licensed to the Apache Software Foundation (ASF) under one or more
+ #   contributor license agreements. See the NOTICE file distributed
+ #   with this work for additional information regarding copyright
+ #   ownership. The ASF licenses this file to you under the Apache
+ #   License, Version 2.0 (the "License"); you may not use this file
+ #   except in compliance with the License. You may obtain a copy of
+ #   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ .
+ On Debian systems the full text of the Apache-2.0 license can be found in
+ /usr/share/common-licenses/Apache-2.0.
+
+Files: debian/*
+Copyright: Copyright (c) 2024 Loongson.
+License: GPL-2
+ On Debian systems the full text of the GPL-2 can be found in
+ /usr/share/common-licenses/GPL-2
+
+License: MPL-2.0
+ On Debian systems the full text of the MPL-2.0 can be found in
+ /usr/share/common-licenses/MPL-2.0.
+
+License: Apache-2.0
+ On Debian systems the full text of the Apache-2.0 license can be found in
+ /usr/share/common-licenses/Apache-2.0.
+
+License: GPL-2
+ On Debian systems the full text of the GPL-2 can be found in
+ /usr/share/common-licenses/GPL-2

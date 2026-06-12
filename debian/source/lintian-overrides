@@ -1,0 +1,6 @@
+# LoongOffice bundles many third-party libraries with embedded copies
+loongoffice source: source-is-missing [odk/index.html]
+loongoffice source: source-is-missing [odk/docs/tools.html]
+loongoffice source: source-is-missing [odk/examples/DevelopersGuide/examples.html]
+loongoffice source: source-is-missing [odk/examples/examples.html]
+loongoffice source: source-is-missing [odk/index_online.html]

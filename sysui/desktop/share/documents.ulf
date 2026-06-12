@@ -132,3 +132,6 @@ en-US = "Microsoft Word Document Template"
 
 [ms-excel-sheet-binary-12]
 en-US = "Microsoft Excel Worksheet"
+
+[oasis-ofd]
+en-US = "OFD Document"

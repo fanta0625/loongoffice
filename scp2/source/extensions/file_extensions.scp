@@ -48,6 +48,19 @@ End
 
 #endif
 
+/* ** OFD Reader ** */
+
+#ifdef WITH_EXTENSION_OFDREADER
+
+File gid_File_Oxt_OFDReader
+    TXT_FILE_BODY;
+    Styles = (PACKED, FILELIST);
+    Dir = FILELIST_DIR;
+    Name = "ofdreader.filelist";
+End
+
+#endif
+
 /* ** Script provider for BeanShell ** */
 
 #if defined ENABLE_JAVA && !defined WITHOUT_SCRIPTING_BEANSHELL

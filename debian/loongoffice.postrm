@@ -1,0 +1,33 @@
+#!/bin/sh
+# LoongOffice postrm - clean up system databases after remove
+
+set -e
+
+if [ "$1" = "remove" ]; then
+  # Remove loongoffice entries from /etc/mailcap
+  if [ -f /etc/mailcap ]; then
+    sed -i '/loongoffice/d' /etc/mailcap
+  fi
+fi
+
+if [ "$1" != "purge" ]; then
+  if [ -x /usr/bin/update-mime-database ]; then
+    update-mime-database /usr/share/mime
+  fi
+  if [ -x /usr/bin/update-desktop-database ]; then
+    update-desktop-database -q /usr/share/applications
+  fi
+  if [ -x /usr/bin/update-menus ]; then
+    update-menus
+  fi
+  if [ -e /usr/share/icons/hicolor/icon-theme.cache ]; then
+    touch /usr/share/icons/hicolor
+    if command -v gtk-update-icon-cache >/dev/null 2>&1; then
+      gtk-update-icon-cache /usr/share/icons/hicolor || true
+    fi
+  fi
+fi
+
+#DEBHELPER#
+
+exit 0

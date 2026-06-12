@@ -258,6 +258,12 @@ $(WORKDIR)/download: $(BUILDDIR)/config_$(gb_Side).mk $(SRCDIR)/download.lst $(S
 	-@mkdir -p $(TARFILE_LOCATION)/cargo
 	$(if $(call fetch_Optional,YRS,1),\
 		CARGO_HOME=$(TARFILE_LOCATION)/cargo cargo fetch $(if $(verbose),--verbose,) --locked --manifest-path $(SRCDIR)/external/y-crdt/Cargo.toml)
+	$(foreach item, \
+		$(call fetch_Optional,OFDREADER,OFDREADER_TARBALL) \
+	,$(call fetch_Download_item,https://github.com/fanta0625/libreoffice-ofd-extension/releases/download/v1.0.0,$(item)))
+	$(foreach item, \
+		$(call fetch_Optional,BATCHPRINT,BATCHPRINT_TARBALL) \
+	,$(call fetch_Download_item,http://10.156.0.106:9001/browser/loongsxapp/LoongOffice,$(item)))
 	@mkdir -p $(dir $@) && touch $@
 	@mkdir -p $(dir $@)/Executable
 

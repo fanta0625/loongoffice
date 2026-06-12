@@ -1,0 +1,128 @@
+#!/bin/sh
+# LoongOffice postinst - update system databases after install
+
+set -e
+
+if [ "$1" = "configure" ]; then
+  # Update shared mime-info database
+  if [ -x /usr/bin/update-mime-database ]; then
+    update-mime-database /usr/share/mime
+  fi
+  # Update desktop database
+  if [ -x /usr/bin/update-desktop-database ]; then
+    update-desktop-database -q /usr/share/applications
+  fi
+  # Update debian style menus
+  if [ -x /usr/bin/update-menus ]; then
+    update-menus
+  fi
+  # Update icon cache if already present
+  if [ -e /usr/share/icons/hicolor/icon-theme.cache ]; then
+    touch /usr/share/icons/hicolor
+    if command -v gtk-update-icon-cache >/dev/null 2>&1; then
+      gtk-update-icon-cache /usr/share/icons/hicolor || true
+    fi
+  fi
+
+  # Update /etc/mime.types
+  if [ -f /etc/mime.types ]; then
+    sed -i \
+      -e '/application\/vnd\.oasis\.opendocument/d' \
+      -e '/application\/vnd\.sun/d' \
+      -e '/application\/vnd\.stardivision/d' \
+      -e '/application\/vnd\.openofficeorg/d' \
+      -e '/application\/ofd/d' \
+      /etc/mime.types
+
+    cat >> /etc/mime.types << 'END'
+application/vnd.oasis.opendocument.text odt
+application/vnd.oasis.opendocument.text-flat-xml fodt
+application/vnd.oasis.opendocument.text-template ott
+application/vnd.oasis.opendocument.text-web oth
+application/vnd.oasis.opendocument.text-master odm
+application/vnd.oasis.opendocument.text-master-template otm
+application/vnd.oasis.opendocument.graphics odg
+application/vnd.oasis.opendocument.graphics-flat-xml fodg
+application/vnd.oasis.opendocument.graphics-template otg
+application/vnd.oasis.opendocument.presentation odp
+application/vnd.oasis.opendocument.presentation-flat-xml fodp
+application/vnd.oasis.opendocument.presentation-template otp
+application/vnd.oasis.opendocument.spreadsheet ods
+application/vnd.oasis.opendocument.spreadsheet-flat-xml fods
+application/vnd.oasis.opendocument.spreadsheet-template ots
+application/vnd.oasis.opendocument.chart odc
+application/vnd.oasis.opendocument.chart-template otc
+application/vnd.oasis.opendocument.image odi
+application/vnd.oasis.opendocument.image-template oti
+application/vnd.oasis.opendocument.formula odf
+application/vnd.oasis.opendocument.formula-template otf
+application/vnd.oasis.opendocument.database odb
+application/vnd.sun.xml.writer sxw
+application/vnd.sun.xml.writer.template stw
+application/vnd.sun.xml.calc sxc
+application/vnd.sun.xml.calc.template stc
+application/vnd.sun.xml.draw sxd
+application/vnd.sun.xml.draw.template std
+application/vnd.sun.xml.impress sxi
+application/vnd.sun.xml.impress.template sti
+application/vnd.sun.xml.math sxm
+application/vnd.sun.xml.writer.global sxg
+application/vnd.stardivision.writer sdw
+application/vnd.stardivision.writer-template stw
+application/vnd.stardivision.calc sdc
+application/vnd.stardivision.calc.template stc
+application/vnd.stardivision.draw sda
+application/vnd.stardivision.draw.template std
+application/vnd.stardivision.impress sdd
+application/vnd.stardivision.impress.template sti
+application/vnd.stardivision.math smf
+application/vnd.stardivision.chart sds
+application/vnd.openofficeorg.extension oxt
+application/ofd ofd
+END
+  fi
+
+  # Update /etc/mailcap
+  if [ -f /etc/mailcap ]; then
+    sed -i '/loongoffice/d' /etc/mailcap
+
+    cat >> /etc/mailcap << 'END'
+application/vnd.oasis.opendocument.text; loongoffice -view %s
+application/vnd.oasis.opendocument.text-flat-xml; loongoffice -view %s
+application/vnd.oasis.opendocument.text-template; loongoffice -view %s
+application/vnd.oasis.opendocument.text-web; loongoffice -view %s
+application/vnd.oasis.opendocument.text-master; loongoffice -view %s
+application/vnd.oasis.opendocument.graphics; loongoffice -view %s
+application/vnd.oasis.opendocument.graphics-flat-xml; loongoffice -view %s
+application/vnd.oasis.opendocument.graphics-template; loongoffice -view %s
+application/vnd.oasis.opendocument.presentation; loongoffice -view %s
+application/vnd.oasis.opendocument.presentation-flat-xml; loongoffice -view %s
+application/vnd.oasis.opendocument.presentation-template; loongoffice -view %s
+application/vnd.oasis.opendocument.spreadsheet; loongoffice -view %s
+application/vnd.oasis.opendocument.spreadsheet-flat-xml; loongoffice -view %s
+application/vnd.oasis.opendocument.spreadsheet-template; loongoffice -view %s
+application/vnd.oasis.opendocument.chart; loongoffice -view %s
+application/vnd.oasis.opendocument.formula; loongoffice -view %s
+application/vnd.oasis.opendocument.database; loongoffice -view %s
+application/vnd.sun.xml.writer; loongoffice -view %s
+application/vnd.sun.xml.calc; loongoffice -view %s
+application/vnd.sun.xml.draw; loongoffice -view %s
+application/vnd.sun.xml.impress; loongoffice -view %s
+application/vnd.sun.xml.math; loongoffice -view %s
+application/vnd.stardivision.writer; loongoffice -view %s
+application/vnd.stardivision.calc; loongoffice -view %s
+application/vnd.stardivision.draw; loongoffice -view %s
+application/vnd.stardivision.impress; loongoffice -view %s
+application/vnd.stardivision.math; loongoffice -view %s
+application/msword; loongoffice -view %s
+application/vnd.ms-excel; loongoffice -view %s
+application/vnd.ms-powerpoint; loongoffice -view %s
+application/vnd.openofficeorg.extension; loongoffice %s
+application/ofd; loongoffice -view %s
+END
+  fi
+fi
+
+#DEBHELPER#
+
+exit 0

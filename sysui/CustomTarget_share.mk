@@ -55,6 +55,7 @@ MIMELIST := \
     oasis-master-document-template \
     oasis-database \
     oasis-web-template \
+    oasis-ofd \
     ms-excel-sheet-12 \
     ms-excel-sheet \
     ms-excel-template-12 \
@@ -88,6 +89,7 @@ MIMEICONLIST := \
     oasis-master-document-template \
     oasis-database \
     oasis-web-template \
+    oasis-ofd \
     text \
     text-template \
     spreadsheet \

@@ -14400,6 +14400,23 @@ if test "x$with_java" != "xno"; then
     libo_CHECK_EXTENSION([NLPSolver],[NLPSOLVER],[nlpsolver],[nlpsolver],[])
 fi
 
+libo_CHECK_EXTENSION([OFDReader],[OFDREADER],[ofdreader],[ofdreader],[])
+
+dnl ===================================================================
+dnl BatchPrint extension (pre-built deb with Python extension + native binary)
+dnl ===================================================================
+AC_ARG_ENABLE(ext-batchprint,
+    AS_HELP_STRING([--enable-ext-batchprint],
+        [Enable the BatchPrint extension (requires pre-built deb download)])
+)
+AC_MSG_CHECKING([whether to enable the BatchPrint extension])
+if test "x$enable_ext_batchprint" = "xyes"; then
+    BUILD_TYPE="$BUILD_TYPE BATCHPRINT"
+    AC_MSG_RESULT([yes])
+else
+    AC_MSG_RESULT([no])
+fi
+
 AC_MSG_CHECKING([whether to build opens___.ttf])
 if test "$enable_build_opensymbol" = "yes"; then
     AC_MSG_RESULT([yes])

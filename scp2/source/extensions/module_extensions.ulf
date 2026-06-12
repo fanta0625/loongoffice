@@ -34,6 +34,14 @@ en-US = "Solver for Nonlinear Programming"
 [STR_DESC_MODULE_OPTIONAL_EXTENSIONS_NLPSOLVER]
 en-US = "Solver for Nonlinear Programming"
 
+[STR_NAME_MODULE_OPTIONAL_EXTENSIONS_OFDREADER]
+en-US = "OFD Reader"
+zh-CN = "OFD 阅读器"
+
+[STR_DESC_MODULE_OPTIONAL_EXTENSIONS_OFDREADER]
+en-US = "OFD document reader extension"
+zh-CN = "OFD 文档阅读器扩展"
+
 [STR_NAME_MODULE_OPTIONAL_EXTENSIONS_SCRIPT_PROVIDER_FOR_BEANSHELL]
 en-US = "Script provider for BeanShell"
 
