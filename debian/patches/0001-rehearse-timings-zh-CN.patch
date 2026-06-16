@@ -1,0 +1,1496 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ loongoffice (25.8.7.0.0-1.lnd.1.0.0001) unstable; urgency=medium
+ .
+   * init version
+Author: Loongson <service@loongson.cn>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2026-04-16
+
+--- loongoffice-25.8.7.0.0.orig/translations/source/zh-CN/sd/messages.po
++++ loongoffice-25.8.7.0.0/translations/source/zh-CN/sd/messages.po
+@@ -3,7 +3,7 @@ msgid ""
+ msgstr ""
+ "Project-Id-Version: PACKAGE VERSION\n"
+ "Report-Msgid-Bugs-To: https://bugs.libreoffice.org/enter_bug.cgi?product=LibreOffice&bug_status=UNCONFIRMED&component=UI\n"
+-"POT-Creation-Date: 2025-09-18 12:11+0200\n"
++"POT-Creation-Date: 2026-03-23 16:06+0800\n"
+ "PO-Revision-Date: 2026-02-16 01:30+0000\n"
+ "Last-Translator: Ming Hua <plateauwolf@qq.com>\n"
+ "Language-Team: Chinese (Simplified Han script) <https://translations.documentfoundation.org/projects/libo_ui-25-8/sdmessages/zh_Hans/>\n"
+@@ -3824,435 +3824,435 @@ msgid "Rename"
+ msgstr "重命名"
+ 
+ #. V3FWt
+-#: sd/uiconfig/sdraw/ui/notebookbar.ui:3024
++#: sd/uiconfig/sdraw/ui/notebookbar.ui:2970
+ msgctxt "drawnotebookbar|FileLabel"
+ msgid "_File"
+ msgstr "文件(_F)"
+ 
+ #. exwEC
+-#: sd/uiconfig/sdraw/ui/notebookbar.ui:3043
++#: sd/uiconfig/sdraw/ui/notebookbar.ui:2989
+ msgctxt "drawnotebookbar|HelpMenuButton"
+ msgid "_Help"
+ msgstr "帮助(_H)"
+ 
+ #. qrXDY
+-#: sd/uiconfig/sdraw/ui/notebookbar.ui:3099
++#: sd/uiconfig/sdraw/ui/notebookbar.ui:3045
+ msgctxt "drawnotebookbar|FileLabel"
+ msgid "~File"
+ msgstr "文件(~F)"
+ 
+ #. EQ6HL
+-#: sd/uiconfig/sdraw/ui/notebookbar.ui:4468
++#: sd/uiconfig/sdraw/ui/notebookbar.ui:4414
+ msgctxt "drawnotebookbar|HomeMenuButton"
+ msgid "_Home"
+ msgstr "常用(_H)"
+ 
+ #. jtFqm
+-#: sd/uiconfig/sdraw/ui/notebookbar.ui:4567
++#: sd/uiconfig/sdraw/ui/notebookbar.ui:4513
+ msgctxt "drawnotebookbar|HomeLabel"
+ msgid "~Home"
+ msgstr "常用(~H)"
+ 
+ #. zoUaS
+-#: sd/uiconfig/sdraw/ui/notebookbar.ui:5275
++#: sd/uiconfig/sdraw/ui/notebookbar.ui:5221
+ msgctxt "drawnotebookbar|FieldMenuButton"
+ msgid "Fiel_d"
+ msgstr "字段(_D)"
+ 
+ #. S5FkE
+-#: sd/uiconfig/sdraw/ui/notebookbar.ui:5438
++#: sd/uiconfig/sdraw/ui/notebookbar.ui:5384
+ msgctxt "drawnotebookbar|InsertMenuButton"
+ msgid "_Insert"
+ msgstr "插入(_I)"
+ 
+ #. Z3UCg
+-#: sd/uiconfig/sdraw/ui/notebookbar.ui:5542
++#: sd/uiconfig/sdraw/ui/notebookbar.ui:5488
+ msgctxt "drawnotebookbar|InsertLabel"
+ msgid "~Insert"
+ msgstr "插入(~I)"
+ 
+ #. TVDXM
+-#: sd/uiconfig/sdraw/ui/notebookbar.ui:6242
++#: sd/uiconfig/sdraw/ui/notebookbar.ui:6188
+ msgctxt "drawnotebookbar|PageMenuButton"
+ msgid "_Layout"
+ msgstr "布局(_L)"
+ 
+ #. Rv7x4
+-#: sd/uiconfig/sdraw/ui/notebookbar.ui:6327
++#: sd/uiconfig/sdraw/ui/notebookbar.ui:6273
+ msgctxt "drawnotebookbar|PageLabel"
+ msgid "~Layout"
+ msgstr "布局(~L)"
+ 
+ #. BQcfo
+-#: sd/uiconfig/sdraw/ui/notebookbar.ui:6865
++#: sd/uiconfig/sdraw/ui/notebookbar.ui:6811
+ msgctxt "drawnotebookbar|ReviewMenuButton"
+ msgid "_Review"
+ msgstr "审阅(_R)"
+ 
+ #. prpcY
+-#: sd/uiconfig/sdraw/ui/notebookbar.ui:6948
++#: sd/uiconfig/sdraw/ui/notebookbar.ui:6894
+ msgctxt "drawnotebookbar|ReviewLabel"
+ msgid "~Review"
+ msgstr "审阅(~R)"
+ 
+ #. EiuB6
+-#: sd/uiconfig/sdraw/ui/notebookbar.ui:8031
++#: sd/uiconfig/sdraw/ui/notebookbar.ui:7977
+ msgctxt "drawnotebookbar|ViewMenuButton"
+ msgid "_View"
+ msgstr "视图(_V)"
+ 
+ #. EF3TH
+-#: sd/uiconfig/sdraw/ui/notebookbar.ui:8116
++#: sd/uiconfig/sdraw/ui/notebookbar.ui:8062
+ msgctxt "drawnotebookbar|ViewLabel"
+ msgid "~View"
+ msgstr "视图(~V)"
+ 
+ #. 94L75
+-#: sd/uiconfig/sdraw/ui/notebookbar.ui:9461
++#: sd/uiconfig/sdraw/ui/notebookbar.ui:9407
+ msgctxt "drawnotebookbar|TextMenuButton"
+ msgid "T_ext"
+ msgstr "文字(_E)"
+ 
+ #. PQtWE
+-#: sd/uiconfig/sdraw/ui/notebookbar.ui:9556
++#: sd/uiconfig/sdraw/ui/notebookbar.ui:9502
+ msgctxt "drawnotebookbar|ReferencesLabel"
+ msgid "T~ext"
+ msgstr "文字(~E)"
+ 
+ #. tNq7H
+-#: sd/uiconfig/sdraw/ui/notebookbar.ui:10458
++#: sd/uiconfig/sdraw/ui/notebookbar.ui:10404
+ msgctxt "drawnotebookbar|TableMenuButton"
+ msgid "_Table"
+ msgstr "表格(_T)"
+ 
+ #. 9pJGh
+-#: sd/uiconfig/sdraw/ui/notebookbar.ui:10542
++#: sd/uiconfig/sdraw/ui/notebookbar.ui:10488
+ msgctxt "drawnotebookbar|TableLabel"
+ msgid "~Table"
+ msgstr "表格(~T)"
+ 
+ #. ECD4J
+-#: sd/uiconfig/sdraw/ui/notebookbar.ui:11069
+-#: sd/uiconfig/sdraw/ui/notebookbar.ui:12386
+-#: sd/uiconfig/sdraw/ui/notebookbar.ui:14180
++#: sd/uiconfig/sdraw/ui/notebookbar.ui:11015
++#: sd/uiconfig/sdraw/ui/notebookbar.ui:12332
++#: sd/uiconfig/sdraw/ui/notebookbar.ui:14126
+ msgctxt "drawnotebookbar|ConvertMenuButton"
+ msgid "Convert"
+ msgstr "转换"
+ 
+ #. 4Z6aZ
+-#: sd/uiconfig/sdraw/ui/notebookbar.ui:11737
++#: sd/uiconfig/sdraw/ui/notebookbar.ui:11683
+ msgctxt "drawnotebookbar|GraphicMenuButton"
+ msgid "Ima_ge"
+ msgstr "图像(_G)"
+ 
+ #. 7FoFi
+-#: sd/uiconfig/sdraw/ui/notebookbar.ui:11846
++#: sd/uiconfig/sdraw/ui/notebookbar.ui:11792
+ msgctxt "drawnotebookbar|ImageLabel"
+ msgid "Ima~ge"
+ msgstr "图像(~G)"
+ 
+ #. 6SADm
+-#: sd/uiconfig/sdraw/ui/notebookbar.ui:13597
++#: sd/uiconfig/sdraw/ui/notebookbar.ui:13543
+ msgctxt "drawnotebookbar|DrawMenuButton"
+ msgid "_Draw"
+ msgstr "绘制(_D)"
+ 
+ #. 6S8qN
+-#: sd/uiconfig/sdraw/ui/notebookbar.ui:13703
++#: sd/uiconfig/sdraw/ui/notebookbar.ui:13649
+ msgctxt "drawnotebookbar|DrawLabel"
+ msgid "~Draw"
+ msgstr "绘制(~D)"
+ 
+ #. QAEDd
+-#: sd/uiconfig/sdraw/ui/notebookbar.ui:14536
++#: sd/uiconfig/sdraw/ui/notebookbar.ui:14482
+ msgctxt "drawnotebookbar|ObjectMenuButton"
+ msgid "_Object"
+ msgstr "对象(_O)"
+ 
+ #. SL4NA
+-#: sd/uiconfig/sdraw/ui/notebookbar.ui:14643
++#: sd/uiconfig/sdraw/ui/notebookbar.ui:14589
+ msgctxt "drawnotebookbar|ObjectLabel"
+ msgid "~Object"
+ msgstr "对象(~O)"
+ 
+ #. 4aAxG
+-#: sd/uiconfig/sdraw/ui/notebookbar.ui:15109
++#: sd/uiconfig/sdraw/ui/notebookbar.ui:15055
+ msgctxt "drawnotebookbar|MediaMenuButton"
+ msgid "_Media"
+ msgstr "媒体(_M)"
+ 
+ #. ed3LH
+-#: sd/uiconfig/sdraw/ui/notebookbar.ui:15213
++#: sd/uiconfig/sdraw/ui/notebookbar.ui:15159
+ msgctxt "drawnotebookbar|MediaLabel"
+ msgid "~Media"
+ msgstr "媒体(~M)"
+ 
+ #. FAL6c
+-#: sd/uiconfig/sdraw/ui/notebookbar.ui:16021
++#: sd/uiconfig/sdraw/ui/notebookbar.ui:15967
+ msgctxt "drawnotebookbar|FormMenuButton"
+ msgid "Fo_rm"
+ msgstr "表单(_R)"
+ 
+ #. oaAJU
+-#: sd/uiconfig/sdraw/ui/notebookbar.ui:16105
++#: sd/uiconfig/sdraw/ui/notebookbar.ui:16051
+ msgctxt "DrawNotebookbar|FormLabel"
+ msgid "Fo~rm"
+ msgstr "表单(~R)"
+ 
+ #. ZBVGA
+-#: sd/uiconfig/sdraw/ui/notebookbar.ui:16892
++#: sd/uiconfig/sdraw/ui/notebookbar.ui:16838
+ msgctxt "DrawNotebookbar|FormMenuButton"
+ msgid "3_d"
+ msgstr "3_d"
+ 
+ #. fEyRX
+-#: sd/uiconfig/sdraw/ui/notebookbar.ui:16999
++#: sd/uiconfig/sdraw/ui/notebookbar.ui:16945
+ msgctxt "DrawNotebookbar|FormLabel"
+ msgid "3~d"
+ msgstr "3~d"
+ 
+ #. 7ZLQw
+-#: sd/uiconfig/sdraw/ui/notebookbar.ui:17523
++#: sd/uiconfig/sdraw/ui/notebookbar.ui:17469
+ msgctxt "DrawNotebookbar|FormMenuButton"
+ msgid "_Master"
+ msgstr "母版(_M)"
+ 
+ #. oiXVg
+-#: sd/uiconfig/sdraw/ui/notebookbar.ui:17607
++#: sd/uiconfig/sdraw/ui/notebookbar.ui:17553
+ msgctxt "DrawNotebookbar|MasterLabel"
+ msgid "~Master"
+ msgstr "母版(~M)"
+ 
+ #. yzvja
+-#: sd/uiconfig/sdraw/ui/notebookbar.ui:17664
++#: sd/uiconfig/sdraw/ui/notebookbar.ui:17610
+ msgctxt "drawnotebookbar|FormMenuButton"
+ msgid "E_xtension"
+ msgstr "扩展(_X)"
+ 
+ #. L3eG5
+-#: sd/uiconfig/sdraw/ui/notebookbar.ui:17738
++#: sd/uiconfig/sdraw/ui/notebookbar.ui:17684
+ msgctxt "drawnotebookbar|ExtensionLabel"
+ msgid "E~xtension"
+ msgstr "扩展(~X)"
+ 
+ #. dkNUg
+-#: sd/uiconfig/sdraw/ui/notebookbar.ui:18650
++#: sd/uiconfig/sdraw/ui/notebookbar.ui:18596
+ msgctxt "drawnotebookbar|ToolsMenuButton"
+ msgid "_Tools"
+ msgstr "工具(_T)"
+ 
+ #. Je8XQ
+-#: sd/uiconfig/sdraw/ui/notebookbar.ui:18734
++#: sd/uiconfig/sdraw/ui/notebookbar.ui:18680
+ msgctxt "drawnotebookbar|DevLabel"
+ msgid "~Tools"
+ msgstr "工具(~T)"
+ 
+ #. uuFFm
+-#: sd/uiconfig/sdraw/ui/notebookbar_compact.ui:2982
++#: sd/uiconfig/sdraw/ui/notebookbar_compact.ui:2928
+ msgctxt "notebookbar_draw_compact|FileMenuButton"
+ msgid "_File"
+ msgstr "文件(_F)"
+ 
+ #. oum9B
+-#: sd/uiconfig/sdraw/ui/notebookbar_compact.ui:3031
++#: sd/uiconfig/sdraw/ui/notebookbar_compact.ui:2977
+ msgctxt "notebookbar_draw_compact|FileLabel"
+ msgid "~File"
+ msgstr "文件(~F)"
+ 
+ #. FcC26
+-#: sd/uiconfig/sdraw/ui/notebookbar_compact.ui:4424
++#: sd/uiconfig/sdraw/ui/notebookbar_compact.ui:4370
+ msgctxt "notebookbar_draw_compact|HomeMenuButton"
+ msgid "_Home"
+ msgstr "常用(_H)"
+ 
+ #. msJmR
+-#: sd/uiconfig/sdraw/ui/notebookbar_compact.ui:4476
++#: sd/uiconfig/sdraw/ui/notebookbar_compact.ui:4422
+ msgctxt "notebookbar_draw_compact|HomeLabel"
+ msgid "~Home"
+ msgstr "常用(~H)"
+ 
+ #. j6zsX
+-#: sd/uiconfig/sdraw/ui/notebookbar_compact.ui:4996
++#: sd/uiconfig/sdraw/ui/notebookbar_compact.ui:4942
+ msgctxt "notebookbar_draw_compact|FieldMenuButton"
+ msgid "Fiel_d"
+ msgstr "字段(_D)"
+ 
+ #. ZDsWu
+-#: sd/uiconfig/sdraw/ui/notebookbar_compact.ui:5497
++#: sd/uiconfig/sdraw/ui/notebookbar_compact.ui:5443
+ msgctxt "notebookbar_draw_compact|InsertMenuButton"
+ msgid "_Insert"
+ msgstr "插入(_I)"
+ 
+ #. d8cey
+-#: sd/uiconfig/sdraw/ui/notebookbar_compact.ui:5548
++#: sd/uiconfig/sdraw/ui/notebookbar_compact.ui:5494
+ msgctxt "notebookbar_draw_compact|InsertLabel"
+ msgid "~Insert"
+ msgstr "插入(~I)"
+ 
+ #. kkPza
+-#: sd/uiconfig/sdraw/ui/notebookbar_compact.ui:6247
++#: sd/uiconfig/sdraw/ui/notebookbar_compact.ui:6193
+ msgctxt "notebookbar_draw_compact|LayoutMenuButton"
+ msgid "Layout"
+ msgstr "布局"
+ 
+ #. 2wBCF
+-#: sd/uiconfig/sdraw/ui/notebookbar_compact.ui:6299
++#: sd/uiconfig/sdraw/ui/notebookbar_compact.ui:6245
+ msgctxt "notebookbar_draw_compact|LayoutLabel"
+ msgid "~Layout"
+ msgstr "布局(~L)"
+ 
+ #. GG7uL
+-#: sd/uiconfig/sdraw/ui/notebookbar_compact.ui:6814
++#: sd/uiconfig/sdraw/ui/notebookbar_compact.ui:6760
+ msgctxt "notebookbar_draw_compact|ReviewMenuButton"
+ msgid "_Review"
+ msgstr "审阅(_R)"
+ 
+ #. twxEq
+-#: sd/uiconfig/sdraw/ui/notebookbar_compact.ui:6866
++#: sd/uiconfig/sdraw/ui/notebookbar_compact.ui:6812
+ msgctxt "notebookbar_draw_compact|ReviewLabel"
+ msgid "~Review"
+ msgstr "审阅(~R)"
+ 
+ #. H5eNL
+-#: sd/uiconfig/sdraw/ui/notebookbar_compact.ui:7561
++#: sd/uiconfig/sdraw/ui/notebookbar_compact.ui:7507
+ msgctxt "notebookbar_draw_compact|ViewMenuButton"
+ msgid "_View"
+ msgstr "视图(_V)"
+ 
+ #. GGEXu
+-#: sd/uiconfig/sdraw/ui/notebookbar_compact.ui:7613
++#: sd/uiconfig/sdraw/ui/notebookbar_compact.ui:7559
+ msgctxt "notebookbar_draw_compact|ViewLabel"
+ msgid "~View"
+ msgstr "视图(~V)"
+ 
+ #. CqEAM
+-#: sd/uiconfig/sdraw/ui/notebookbar_compact.ui:9095
++#: sd/uiconfig/sdraw/ui/notebookbar_compact.ui:9041
+ msgctxt "notebookbar_draw_compact|TextMenuButton"
+ msgid "T_ext"
+ msgstr "文字(_E)"
+ 
+ #. LFcJC
+-#: sd/uiconfig/sdraw/ui/notebookbar_compact.ui:9149
++#: sd/uiconfig/sdraw/ui/notebookbar_compact.ui:9095
+ msgctxt "notebookbar_draw_compact|ReferencesLabel"
+ msgid "T~ext"
+ msgstr "文字(~E)"
+ 
+ #. sdACh
+-#: sd/uiconfig/sdraw/ui/notebookbar_compact.ui:10842
++#: sd/uiconfig/sdraw/ui/notebookbar_compact.ui:10788
+ msgctxt "notebookbar_draw_compact|TableMenuButton"
+ msgid "T_able"
+ msgstr "表格(_A)"
+ 
+ #. GEmbu
+-#: sd/uiconfig/sdraw/ui/notebookbar_compact.ui:10893
++#: sd/uiconfig/sdraw/ui/notebookbar_compact.ui:10839
+ msgctxt "notebookbar_draw_compact|TableLabel"
+ msgid "~Table"
+ msgstr "表格(~T)"
+ 
+ #. EGCcN
+-#: sd/uiconfig/sdraw/ui/notebookbar_compact.ui:12242
++#: sd/uiconfig/sdraw/ui/notebookbar_compact.ui:12188
+ msgctxt "notebookbar_draw_compact|ImageMenuButton"
+ msgid "Image"
+ msgstr "图像"
+ 
+ #. 2eQcW
+-#: sd/uiconfig/sdraw/ui/notebookbar_compact.ui:12294
++#: sd/uiconfig/sdraw/ui/notebookbar_compact.ui:12240
+ msgctxt "notebookbar_draw_compact|ImageLabel"
+ msgid "Ima~ge"
+ msgstr "图像(~G)"
+ 
+ #. CezAN
+-#: sd/uiconfig/sdraw/ui/notebookbar_compact.ui:14128
++#: sd/uiconfig/sdraw/ui/notebookbar_compact.ui:14074
+ msgctxt "notebookbar_draw_compact|DrawMenuButton"
+ msgid "D_raw"
+ msgstr "绘图(_R)"
+ 
+ #. tAMd5
+-#: sd/uiconfig/sdraw/ui/notebookbar_compact.ui:14183
++#: sd/uiconfig/sdraw/ui/notebookbar_compact.ui:14129
+ msgctxt "notebookbar_draw_compact|ShapeLabel"
+ msgid "~Draw"
+ msgstr "~Draw"
+ 
+ #. A49xv
+-#: sd/uiconfig/sdraw/ui/notebookbar_compact.ui:15182
++#: sd/uiconfig/sdraw/ui/notebookbar_compact.ui:15128
+ msgctxt "notebookbar_draw_compact|ObjectMenuButton"
+ msgid "Object"
+ msgstr "对象"
+ 
+ #. 3gubF
+-#: sd/uiconfig/sdraw/ui/notebookbar_compact.ui:15238
++#: sd/uiconfig/sdraw/ui/notebookbar_compact.ui:15184
+ msgctxt "notebookbar_draw_compact|FrameLabel"
+ msgid "~Object"
+ msgstr "对象(~O)"
+ 
+ #. fDRf9
+-#: sd/uiconfig/sdraw/ui/notebookbar_compact.ui:16383
++#: sd/uiconfig/sdraw/ui/notebookbar_compact.ui:16329
+ msgctxt "notebookbar_draw_compact|MediaButton"
+ msgid "_Media"
+ msgstr "媒体(_M)"
+ 
+ #. dAbX4
+-#: sd/uiconfig/sdraw/ui/notebookbar_compact.ui:16437
++#: sd/uiconfig/sdraw/ui/notebookbar_compact.ui:16383
+ msgctxt "notebookbar_draw_compact|MediaLabel"
+ msgid "~Media"
+ msgstr "媒体(~M)"
+ 
+ #. SCSH8
+-#: sd/uiconfig/sdraw/ui/notebookbar_compact.ui:17674
++#: sd/uiconfig/sdraw/ui/notebookbar_compact.ui:17620
+ msgctxt "notebookbar_draw_compact|FormButton"
+ msgid "Fo_rm"
+ msgstr "表单(_R)"
+ 
+ #. vzdXF
+-#: sd/uiconfig/sdraw/ui/notebookbar_compact.ui:17729
++#: sd/uiconfig/sdraw/ui/notebookbar_compact.ui:17675
+ msgctxt "notebookbar_draw_compact|FormLabel"
+ msgid "Fo~rm"
+ msgstr "表单(~R)"
+ 
+ #. zEK2o
+-#: sd/uiconfig/sdraw/ui/notebookbar_compact.ui:18250
++#: sd/uiconfig/sdraw/ui/notebookbar_compact.ui:18196
+ msgctxt "notebookbar_draw_compact|PrintPreviewButton"
+ msgid "_Master"
+ msgstr "母版(_M)"
+ 
+ #. S3huE
+-#: sd/uiconfig/sdraw/ui/notebookbar_compact.ui:18302
++#: sd/uiconfig/sdraw/ui/notebookbar_compact.ui:18248
+ msgctxt "notebookbar_draw_compact|FormLabel"
+ msgid "~Master"
+ msgstr "母版(~M)"
+ 
+ #. T3Z8R
+-#: sd/uiconfig/sdraw/ui/notebookbar_compact.ui:19264
++#: sd/uiconfig/sdraw/ui/notebookbar_compact.ui:19210
+ msgctxt "notebookbar_draw_compact|FormButton"
+ msgid "3_d"
+ msgstr "3_d"
+ 
+ #. ZCuDe
+-#: sd/uiconfig/sdraw/ui/notebookbar_compact.ui:19319
++#: sd/uiconfig/sdraw/ui/notebookbar_compact.ui:19265
+ msgctxt "notebookbar_draw_compact|FormLabel"
+ msgid "3~d"
+ msgstr "3~d"
+ 
+ #. YpLRj
+-#: sd/uiconfig/sdraw/ui/notebookbar_compact.ui:19398
++#: sd/uiconfig/sdraw/ui/notebookbar_compact.ui:19344
+ msgctxt "notebookbar_draw_compact|ExtensionMenuButton"
+ msgid "E_xtension"
+ msgstr "扩展(_X)"
+ 
+ #. uRrEt
+-#: sd/uiconfig/sdraw/ui/notebookbar_compact.ui:19456
++#: sd/uiconfig/sdraw/ui/notebookbar_compact.ui:19402
+ msgctxt "notebookbar_draw_compact|ExtensionLabel"
+ msgid "E~xtension"
+ msgstr "扩展(~X)"
+ 
+ #. L3xmd
+-#: sd/uiconfig/sdraw/ui/notebookbar_compact.ui:20457
++#: sd/uiconfig/sdraw/ui/notebookbar_compact.ui:20403
+ msgctxt "notebookbar_draw_compact|ToolsMenuButton"
+ msgid "_Tools"
+ msgstr "工具(_T)"
+ 
+ #. LhBTk
+-#: sd/uiconfig/sdraw/ui/notebookbar_compact.ui:20509
++#: sd/uiconfig/sdraw/ui/notebookbar_compact.ui:20455
+ msgctxt "notebookbar_draw_compact|DevLabel"
+ msgid "~Tools"
+ msgstr "工具(~T)"
+@@ -6743,447 +6743,447 @@ msgid "Back to front"
+ msgstr "从背景到前景"
+ 
+ #. qGFEo
+-#: sd/uiconfig/simpress/ui/notebookbar.ui:3058
++#: sd/uiconfig/simpress/ui/notebookbar.ui:3004
+ msgctxt "impressnotebookbar|FileLabel"
+ msgid "_File"
+ msgstr "文件(_F)"
+ 
+ #. PyC4c
+-#: sd/uiconfig/simpress/ui/notebookbar.ui:3077
++#: sd/uiconfig/simpress/ui/notebookbar.ui:3023
+ msgctxt "impressnotebookbar|HelpMenuButton"
+ msgid "_Help"
+ msgstr "帮助(_H)"
+ 
+ #. VoxXb
+-#: sd/uiconfig/simpress/ui/notebookbar.ui:3133
++#: sd/uiconfig/simpress/ui/notebookbar.ui:3079
+ msgctxt "impressnotebookbar|FileLabel"
+ msgid "~File"
+ msgstr "文件(~F)"
+ 
+ #. XRcKU
+-#: sd/uiconfig/simpress/ui/notebookbar.ui:4653
++#: sd/uiconfig/simpress/ui/notebookbar.ui:4599
+ msgctxt "impressnotebookbar|HomeMenuButton"
+ msgid "_Home"
+ msgstr "常用(_H)"
+ 
+ #. XqFQv
+-#: sd/uiconfig/simpress/ui/notebookbar.ui:4753
++#: sd/uiconfig/simpress/ui/notebookbar.ui:4699
+ msgctxt "impressnotebookbar|HomeLabel"
+ msgid "~Home"
+ msgstr "常用(~H)"
+ 
+ #. DEQhQ
+-#: sd/uiconfig/simpress/ui/notebookbar.ui:5355
++#: sd/uiconfig/simpress/ui/notebookbar.ui:5301
+ msgctxt "impressnotebookbar|FieldMenuButton"
+ msgid "Fiel_d"
+ msgstr "字段(_D)"
+ 
+ #. 9GEAC
+-#: sd/uiconfig/simpress/ui/notebookbar.ui:5873
++#: sd/uiconfig/simpress/ui/notebookbar.ui:5819
+ msgctxt "impressnotebookbar|InsertMenuButton"
+ msgid "_Insert"
+ msgstr "插入(_I)"
+ 
+ #. t3YwN
+-#: sd/uiconfig/simpress/ui/notebookbar.ui:5976
++#: sd/uiconfig/simpress/ui/notebookbar.ui:5922
+ msgctxt "impressnotebookbar|InsertLabel"
+ msgid "~Insert"
+ msgstr "插入(~I)"
+ 
+ #. 58fjG
+-#: sd/uiconfig/simpress/ui/notebookbar.ui:6751
++#: sd/uiconfig/simpress/ui/notebookbar.ui:6697
+ msgctxt "impressnotebookbar|SlideMenuButton"
+ msgid "_Layout"
+ msgstr "布局(_L)"
+ 
+ #. ArPLp
+-#: sd/uiconfig/simpress/ui/notebookbar.ui:6836
++#: sd/uiconfig/simpress/ui/notebookbar.ui:6782
+ msgctxt "impressnotebookbar|LayoutLabel"
+ msgid "~Layout"
+ msgstr "布局(~L)"
+ 
+ #. vRtjP
+-#: sd/uiconfig/simpress/ui/notebookbar.ui:7300
++#: sd/uiconfig/simpress/ui/notebookbar.ui:7246
+ msgctxt "impressnotebookbar|SlideShowMenuButton"
+ msgid "_Slide Show"
+ msgstr "幻灯片放映(_S)"
+ 
+ #. nV5FC
+-#: sd/uiconfig/simpress/ui/notebookbar.ui:7384
++#: sd/uiconfig/simpress/ui/notebookbar.ui:7330
+ msgctxt "impressnotebookbar|ReferencesLabel"
+ msgid "~Slide Show"
+ msgstr "幻灯片放映(~S)"
+ 
+ #. sDdGm
+-#: sd/uiconfig/simpress/ui/notebookbar.ui:7920
++#: sd/uiconfig/simpress/ui/notebookbar.ui:7866
+ msgctxt "impressnotebookbar|ReviewMenuButton"
+ msgid "_Review"
+ msgstr "审阅(_R)"
+ 
+ #. drk6E
+-#: sd/uiconfig/simpress/ui/notebookbar.ui:8003
++#: sd/uiconfig/simpress/ui/notebookbar.ui:7949
+ msgctxt "impressnotebookbar|ReviewLabel"
+ msgid "~Review"
+ msgstr "审阅(~R)"
+ 
+ #. vjE5w
+-#: sd/uiconfig/simpress/ui/notebookbar.ui:9276
++#: sd/uiconfig/simpress/ui/notebookbar.ui:9222
+ msgctxt "impressnotebookbar|ViewMenuButton"
+ msgid "_View"
+ msgstr "视图(_V)"
+ 
+ #. KJK9J
+-#: sd/uiconfig/simpress/ui/notebookbar.ui:9361
++#: sd/uiconfig/simpress/ui/notebookbar.ui:9307
+ msgctxt "impressnotebookbar|ViewLabel"
+ msgid "~View"
+ msgstr "视图(~V)"
+ 
+ #. bWC2b
+-#: sd/uiconfig/simpress/ui/notebookbar.ui:10255
++#: sd/uiconfig/simpress/ui/notebookbar.ui:10201
+ msgctxt "impressnotebookbar|TableMenuButton"
+ msgid "_Table"
+ msgstr "表格(_T)"
+ 
+ #. dmEJG
+-#: sd/uiconfig/simpress/ui/notebookbar.ui:10339
++#: sd/uiconfig/simpress/ui/notebookbar.ui:10285
+ msgctxt "impressnotebookbar|TableLabel"
+ msgid "~Table"
+ msgstr "表格(~T)"
+ 
+ #. Cn8TS
+-#: sd/uiconfig/simpress/ui/notebookbar.ui:10864
+-#: sd/uiconfig/simpress/ui/notebookbar.ui:12118
+-#: sd/uiconfig/simpress/ui/notebookbar.ui:13930
++#: sd/uiconfig/simpress/ui/notebookbar.ui:10810
++#: sd/uiconfig/simpress/ui/notebookbar.ui:12064
++#: sd/uiconfig/simpress/ui/notebookbar.ui:13876
+ msgctxt "impressnotebookbar|ConvertMenuButton"
+ msgid "Convert"
+ msgstr "转换"
+ 
+ #. do5DT
+-#: sd/uiconfig/simpress/ui/notebookbar.ui:11534
++#: sd/uiconfig/simpress/ui/notebookbar.ui:11480
+ msgctxt "impressnotebookbar|GraphicMenuButton"
+ msgid "Ima_ge"
+ msgstr "图像(_G)"
+ 
+ #. XCSMA
+-#: sd/uiconfig/simpress/ui/notebookbar.ui:11643
++#: sd/uiconfig/simpress/ui/notebookbar.ui:11589
+ msgctxt "impressnotebookbar|ImageLabel"
+ msgid "Ima~ge"
+ msgstr "图像(~G)"
+ 
+ #. nTy3C
+-#: sd/uiconfig/simpress/ui/notebookbar.ui:13345
++#: sd/uiconfig/simpress/ui/notebookbar.ui:13291
+ msgctxt "impressnotebookbar|DrawMenuButton"
+ msgid "_Draw"
+ msgstr "绘制(_D)"
+ 
+ #. BfNQD
+-#: sd/uiconfig/simpress/ui/notebookbar.ui:13452
++#: sd/uiconfig/simpress/ui/notebookbar.ui:13398
+ msgctxt "impressnotebookbar|DrawLabel"
+ msgid "~Draw"
+ msgstr "绘制(~D)"
+ 
+ #. p3Faf
+-#: sd/uiconfig/simpress/ui/notebookbar.ui:14286
++#: sd/uiconfig/simpress/ui/notebookbar.ui:14232
+ msgctxt "impressnotebookbar|ObjectMenuButton"
+ msgid "_Object"
+ msgstr "对象(_O)"
+ 
+ #. wL8mu
+-#: sd/uiconfig/simpress/ui/notebookbar.ui:14393
++#: sd/uiconfig/simpress/ui/notebookbar.ui:14339
+ msgctxt "impressnotebookbar|ObjectLabel"
+ msgid "~Object"
+ msgstr "对象(~O)"
+ 
+ #. AAosj
+-#: sd/uiconfig/simpress/ui/notebookbar.ui:14859
++#: sd/uiconfig/simpress/ui/notebookbar.ui:14805
+ msgctxt "impressnotebookbar|MediaMenuButton"
+ msgid "_Media"
+ msgstr "媒体(_M)"
+ 
+ #. GgHEg
+-#: sd/uiconfig/simpress/ui/notebookbar.ui:14963
++#: sd/uiconfig/simpress/ui/notebookbar.ui:14909
+ msgctxt "impressnotebookbar|MediaLabel"
+ msgid "~Media"
+ msgstr "媒体(~M)"
+ 
+ #. W9oCC
+-#: sd/uiconfig/simpress/ui/notebookbar.ui:15771
++#: sd/uiconfig/simpress/ui/notebookbar.ui:15717
+ msgctxt "impressnotebookbar|FormMenuButton"
+ msgid "Fo_rm"
+ msgstr "表单(_R)"
+ 
+ #. 7sAbT
+-#: sd/uiconfig/simpress/ui/notebookbar.ui:15855
++#: sd/uiconfig/simpress/ui/notebookbar.ui:15801
+ msgctxt "ImpressNotebookbar|FormLabel"
+ msgid "Fo~rm"
+ msgstr "表单(~R)"
+ 
+ #. aAdZJ
+-#: sd/uiconfig/simpress/ui/notebookbar.ui:16650
++#: sd/uiconfig/simpress/ui/notebookbar.ui:16596
+ msgctxt "impressnotebookbar|FormMenuButton"
+ msgid "_Master"
+ msgstr "母版(_M)"
+ 
+ #. XAZEm
+-#: sd/uiconfig/simpress/ui/notebookbar.ui:16734
++#: sd/uiconfig/simpress/ui/notebookbar.ui:16680
+ msgctxt "ImpressNotebookbar|MasterLabel"
+ msgid "~Master"
+ msgstr "母版(~M)"
+ 
+ #. DyZAq
+-#: sd/uiconfig/simpress/ui/notebookbar.ui:17544
++#: sd/uiconfig/simpress/ui/notebookbar.ui:17490
+ msgctxt "ImpressNotebookbar|FormMenuButton"
+ msgid "_View"
+ msgstr "视图(_V)"
+ 
+ #. rUJFu
+-#: sd/uiconfig/simpress/ui/notebookbar.ui:17628
++#: sd/uiconfig/simpress/ui/notebookbar.ui:17574
+ msgctxt "ImpressNotebookbar|View2Label"
+ msgid "~Outline"
+ msgstr "提纲(~O)"
+ 
+ #. pA8DH
+-#: sd/uiconfig/simpress/ui/notebookbar.ui:18415
++#: sd/uiconfig/simpress/ui/notebookbar.ui:18361
+ msgctxt "impressnotebookbar|FormMenuButton"
+ msgid "3_d"
+ msgstr "3_D"
+ 
+ #. xwrog
+-#: sd/uiconfig/simpress/ui/notebookbar.ui:18522
++#: sd/uiconfig/simpress/ui/notebookbar.ui:18468
+ msgctxt "impressnotebookbar|FormLabel"
+ msgid "3~d"
+ msgstr "3~D"
+ 
+ #. syaDA
+-#: sd/uiconfig/simpress/ui/notebookbar.ui:18579
++#: sd/uiconfig/simpress/ui/notebookbar.ui:18525
+ msgctxt "impressnotebookbar|FormMenuButton"
+ msgid "E_xtension"
+ msgstr "扩展(_X)"
+ 
+ #. Nwrnv
+-#: sd/uiconfig/simpress/ui/notebookbar.ui:18653
++#: sd/uiconfig/simpress/ui/notebookbar.ui:18599
+ msgctxt "impressnotebookbar|ExtensionLabel"
+ msgid "E~xtension"
+ msgstr "扩展(~X)"
+ 
+ #. rBSXA
+-#: sd/uiconfig/simpress/ui/notebookbar.ui:19616
++#: sd/uiconfig/simpress/ui/notebookbar.ui:19562
+ msgctxt "impressnotebookbar|ToolsMenuButton"
+ msgid "_Tools"
+ msgstr "工具(_T)"
+ 
+ #. DTNDB
+-#: sd/uiconfig/simpress/ui/notebookbar.ui:19700
++#: sd/uiconfig/simpress/ui/notebookbar.ui:19646
+ msgctxt "impressnotebookbar|DevLabel"
+ msgid "~Tools"
+ msgstr "工具(~T)"
+ 
+ #. FSDrH
+-#: sd/uiconfig/simpress/ui/notebookbar_compact.ui:3267
++#: sd/uiconfig/simpress/ui/notebookbar_compact.ui:3213
+ msgctxt "notebookbar_impress_compact|FileMenuButton"
+ msgid "_File"
+ msgstr "文件(_F)"
+ 
+ #. LEEM5
+-#: sd/uiconfig/simpress/ui/notebookbar_compact.ui:3316
++#: sd/uiconfig/simpress/ui/notebookbar_compact.ui:3262
+ msgctxt "notebookbar_impress_compact|FileLabel"
+ msgid "~File"
+ msgstr "文件(~F)"
+ 
+ #. ujGqT
+-#: sd/uiconfig/simpress/ui/notebookbar_compact.ui:4685
++#: sd/uiconfig/simpress/ui/notebookbar_compact.ui:4631
+ msgctxt "notebookbar_impress_compact|HomeMenuButton"
+ msgid "_Home"
+ msgstr "常用(_H)"
+ 
+ #. NGYSB
+-#: sd/uiconfig/simpress/ui/notebookbar_compact.ui:4737
++#: sd/uiconfig/simpress/ui/notebookbar_compact.ui:4683
+ msgctxt "notebookbar_impress_compact|HomeLabel"
+ msgid "~Home"
+ msgstr "常用(~H)"
+ 
+ #. 4g3iJ
+-#: sd/uiconfig/simpress/ui/notebookbar_compact.ui:5260
++#: sd/uiconfig/simpress/ui/notebookbar_compact.ui:5206
+ msgctxt "notebookbar_impress_compact|FieldMenuButton"
+ msgid "Fiel_d"
+ msgstr "字段(_D)"
+ 
+ #. 927AD
+-#: sd/uiconfig/simpress/ui/notebookbar_compact.ui:5761
++#: sd/uiconfig/simpress/ui/notebookbar_compact.ui:5707
+ msgctxt "notebookbar_impress_compact|InsertMenuButton"
+ msgid "_Insert"
+ msgstr "插入(_I)"
+ 
+ #. ZPHaB
+-#: sd/uiconfig/simpress/ui/notebookbar_compact.ui:5812
++#: sd/uiconfig/simpress/ui/notebookbar_compact.ui:5758
+ msgctxt "notebookbar_impress_compact|InsertLabel"
+ msgid "~Insert"
+ msgstr "插入(~I)"
+ 
+ #. zEEiz
+-#: sd/uiconfig/simpress/ui/notebookbar_compact.ui:6598
++#: sd/uiconfig/simpress/ui/notebookbar_compact.ui:6544
+ msgctxt "notebookbar_impress_compact|LayoutMenuButton"
+ msgid "Layout"
+ msgstr "布局"
+ 
+ #. EZeGS
+-#: sd/uiconfig/simpress/ui/notebookbar_compact.ui:6650
++#: sd/uiconfig/simpress/ui/notebookbar_compact.ui:6596
+ msgctxt "notebookbar_impress_compact|LayoutLabel"
+ msgid "~Layout"
+ msgstr "布局(~L)"
+ 
+ #. sMsGk
+-#: sd/uiconfig/simpress/ui/notebookbar_compact.ui:7165
++#: sd/uiconfig/simpress/ui/notebookbar_compact.ui:7111
+ msgctxt "notebookbar_impress_compact|ReviewMenuButton"
+ msgid "_Review"
+ msgstr "审阅(_R)"
+ 
+ #. pZ4A3
+-#: sd/uiconfig/simpress/ui/notebookbar_compact.ui:7217
++#: sd/uiconfig/simpress/ui/notebookbar_compact.ui:7163
+ msgctxt "notebookbar_impress_compact|ReviewLabel"
+ msgid "~Review"
+ msgstr "审阅(~R)"
+ 
+ #. cRSR3
+-#: sd/uiconfig/simpress/ui/notebookbar_compact.ui:7754
++#: sd/uiconfig/simpress/ui/notebookbar_compact.ui:7700
+ msgctxt "notebookbar_impress_compact|LayoutMenuButton"
+ msgid "_Slide Show"
+ msgstr "幻灯片放映(_S)"
+ 
+ #. KAo9c
+-#: sd/uiconfig/simpress/ui/notebookbar_compact.ui:7806
++#: sd/uiconfig/simpress/ui/notebookbar_compact.ui:7752
+ msgctxt "notebookbar_impress_compact|LayoutLabel"
+ msgid "~Slide Show"
+ msgstr "幻灯片放映(~S)"
+ 
+ #. URjcx
+-#: sd/uiconfig/simpress/ui/notebookbar_compact.ui:8638
++#: sd/uiconfig/simpress/ui/notebookbar_compact.ui:8584
+ msgctxt "notebookbar_impress_compact|ViewMenuButton"
+ msgid "_View"
+ msgstr "视图(_V)"
+ 
+ #. SScpo
+-#: sd/uiconfig/simpress/ui/notebookbar_compact.ui:8690
++#: sd/uiconfig/simpress/ui/notebookbar_compact.ui:8636
+ msgctxt "notebookbar_impress_compact|ViewLabel"
+ msgid "~View"
+ msgstr "视图(~V)"
+ 
+ #. CzCMC
+-#: sd/uiconfig/simpress/ui/notebookbar_compact.ui:10374
++#: sd/uiconfig/simpress/ui/notebookbar_compact.ui:10320
+ msgctxt "notebookbar_impress_compact|TableMenuButton"
+ msgid "T_able"
+ msgstr "表格(_A)"
+ 
+ #. mnepU
+-#: sd/uiconfig/simpress/ui/notebookbar_compact.ui:10425
++#: sd/uiconfig/simpress/ui/notebookbar_compact.ui:10371
+ msgctxt "notebookbar_impress_compact|TableLabel"
+ msgid "~Table"
+ msgstr "表格(~T)"
+ 
+ #. BzXPB
+-#: sd/uiconfig/simpress/ui/notebookbar_compact.ui:11772
++#: sd/uiconfig/simpress/ui/notebookbar_compact.ui:11718
+ msgctxt "notebookbar_impress_compact|ImageMenuButton"
+ msgid "Image"
+ msgstr "图像"
+ 
+ #. wD2ow
+-#: sd/uiconfig/simpress/ui/notebookbar_compact.ui:11827
++#: sd/uiconfig/simpress/ui/notebookbar_compact.ui:11773
+ msgctxt "notebookbar_impress_compact|ImageLabel"
+ msgid "Ima~ge"
+ msgstr "图像(~G)"
+ 
+ #. ZqPYr
+-#: sd/uiconfig/simpress/ui/notebookbar_compact.ui:13602
++#: sd/uiconfig/simpress/ui/notebookbar_compact.ui:13548
+ msgctxt "notebookbar_impress_compact|DrawMenuButton"
+ msgid "D_raw"
+ msgstr "绘图(_R)"
+ 
+ #. 78DU3
+-#: sd/uiconfig/simpress/ui/notebookbar_compact.ui:13654
++#: sd/uiconfig/simpress/ui/notebookbar_compact.ui:13600
+ msgctxt "notebookbar_impress_compact|ShapeLabel"
+ msgid "~Draw"
+ msgstr "绘图(~D)"
+ 
+ #. uv2FE
+-#: sd/uiconfig/simpress/ui/notebookbar_compact.ui:14651
++#: sd/uiconfig/simpress/ui/notebookbar_compact.ui:14597
+ msgctxt "notebookbar_impress_compact|ObjectMenuButton"
+ msgid "Object"
+ msgstr "对象"
+ 
+ #. FSjqt
+-#: sd/uiconfig/simpress/ui/notebookbar_compact.ui:14703
++#: sd/uiconfig/simpress/ui/notebookbar_compact.ui:14649
+ msgctxt "notebookbar_impress_compact|FrameLabel"
+ msgid "~Object"
+ msgstr "对象(~O)"
+ 
+ #. t3Fmv
+-#: sd/uiconfig/simpress/ui/notebookbar_compact.ui:15846
++#: sd/uiconfig/simpress/ui/notebookbar_compact.ui:15792
+ msgctxt "notebookbar_impress_compact|MediaButton"
+ msgid "_Media"
+ msgstr "媒体(_M)"
+ 
+ #. HbptL
+-#: sd/uiconfig/simpress/ui/notebookbar_compact.ui:15897
++#: sd/uiconfig/simpress/ui/notebookbar_compact.ui:15843
+ msgctxt "notebookbar_impress_compact|MediaLabel"
+ msgid "~Media"
+ msgstr "媒体(~M)"
+ 
+ #. NNqQ2
+-#: sd/uiconfig/simpress/ui/notebookbar_compact.ui:17134
++#: sd/uiconfig/simpress/ui/notebookbar_compact.ui:17080
+ msgctxt "notebookbar_impress_compact|FormButton"
+ msgid "Fo_rm"
+ msgstr "表单(_R)"
+ 
+ #. DpFpM
+-#: sd/uiconfig/simpress/ui/notebookbar_compact.ui:17186
++#: sd/uiconfig/simpress/ui/notebookbar_compact.ui:17132
+ msgctxt "notebookbar_impress_compact|FormLabel"
+ msgid "Fo~rm"
+ msgstr "表单(~R)"
+ 
+ #. MNUFm
+-#: sd/uiconfig/simpress/ui/notebookbar_compact.ui:17938
++#: sd/uiconfig/simpress/ui/notebookbar_compact.ui:17884
+ msgctxt "notebookbar_impress_compact|PrintPreviewButton"
+ msgid "_Master"
+ msgstr "母版(_M)"
+ 
+ #. NUiWE
+-#: sd/uiconfig/simpress/ui/notebookbar_compact.ui:17990
++#: sd/uiconfig/simpress/ui/notebookbar_compact.ui:17936
+ msgctxt "notebookbar_impress_compact|FormLabel"
+ msgid "~Master"
+ msgstr "母版(~M)"
+ 
+ #. 4f9xG
+-#: sd/uiconfig/simpress/ui/notebookbar_compact.ui:18950
++#: sd/uiconfig/simpress/ui/notebookbar_compact.ui:18896
+ msgctxt "notebookbar_impress_compact|FormButton"
+ msgid "3_d"
+ msgstr "3_D"
+ 
+ #. ntfL7
+-#: sd/uiconfig/simpress/ui/notebookbar_compact.ui:19002
++#: sd/uiconfig/simpress/ui/notebookbar_compact.ui:18948
+ msgctxt "notebookbar_impress_compact|FormLabel"
+ msgid "3~d"
+ msgstr "3~D"
+ 
+ #. ntjaC
+-#: sd/uiconfig/simpress/ui/notebookbar_compact.ui:19081
++#: sd/uiconfig/simpress/ui/notebookbar_compact.ui:19027
+ msgctxt "notebookbar_impress_compact|ExtensionMenuButton"
+ msgid "E_xtension"
+ msgstr "扩展(_X)"
+ 
+ #. Tu5f8
+-#: sd/uiconfig/simpress/ui/notebookbar_compact.ui:19139
++#: sd/uiconfig/simpress/ui/notebookbar_compact.ui:19085
+ msgctxt "notebookbar_impress_compact|ExtensionLabel"
+ msgid "E~xtension"
+ msgstr "扩展(~X)"
+ 
+ #. abvtG
+-#: sd/uiconfig/simpress/ui/notebookbar_compact.ui:20140
++#: sd/uiconfig/simpress/ui/notebookbar_compact.ui:20086
+ msgctxt "notebookbar_impress_compact|ToolsMenuButton"
+ msgid "_Tools"
+ msgstr "工具(_T)"
+ 
+ #. oKhkv
+-#: sd/uiconfig/simpress/ui/notebookbar_compact.ui:20192
++#: sd/uiconfig/simpress/ui/notebookbar_compact.ui:20138
+ msgctxt "notebookbar_impress_compact|DevLabel"
+ msgid "~Tools"
+ msgstr "工具(~T)"
+@@ -7384,231 +7384,231 @@ msgid "_Menu"
+ msgstr "菜单(_M)"
+ 
+ #. EsADr
+-#: sd/uiconfig/simpress/ui/notebookbar_groupedbar_full.ui:2995
++#: sd/uiconfig/simpress/ui/notebookbar_groupedbar_full.ui:2954
+ msgctxt "notebookbar_groupedbar_full|menub"
+ msgid "_Menu"
+ msgstr "菜单(_M)"
+ 
+ #. Ch63h
+-#: sd/uiconfig/simpress/ui/notebookbar_groupedbar_full.ui:3047
++#: sd/uiconfig/simpress/ui/notebookbar_groupedbar_full.ui:3006
+ msgctxt "notebookbar_groupedbar_full|toolsb"
+ msgid "_Tools"
+ msgstr "工具(_T)"
+ 
+ #. kdH4L
+-#: sd/uiconfig/simpress/ui/notebookbar_groupedbar_full.ui:3100
++#: sd/uiconfig/simpress/ui/notebookbar_groupedbar_full.ui:3059
+ msgctxt "notebookbar_groupedbar_full|helpb"
+ msgid "_Help"
+ msgstr "帮助(_H)"
+ 
+ #. bkg23
+-#: sd/uiconfig/simpress/ui/notebookbar_groupedbar_full.ui:3206
++#: sd/uiconfig/simpress/ui/notebookbar_groupedbar_full.ui:3165
+ msgctxt "notebookbar_groupedbar_full|fileb"
+ msgid "_File"
+ msgstr "文件(_F)"
+ 
+ #. aqbEs
+-#: sd/uiconfig/simpress/ui/notebookbar_groupedbar_full.ui:3439
++#: sd/uiconfig/simpress/ui/notebookbar_groupedbar_full.ui:3398
+ msgctxt "notebookbar_groupedbar_full|editb"
+ msgid "_Edit"
+ msgstr "编辑(_E)"
+ 
+ #. S4ZPU
+-#: sd/uiconfig/simpress/ui/notebookbar_groupedbar_full.ui:3596
++#: sd/uiconfig/simpress/ui/notebookbar_groupedbar_full.ui:3555
+ msgctxt "notebookbar_groupedbar_full|slideshowb"
+ msgid "_Slide Show"
+ msgstr "幻灯片放映(_S)"
+ 
+ #. ZShaH
+-#: sd/uiconfig/simpress/ui/notebookbar_groupedbar_full.ui:3789
++#: sd/uiconfig/simpress/ui/notebookbar_groupedbar_full.ui:3748
+ msgctxt "notebookbar_groupedbar_full|paragraphstylet"
+ msgid "S_lide"
+ msgstr "幻灯片(_L)"
+ 
+ #. dS4bE
+-#: sd/uiconfig/simpress/ui/notebookbar_groupedbar_full.ui:3938
++#: sd/uiconfig/simpress/ui/notebookbar_groupedbar_full.ui:3897
+ msgctxt "notebookbar_groupedbar_full|insertText"
+ msgid "_Insert"
+ msgstr "插入(_I)"
+ 
+ #. bwvGG
+-#: sd/uiconfig/simpress/ui/notebookbar_groupedbar_full.ui:4274
++#: sd/uiconfig/simpress/ui/notebookbar_groupedbar_full.ui:4233
+ msgctxt "notebookbar_groupedbar_full|draw"
+ msgid "D_raw"
+ msgstr "绘图(_R)"
+ 
+ #. gQQfL
+-#: sd/uiconfig/simpress/ui/notebookbar_groupedbar_full.ui:4458
++#: sd/uiconfig/simpress/ui/notebookbar_groupedbar_full.ui:4417
+ msgctxt "notebookbar_groupedbar_full|reviewb"
+ msgid "_Review"
+ msgstr "审阅(_R)"
+ 
+ #. BHDdD
+-#: sd/uiconfig/simpress/ui/notebookbar_groupedbar_full.ui:4604
++#: sd/uiconfig/simpress/ui/notebookbar_groupedbar_full.ui:4563
+ msgctxt "notebookbar_groupedbar_full|viewb"
+ msgid "_View"
+ msgstr "视图(_V)"
+ 
+ #. MECyG
+-#: sd/uiconfig/simpress/ui/notebookbar_groupedbar_full.ui:4886
+-#: sd/uiconfig/simpress/ui/notebookbar_groupedbar_full.ui:8408
+-#: sd/uiconfig/simpress/ui/notebookbar_groupedbar_full.ui:9650
+-#: sd/uiconfig/simpress/ui/notebookbar_groupedbar_full.ui:11041
+-#: sd/uiconfig/simpress/ui/notebookbar_groupedbar_full.ui:12273
++#: sd/uiconfig/simpress/ui/notebookbar_groupedbar_full.ui:4845
++#: sd/uiconfig/simpress/ui/notebookbar_groupedbar_full.ui:8367
++#: sd/uiconfig/simpress/ui/notebookbar_groupedbar_full.ui:9609
++#: sd/uiconfig/simpress/ui/notebookbar_groupedbar_full.ui:11000
++#: sd/uiconfig/simpress/ui/notebookbar_groupedbar_full.ui:12232
+ msgctxt "notebookbar_groupedbar_full|arrangedrawb"
+ msgid "_Arrange"
+ msgstr "排列(_A)"
+ 
+ #. ZZz6G
+-#: sd/uiconfig/simpress/ui/notebookbar_groupedbar_full.ui:5043
++#: sd/uiconfig/simpress/ui/notebookbar_groupedbar_full.ui:5002
+ msgctxt "notebookbar_groupedbar_full|slideshowt"
+ msgid "_Slide Show"
+ msgstr "幻灯片放映(_S)"
+ 
+ #. etFeN
+-#: sd/uiconfig/simpress/ui/notebookbar_groupedbar_full.ui:5286
+-#: sd/uiconfig/simpress/ui/notebookbar_groupedbar_full.ui:6529
++#: sd/uiconfig/simpress/ui/notebookbar_groupedbar_full.ui:5245
++#: sd/uiconfig/simpress/ui/notebookbar_groupedbar_full.ui:6488
+ msgctxt "notebookbar_groupedbar_full|formatd"
+ msgid "F_ormat"
+ msgstr "格式(_O)"
+ 
+ #. sdehG
+-#: sd/uiconfig/simpress/ui/notebookbar_groupedbar_full.ui:5597
+-#: sd/uiconfig/simpress/ui/notebookbar_groupedbar_full.ui:6840
++#: sd/uiconfig/simpress/ui/notebookbar_groupedbar_full.ui:5556
++#: sd/uiconfig/simpress/ui/notebookbar_groupedbar_full.ui:6799
+ msgctxt "notebookbar_groupedbar_full|paragraphTextb"
+ msgid "_Paragraph"
+ msgstr "段落(_P)"
+ 
+ #. ncg2G
+-#: sd/uiconfig/simpress/ui/notebookbar_groupedbar_full.ui:5837
++#: sd/uiconfig/simpress/ui/notebookbar_groupedbar_full.ui:5796
+ msgctxt "notebookbar_groupedbar_full|insertTextt"
+ msgid "_Insert"
+ msgstr "插入(_I)"
+ 
+ #. 6isa9
+-#: sd/uiconfig/simpress/ui/notebookbar_groupedbar_full.ui:5999
++#: sd/uiconfig/simpress/ui/notebookbar_groupedbar_full.ui:5958
+ msgctxt "notebookbar_groupedbar_full|viewt"
+ msgid "_View"
+ msgstr "视图(_V)"
+ 
+ #. sorSJ
+-#: sd/uiconfig/simpress/ui/notebookbar_groupedbar_full.ui:6147
++#: sd/uiconfig/simpress/ui/notebookbar_groupedbar_full.ui:6106
+ msgctxt "notebookbar_groupedbar_full|reviewp"
+ msgid "_Review"
+ msgstr "审阅(_R)"
+ 
+ #. jHLaW
+-#: sd/uiconfig/simpress/ui/notebookbar_groupedbar_full.ui:6286
++#: sd/uiconfig/simpress/ui/notebookbar_groupedbar_full.ui:6245
+ msgctxt "notebookbar_groupedbar_full|slideshowtt"
+ msgid "_Slide Show"
+ msgstr "幻灯片放映(_S)"
+ 
+ #. Ew7Ho
+-#: sd/uiconfig/simpress/ui/notebookbar_groupedbar_full.ui:7015
++#: sd/uiconfig/simpress/ui/notebookbar_groupedbar_full.ui:6974
+ msgctxt "notebookbar_groupedbar_full|tabled"
+ msgid "T_able"
+ msgstr "表格(_A)"
+ 
+ #. i8XUZ
+-#: sd/uiconfig/simpress/ui/notebookbar_groupedbar_full.ui:7275
++#: sd/uiconfig/simpress/ui/notebookbar_groupedbar_full.ui:7234
+ msgctxt "notebookbar_groupedbar_full|rowscolumnst"
+ msgid "R_ows"
+ msgstr "行(_O)"
+ 
+ #. 4nboE
+-#: sd/uiconfig/simpress/ui/notebookbar_groupedbar_full.ui:7397
++#: sd/uiconfig/simpress/ui/notebookbar_groupedbar_full.ui:7356
+ msgctxt "notebookbar_groupedbar_full|calculatet"
+ msgid "_Calc"
+ msgstr "_Calc"
+ 
+ #. WfzeY
+-#: sd/uiconfig/simpress/ui/notebookbar_groupedbar_full.ui:7723
++#: sd/uiconfig/simpress/ui/notebookbar_groupedbar_full.ui:7682
+ msgctxt "notebookbar_groupedbar_full|drawb"
+ msgid "D_raw"
+ msgstr "绘图(_R)"
+ 
+ #. QNg9L
+-#: sd/uiconfig/simpress/ui/notebookbar_groupedbar_full.ui:8008
++#: sd/uiconfig/simpress/ui/notebookbar_groupedbar_full.ui:7967
+ msgctxt "notebookbar_groupedbar_full|editdrawb"
+ msgid "_Edit"
+ msgstr "编辑(_E)"
+ 
+ #. BfnGg
+-#: sd/uiconfig/simpress/ui/notebookbar_groupedbar_full.ui:8560
+-#: sd/uiconfig/simpress/ui/notebookbar_groupedbar_full.ui:9802
+-#: sd/uiconfig/simpress/ui/notebookbar_groupedbar_full.ui:11193
++#: sd/uiconfig/simpress/ui/notebookbar_groupedbar_full.ui:8519
++#: sd/uiconfig/simpress/ui/notebookbar_groupedbar_full.ui:9761
++#: sd/uiconfig/simpress/ui/notebookbar_groupedbar_full.ui:11152
+ msgctxt "notebookbar_groupedbar_full|GridDrawB"
+ msgid "_Grid"
+ msgstr "网格(_G)"
+ 
+ #. 3i55T
+-#: sd/uiconfig/simpress/ui/notebookbar_groupedbar_full.ui:8702
++#: sd/uiconfig/simpress/ui/notebookbar_groupedbar_full.ui:8661
+ msgctxt "notebookbar_groupedbar_full|viewDrawb"
+ msgid "Grou_p"
+ msgstr "分组(_P)"
+ 
+ #. fNGFB
+-#: sd/uiconfig/simpress/ui/notebookbar_groupedbar_full.ui:8841
++#: sd/uiconfig/simpress/ui/notebookbar_groupedbar_full.ui:8800
+ msgctxt "notebookbar_groupedbar_full|3Db"
+ msgid "3_D"
+ msgstr "3_D"
+ 
+ #. SbHmx
+-#: sd/uiconfig/simpress/ui/notebookbar_groupedbar_full.ui:9097
++#: sd/uiconfig/simpress/ui/notebookbar_groupedbar_full.ui:9056
+ msgctxt "notebookbar_groupedbar_full|graphicB"
+ msgid "_Graphic"
+ msgstr "图形(_G)"
+ 
+ #. DDTxx
+-#: sd/uiconfig/simpress/ui/notebookbar_groupedbar_full.ui:9262
++#: sd/uiconfig/simpress/ui/notebookbar_groupedbar_full.ui:9221
+ msgctxt "notebookbar_groupedbar_full|colorb"
+ msgid "C_olor"
+ msgstr "颜色(_O)"
+ 
+ #. eLnnF
+-#: sd/uiconfig/simpress/ui/notebookbar_groupedbar_full.ui:10191
++#: sd/uiconfig/simpress/ui/notebookbar_groupedbar_full.ui:10150
+ msgctxt "notebookbar_groupedbar_full|media"
+ msgid "_Media"
+ msgstr "媒体(_M)"
+ 
+ #. duFFM
+-#: sd/uiconfig/simpress/ui/notebookbar_groupedbar_full.ui:10366
++#: sd/uiconfig/simpress/ui/notebookbar_groupedbar_full.ui:10325
+ msgctxt "notebookbar_groupedbar_full|slideshowOLE"
+ msgid "_Slide Show"
+ msgstr "幻灯片放映(_S)"
+ 
+ #. wrKzp
+-#: sd/uiconfig/simpress/ui/notebookbar_groupedbar_full.ui:10641
++#: sd/uiconfig/simpress/ui/notebookbar_groupedbar_full.ui:10600
+ msgctxt "notebookbar_groupedbar_full|editdrawb"
+ msgid "F_rame"
+ msgstr "框架(_R)"
+ 
+ #. EMvnF
+-#: sd/uiconfig/simpress/ui/notebookbar_groupedbar_full.ui:11339
++#: sd/uiconfig/simpress/ui/notebookbar_groupedbar_full.ui:11298
+ msgctxt "notebookbar_groupedbar_full|viewtOLE"
+ msgid "_View"
+ msgstr "视图(_V)"
+ 
+ #. DQLzy
+-#: sd/uiconfig/simpress/ui/notebookbar_groupedbar_full.ui:11499
++#: sd/uiconfig/simpress/ui/notebookbar_groupedbar_full.ui:11458
+ msgctxt "notebookbar_groupedbar_full|oleB"
+ msgid "_Master Page"
+ msgstr "母版页面(_M)"
+ 
+ #. QLjsG
+-#: sd/uiconfig/simpress/ui/notebookbar_groupedbar_full.ui:11730
++#: sd/uiconfig/simpress/ui/notebookbar_groupedbar_full.ui:11689
+ msgctxt "notebookbar_groupedbar_full|insertTextm"
+ msgid "_Insert"
+ msgstr "插入(_I)"
+ 
+ #. Eg8Qi
+-#: sd/uiconfig/simpress/ui/notebookbar_groupedbar_full.ui:11955
++#: sd/uiconfig/simpress/ui/notebookbar_groupedbar_full.ui:11914
+ msgctxt "notebookbar_groupedbar_full|drawm"
+ msgid "D_raw"
+ msgstr "绘图(_R)"
+ 
+ #. tcCdm
+-#: sd/uiconfig/simpress/ui/notebookbar_groupedbar_full.ui:12435
++#: sd/uiconfig/simpress/ui/notebookbar_groupedbar_full.ui:12394
+ msgctxt "notebookbar_groupedbar_full|masterviewm"
+ msgid "_View"
+ msgstr "视图(_V)"
+@@ -8693,44 +8693,140 @@ msgctxt "presentationdialog|label3"
+ msgid "Display"
+ msgstr "显示器"
+ 
++#. a6g7f
++#: sd/uiconfig/simpress/ui/presentationdialog.ui:811
++msgctxt "presentationdialog|globalrehearsetimings"
++msgid "_Global Settings"
++msgstr "全局设置(_G)"
++
++#. AZNh3
++#: sd/uiconfig/simpress/ui/presentationdialog.ui:819
++msgctxt "presentationdialog|extended_tip|globalrehearsetimings"
++msgid "Apply rehearsal timing settings globally to all presentations."
++msgstr "将排练计时设置全局应用到所有演示文稿中。"
++
++#. SCtrD
++#: sd/uiconfig/simpress/ui/presentationdialog.ui:834
++msgctxt "presentationdialog|timingmode_label"
++msgid "_Timing mode:"
++msgstr "计时模式(_T)："
++
++#. kQJzq
++#: sd/uiconfig/simpress/ui/presentationdialog.ui:851
++msgctxt "presentationdialog|timingmode_cb"
++msgid "Current slide / Total time"
++msgstr "当前幻灯片 / 总时间"
++
++#. ivPxJ
++#: sd/uiconfig/simpress/ui/presentationdialog.ui:852
++msgctxt "presentationdialog|timingmode_cb"
++msgid "Current slide only"
++msgstr "仅当前幻灯片"
++
++#. bMxgZ
++#: sd/uiconfig/simpress/ui/presentationdialog.ui:853
++msgctxt "presentationdialog|timingmode_cb"
++msgid "Total time only"
++msgstr "仅总时间"
++
++#. oDmDn
++#: sd/uiconfig/simpress/ui/presentationdialog.ui:857
++msgctxt "presentationdialog|extended_tip|timingmode_cb"
++msgid "Select the timing display mode for rehearsal. Choose to display current slide time, total time, or both."
++msgstr "选择排练时的计时显示模式。可显示当前幻灯片时间、总时间，或同时显示两者。"
++
++#. iV5SA
++#: sd/uiconfig/simpress/ui/presentationdialog.ui:871
++msgctxt "presentationdialog|timerposition_label"
++msgid "Timer _position:"
++msgstr "计时器位置(_P)："
++
++#. rMgCB
++#: sd/uiconfig/simpress/ui/presentationdialog.ui:888
++msgctxt "presentationdialog|timerposition_cb"
++msgid "Top left"
++msgstr "左上"
++
++#. FGvEX
++#: sd/uiconfig/simpress/ui/presentationdialog.ui:889
++msgctxt "presentationdialog|timerposition_cb"
++msgid "Bottom left"
++msgstr "左下"
++
++#. t2dGM
++#: sd/uiconfig/simpress/ui/presentationdialog.ui:890
++msgctxt "presentationdialog|timerposition_cb"
++msgid "Top center"
++msgstr "顶部居中"
++
++#. VHrZU
++#: sd/uiconfig/simpress/ui/presentationdialog.ui:891
++msgctxt "presentationdialog|timerposition_cb"
++msgid "Bottom center"
++msgstr "底部居中"
++
++#. 2zZUb
++#: sd/uiconfig/simpress/ui/presentationdialog.ui:892
++msgctxt "presentationdialog|timerposition_cb"
++msgid "Top right"
++msgstr "右上"
++
++#. PKfUw
++#: sd/uiconfig/simpress/ui/presentationdialog.ui:893
++msgctxt "presentationdialog|timerposition_cb"
++msgid "Bottom right"
++msgstr "右下"
++
++#. gG8QR
++#: sd/uiconfig/simpress/ui/presentationdialog.ui:897
++msgctxt "presentationdialog|extended_tip|timerposition_cb"
++msgid "Select the screen position where the rehearsal timer will be displayed during presentation."
++msgstr "选择演示过程中排练计时器在屏幕上的显示位置。"
++
++#. CBLXK
++#: sd/uiconfig/simpress/ui/presentationdialog.ui:913
++msgctxt "presentationdialog|label6"
++msgid "Rehearse Timings"
++msgstr "排练计时"
++
+ #. oUP7T
+-#: sd/uiconfig/simpress/ui/presentationdialog.ui:808
++#: sd/uiconfig/simpress/ui/presentationdialog.ui:944
+ msgctxt "presentationdialog|enableremote"
+ msgid "Enable remote control"
+ msgstr "启用遥控"
+ 
+ #. 8jdZL
+-#: sd/uiconfig/simpress/ui/presentationdialog.ui:822
++#: sd/uiconfig/simpress/ui/presentationdialog.ui:958
+ msgctxt "presentationdialog|learnmore"
+ msgid "Download App ..."
+ msgstr "下载 App..."
+ 
+ #. j9Lh8
+-#: sd/uiconfig/simpress/ui/presentationdialog.ui:826
++#: sd/uiconfig/simpress/ui/presentationdialog.ui:962
+ msgctxt "presentationdialog|learnmore|tooltip_text"
+ msgid "Download LibreOffice Impress Remote to remotely control the presentation from your smartphone or smartwatch."
+ msgstr "下载「LibreOffice Impress 遥控」可用您的手机或智能手表远程控制演示文稿的放映。"
+ 
+ #. VqnxK
+-#: sd/uiconfig/simpress/ui/presentationdialog.ui:839
++#: sd/uiconfig/simpress/ui/presentationdialog.ui:975
+ msgctxt "presentationdialog|enableremoteinsecure"
+ msgid "Enable insecure WiFi connections"
+ msgstr "启用未加密的 WiFi 连接"
+ 
+ #. HjN2b
+-#: sd/uiconfig/simpress/ui/presentationdialog.ui:843
++#: sd/uiconfig/simpress/ui/presentationdialog.ui:979
+ msgctxt "presentationdialog|enableremoteinsecure|tooltip_text"
+ msgid "In addition to Bluetooth connections, enable insecure and unencrypted connections via IP on all network interfaces. Not recommended in public settings."
+ msgstr "在蓝牙连接以外，还对所有网络连接启用基于 IP 的未加密、不确保安全的连接。不推荐在公共场合使用。"
+ 
+ #. hReeE
+-#: sd/uiconfig/simpress/ui/presentationdialog.ui:861
++#: sd/uiconfig/simpress/ui/presentationdialog.ui:997
+ msgctxt "presentationdialog|label3"
+ msgid "Remote control"
+ msgstr "远程控制"
+ 
+ #. 8pqaK
+-#: sd/uiconfig/simpress/ui/presentationdialog.ui:889
++#: sd/uiconfig/simpress/ui/presentationdialog.ui:1025
+ msgctxt "presentationdialog|extended_tip|PresentationDialog"
+ msgid "Defines settings for your slide show, including which slide to start from, the way you advance the slides, the type of presentation, and pointer options."
+ msgstr "定义幻灯片放映的相关设置，包括从哪一张幻灯片开始、幻灯片切换方式、演示文稿的类型以及指针选项。"
