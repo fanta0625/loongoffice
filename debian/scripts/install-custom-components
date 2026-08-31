@@ -1,0 +1,66 @@
+#!/bin/sh
+
+set -eu
+
+root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
+destdir=${1:?missing DESTDIR}
+ofd_oxt=${2:?missing OFD OXT}
+batch_source=${3:?missing batch print source}
+
+office_home=/opt/loongoffice
+ofd_extension="$destdir$office_home/share/extensions/org.loongoffice.ofd.extension"
+batch_extension="$destdir$office_home/share/extensions/org.loongoffice.batchprint"
+batch_app="$destdir$office_home/share/batch-print"
+
+if [ ! -d "$destdir$office_home/program" ]; then
+    echo "ERROR: LoongOffice is not staged below $destdir$office_home" >&2
+    exit 1
+fi
+if [ ! -s "$ofd_oxt" ]; then
+    echo "ERROR: OFD extension artifact is missing: $ofd_oxt" >&2
+    exit 1
+fi
+if [ ! -f "$batch_source/main.py" ] || \
+   [ ! -f "$batch_source/plugin-oxt/description.xml" ]; then
+    echo "ERROR: batch print source is incomplete: $batch_source" >&2
+    exit 1
+fi
+
+# Bundled LibreOffice extensions are installed as unpacked OXT directories.
+install -d "$ofd_extension"
+unzip -q "$ofd_oxt" -d "$ofd_extension"
+
+# Use distribution Python modules instead of embedding Python and Qt through
+# PyInstaller in a second binary payload.
+install -d "$batch_app"
+install -m 0644 \
+    "$batch_source/main.py" \
+    "$batch_source/resources_rc.py" \
+    "$batch_app/"
+cp -a \
+    "$batch_source/config" \
+    "$batch_source/fonts" \
+    "$batch_source/locales" \
+    "$batch_source/log" \
+    "$batch_source/models" \
+    "$batch_source/services" \
+    "$batch_source/ui" \
+    "$batch_source/utils" \
+    "$batch_app/"
+find "$batch_app" -type d -name __pycache__ -prune -exec rm -rf '{}' +
+find "$batch_app" -type f \( -name '*.pyc' -o -name '*.pyo' \) -delete
+
+install -D -m 0755 "$root/debian/loongoffice-batch-print" \
+    "$destdir/usr/bin/loongoffice-batch-print"
+ln -s /usr/bin/loongoffice-batch-print \
+    "$destdir$office_home/program/lobatchprint"
+
+install -d "$batch_extension"
+cp -a "$batch_source/plugin-oxt/." "$batch_extension/"
+sed -i 's|^APP_PATH = .*|APP_PATH = "/usr/bin/loongoffice-batch-print"|' \
+    "$batch_extension/config.py"
+
+install -D -m 0644 "$batch_source/packager/batch-print.desktop" \
+    "$destdir/usr/share/kio/servicemenus/loongoffice-batch-print.desktop"
+sed -i 's|^Exec=.*|Exec=/usr/bin/loongoffice-batch-print %F|' \
+    "$destdir/usr/share/kio/servicemenus/loongoffice-batch-print.desktop"

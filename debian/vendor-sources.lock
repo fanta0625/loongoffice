@@ -1,0 +1,8 @@
+# shellcheck shell=sh
+
+OFD_COMMIT=35aa3c33af13e929117612bbb722c56812fc19e0
+OFD_URL=https://github.com/fanta0625/libreoffice-ofd-extension.git
+BATCH_PRINT_COMMIT=64786c024efcf9cc8dc3aa09388a64ebb55f2f57
+BATCH_PRINT_URL=https://github.com/fanta0625/libreoffice-batch-print.git
+OFDRW_COMMIT=64489a2b12119818a377e8417be786383876ee6c
+OFDRW_URL=https://github.com/fanta0625/ofdrw.git

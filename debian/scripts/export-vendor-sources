@@ -1,0 +1,49 @@
+#!/bin/sh
+
+set -eu
+
+root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
+. "$root/debian/vendor-sources.lock"
+
+output=${1:-}
+if [ -z "$output" ]; then
+    echo "Usage: $0 OUTPUT.tar.xz" >&2
+    exit 2
+fi
+if [ -e "$output" ]; then
+    echo "ERROR: output already exists: $output" >&2
+    exit 1
+fi
+
+"$root/debian/scripts/check-vendor-sources" \
+    "$root/vendor/maven-repository"
+
+work=$(mktemp -d)
+trap 'rm -rf "$work"' EXIT HUP INT TERM
+mkdir -p "$work/vendor"
+
+export_source()
+{
+    path=$1
+    commit=$2
+    destination="$work/$path"
+
+    mkdir -p "$destination"
+    git -C "$root/$path" archive --format=tar "$commit" | \
+        tar -xf - -C "$destination"
+    printf '%s\n' "$commit" > "$destination/.source-commit"
+}
+
+export_source vendor/libreoffice-ofd-extension "$OFD_COMMIT"
+export_source vendor/libreoffice-batch-print "$BATCH_PRINT_COMMIT"
+export_source vendor/ofdrw "$OFDRW_COMMIT"
+
+mkdir -p "$work/vendor/maven-repository"
+cp -a "$root/vendor/maven-repository/." \
+    "$work/vendor/maven-repository/"
+
+epoch=${SOURCE_DATE_EPOCH:-$(git -C "$root" show -s --format=%ct HEAD)}
+tar --sort=name --mtime="@$epoch" --owner=0 --group=0 --numeric-owner \
+    -cJf "$output" -C "$work" vendor
+
+echo "Vendor source bundle written to $output"

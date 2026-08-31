@@ -1,0 +1,37 @@
+#!/bin/sh
+
+set -eu
+
+root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
+. "$root/debian/vendor-sources.lock"
+
+fetch_source()
+{
+    name=$1
+    url=$2
+    commit=$3
+    path=$4
+
+    if [ ! -e "$path/.git" ]; then
+        if [ -e "$path" ]; then
+            echo "ERROR: $path exists but is not a Git checkout" >&2
+            exit 1
+        fi
+        git clone --no-checkout "$url" "$path"
+    fi
+
+    git -C "$path" fetch --no-tags origin "$commit"
+    git -C "$path" checkout --detach "$commit"
+    echo "$name is locked at $commit"
+}
+
+mkdir -p "$root/vendor"
+fetch_source "OFD extension" "$OFD_URL" "$OFD_COMMIT" \
+    "$root/vendor/libreoffice-ofd-extension"
+fetch_source "batch print" "$BATCH_PRINT_URL" "$BATCH_PRINT_COMMIT" \
+    "$root/vendor/libreoffice-batch-print"
+fetch_source "OFDRW" "$OFDRW_URL" "$OFDRW_COMMIT" \
+    "$root/vendor/ofdrw"
+
+"$root/debian/scripts/check-vendor-sources" \
+    "$root/vendor/maven-repository" --skip-maven
