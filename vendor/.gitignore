@@ -1,0 +1,5 @@
+/libreoffice-batch-print/
+/libreoffice-ofd-extension/
+/ofdrw/
+/maven-repository/*
+!/maven-repository/.gitkeep

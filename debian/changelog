@@ -1,3 +1,12 @@
+loongoffice (25.8.7.3-1.lnd.1) unstable; urgency=medium
+
+  * Build the all-in-one package directly with distro-pack-install and DESTDIR.
+  * Build the pinned OFD and batch print projects from source without network.
+  * Replace the bundled batch print executable with distribution Python modules.
+  * Use debhelper-generated MIME, desktop, and icon cache maintenance hooks.
+
+ -- Loongson <service@loongson.cn>  Mon, 31 Aug 2026 21:40:00 +0800
+
 loongoffice (25.8.7.0.0-1.lnd.1.0.0002) unstable; urgency=medium
 
   * Upgrade to LoongOffice 25.8

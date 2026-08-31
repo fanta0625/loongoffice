@@ -32,6 +32,15 @@ License: GPL-2
  On Debian systems the full text of the GPL-2 can be found in
  /usr/share/common-licenses/GPL-2
 
+Files: vendor/libreoffice-ofd-extension/*
+       vendor/libreoffice-batch-print/*
+Copyright: Copyright (c) LoongOffice extension contributors.
+License: MPL-2.0
+
+Files: vendor/ofdrw/*
+Copyright: Copyright (c) OFDRW contributors.
+License: Apache-2.0
+
 License: MPL-2.0
  On Debian systems the full text of the MPL-2.0 can be found in
  /usr/share/common-licenses/MPL-2.0.

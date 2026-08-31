@@ -1,0 +1,18 @@
+#!/bin/sh
+
+set -eu
+
+test -x /opt/loongoffice/program/soffice
+test -x /usr/bin/loongoffice-batch-print
+test -f /opt/loongoffice/share/batch-print/main.py
+test -f /opt/loongoffice/share/extensions/org.loongoffice.ofd.extension/description.xml
+test -f /opt/loongoffice/share/extensions/org.loongoffice.batchprint/description.xml
+
+python3 - <<'PY'
+import ast
+from pathlib import Path
+
+root = Path("/opt/loongoffice/share/batch-print")
+for source in root.rglob("*.py"):
+    ast.parse(source.read_bytes(), filename=str(source))
+PY
