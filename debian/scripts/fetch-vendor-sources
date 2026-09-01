@@ -38,11 +38,20 @@ fetch_submodule()
         exit 1
     fi
 
+    existing_tree=
     if [ ! -e "$root/$path/.git" ]; then
+        if [ -f "$root/$path/.source-commit" ]; then
+            actual=$(sed -n '1p' "$root/$path/.source-commit")
+            if [ "$actual" != "$commit" ]; then
+                echo "ERROR: $path source marker is $actual; expected $commit" >&2
+                exit 1
+            fi
+            echo "$name is locked at $commit"
+            return
+        fi
         if [ -d "$root/$path" ] && \
            [ -n "$(find "$root/$path" -mindepth 1 -maxdepth 1 -print -quit)" ]; then
-            echo "ERROR: $path exists but is not a Git checkout" >&2
-            exit 1
+            existing_tree=yes
         fi
         mkdir -p "$root/$path"
         git init -q "$root/$path"
@@ -54,7 +63,30 @@ fetch_submodule()
         git -C "$root/$path" remote add origin "$url"
     fi
     git -C "$root/$path" fetch --no-tags --depth 1 origin "$commit"
+
+    if [ "$existing_tree" = yes ]; then
+        temporary_index=$(mktemp)
+        rm -f "$temporary_index"
+        GIT_INDEX_FILE="$temporary_index" \
+            git -C "$root/$path" add -A -f .
+        actual_tree=$(GIT_INDEX_FILE="$temporary_index" \
+            git -C "$root/$path" write-tree)
+        rm -f "$temporary_index"
+        expected_tree=$(git -C "$root/$path" rev-parse "$commit^{tree}")
+        if [ "$actual_tree" != "$expected_tree" ]; then
+            echo "ERROR: existing $path source does not match $commit" >&2
+            echo "Move the unverified directory aside and run this script again." >&2
+            exit 1
+        fi
+        git -C "$root/$path" reset --hard "$commit"
+    fi
+
     git -C "$root/$path" checkout --detach "$commit"
+    if ! git -C "$root/$path" diff --quiet "$commit" -- || \
+       [ -n "$(git -C "$root/$path" clean -ndx)" ]; then
+        echo "ERROR: $path contains changes outside locked commit $commit" >&2
+        exit 1
+    fi
     echo "$name is locked at $commit"
 }
 

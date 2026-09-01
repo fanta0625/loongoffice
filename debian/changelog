@@ -6,7 +6,8 @@ loongoffice (25.8.7.3-1.lnd.1) unstable; urgency=medium
   * Use debhelper-generated MIME, desktop, and icon cache maintenance hooks.
   * Let LibreOffice autogen.sh bootstrap the build instead of dh_autoreconf.
   * Use the configure-derived loongoffice installation directory name.
-  * Prepare and validate the help and translation submodules for offline builds.
+  * Prepare and validate the help and translation submodules for offline builds,
+    including source trees carried over without Git metadata.
 
  -- Loongson <service@loongson.cn>  Mon, 31 Aug 2026 21:40:00 +0800
 
