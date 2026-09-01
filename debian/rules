@@ -49,7 +49,6 @@ override_dh_auto_configure:
 	./autogen.sh \
 		--prefix=/usr \
 		--libdir=/opt \
-		--with-install-dirname=loongoffice \
 		--with-vendor='Loongson' \
 		--with-lang='zh-CN' \
 		--with-help \
