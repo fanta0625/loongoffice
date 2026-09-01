@@ -14,6 +14,22 @@ case "$tarball_dir" in
         ;;
 esac
 
+if command -v curl >/dev/null 2>&1; then
+    download_client=$(command -v curl)
+    curl=$download_client
+    wget=
+elif command -v wget >/dev/null 2>&1; then
+    download_client=$(command -v wget)
+    curl=
+    wget=$download_client
+else
+    echo "ERROR: curl or wget is required to prepare LibreOffice tarballs." >&2
+    echo "Install curl and run this script again." >&2
+    exit 1
+fi
+
+echo "Using $download_client to download LibreOffice tarballs."
+
 "$root/debian/scripts/check-vendor-sources" \
     "$root/vendor/maven-repository" --skip-maven
 
@@ -34,7 +50,7 @@ fi
 
 rm -f "$root/workdir/download"
 make -C "$root" DO_FETCH_TARBALLS=TRUE \
-    TARFILE_LOCATION="$tarball_dir" download
+    TARFILE_LOCATION="$tarball_dir" CURL="$curl" WGET="$wget" download
 
 "$root/debian/scripts/check-libreoffice-tarballs" \
     "$tarball_dir" --write
