@@ -8,6 +8,7 @@ loongoffice (25.8.7.3-1.lnd.1) unstable; urgency=medium
   * Use the configure-derived loongoffice installation directory name.
   * Prepare and validate the help and translation submodules for offline builds,
     including source trees carried over without Git metadata.
+  * Prepare and verify LibreOffice external tarballs as explicit offline input.
 
  -- Loongson <service@loongson.cn>  Mon, 31 Aug 2026 21:40:00 +0800
 

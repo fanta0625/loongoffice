@@ -11,3 +11,8 @@ Run `debian/scripts/fetch-vendor-sources` on a connected preparation host.
 `maven-repository` must also be prepared there and included in an offline CI
 source submission. See `debian/README.source` for the complete workflow.
 `debian/rules` does not download any input.
+
+LibreOffice's configuration-selected third-party archives are stored in the
+ignored `libreoffice-tarballs` directory. Prepare them on a connected host with
+`debian/scripts/prepare-libreoffice-tarballs`; every build validates its
+configuration manifest and SHA256 checksums before compiling.

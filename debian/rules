@@ -15,6 +15,7 @@ OFFICE_HOME := /opt/loongoffice
 OFD_SOURCE ?= $(CURDIR)/vendor/libreoffice-ofd-extension
 OFDRW_SOURCE ?= $(CURDIR)/vendor/ofdrw
 BATCH_PRINT_SOURCE ?= $(CURDIR)/vendor/libreoffice-batch-print
+LO_TARBALLS ?= $(CURDIR)/vendor/libreoffice-tarballs
 
 # The seed repository is prepared on a connected machine. Builds only use the
 # private copy under debian/, so the source-supplied repository stays unchanged.
@@ -46,22 +47,8 @@ override_dh_auto_configure:
 	rm -rf "$(MAVEN_BUILD_REPO)"
 	install -d "$(MAVEN_BUILD_REPO)"
 	cp -a "$(MAVEN_SEED_REPO)/." "$(MAVEN_BUILD_REPO)/"
-	./autogen.sh \
-		--prefix=/usr \
-		--libdir=/opt \
-		--with-vendor='Loongson' \
-		--with-lang='zh-CN' \
-		--with-help \
-		--disable-firebird-sdbc \
-		--with-system-postgresql \
-		--disable-librelogo \
-		--enable-release-build \
-		--enable-qt6 \
-		--enable-kf6 \
-		--enable-qt6-multimedia \
-		--enable-gstreamer-1-0 \
-		--enable-odk \
-		--disable-fetch-external
+	debian/scripts/configure-libreoffice "$(LO_TARBALLS)"
+	debian/scripts/check-libreoffice-tarballs "$(LO_TARBALLS)"
 
 override_dh_auto_build:
 	$(MAVEN) -f "$(OFDRW_SOURCE)/pom.xml" \

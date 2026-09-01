@@ -1,0 +1,41 @@
+#!/bin/sh
+
+set -eu
+
+root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
+tarball_dir=${1:-"$root/vendor/libreoffice-tarballs"}
+marker="$tarball_dir/.loongoffice-offline-tarballs"
+preparing="$tarball_dir/.loongoffice-tarballs-preparing"
+
+case "$tarball_dir" in
+    ""|/|"$root"|"$root/vendor")
+        echo "ERROR: refusing unsafe tarball directory: $tarball_dir" >&2
+        exit 1
+        ;;
+esac
+
+"$root/debian/scripts/check-vendor-sources" \
+    "$root/vendor/maven-repository" --skip-maven
+
+if [ -f "$marker" ]; then
+    "$root/debian/scripts/configure-libreoffice" "$tarball_dir"
+    "$root/debian/scripts/check-libreoffice-tarballs" "$tarball_dir"
+else
+    mkdir -p "$tarball_dir"
+    if [ ! -f "$preparing" ] && \
+       [ -n "$(find "$tarball_dir" -mindepth 1 -maxdepth 1 -print -quit)" ]; then
+        echo "ERROR: $tarball_dir is not a managed tarball directory." >&2
+        echo "Move it aside and run this script again." >&2
+        exit 1
+    fi
+    : > "$preparing"
+    "$root/debian/scripts/configure-libreoffice" "$tarball_dir"
+fi
+
+rm -f "$root/workdir/download"
+make -C "$root" DO_FETCH_TARBALLS=TRUE \
+    TARFILE_LOCATION="$tarball_dir" download
+
+"$root/debian/scripts/check-libreoffice-tarballs" \
+    "$tarball_dir" --write
+rm -f "$preparing"

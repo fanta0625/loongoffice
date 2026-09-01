@@ -1,0 +1,113 @@
+#!/bin/sh
+
+set -eu
+
+root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
+tarball_dir=${1:-"$root/vendor/libreoffice-tarballs"}
+mode=${2:-}
+marker="$tarball_dir/.loongoffice-offline-tarballs"
+
+if [ ! -f "$root/config_host.mk" ]; then
+    echo "ERROR: LibreOffice is not configured; config_host.mk is missing." >&2
+    exit 1
+fi
+
+config_value()
+{
+    sed -n "s/^export $1=//p" "$root/config_host.mk"
+}
+
+raw_build_type=$(config_value BUILD_TYPE)
+build_type=$(
+    for item in $raw_build_type; do
+        printf '%s\n' "$item"
+    done | LC_ALL=C sort | paste -sd ' ' -
+)
+os=$(config_value OS)
+cpu=$(config_value CPUNAME)
+if [ -z "$build_type" ] || [ -z "$os" ] || [ -z "$cpu" ]; then
+    echo "ERROR: config_host.mk is missing build type or platform values." >&2
+    exit 1
+fi
+inputs=$(
+    cd "$root"
+    sha256sum download.lst Makefile.fetch \
+        debian/scripts/configure-libreoffice | \
+        sha256sum | awk '{ print $1 }'
+)
+
+if [ "$mode" = "--write" ]; then
+    mkdir -p "$tarball_dir"
+    temporary_marker="$marker.tmp"
+    trap 'rm -f "$temporary_marker"' 0 HUP INT TERM
+    {
+        printf 'format=1\n'
+        printf 'inputs=%s\n' "$inputs"
+        printf 'os=%s\n' "$os"
+        printf 'cpu=%s\n' "$cpu"
+        printf 'build_type=%s\n' "$build_type"
+        printf '%s\n' '--'
+        cd "$tarball_dir"
+        find . -maxdepth 1 -type f \
+            ! -name '.loongoffice-offline-tarballs*' \
+            ! -name '.loongoffice-tarballs-preparing' \
+            ! -name 'fetch.log' -print0 | \
+            LC_ALL=C sort -z | xargs -0 -r sha256sum
+    } > "$temporary_marker"
+
+    if ! sed -n '/^--$/,$p' "$temporary_marker" | \
+         sed '1d' | grep -q .; then
+        echo "ERROR: no LibreOffice tarballs were downloaded." >&2
+        exit 1
+    fi
+    mv "$temporary_marker" "$marker"
+    trap - 0 HUP INT TERM
+fi
+
+if [ ! -f "$marker" ]; then
+    echo "ERROR: LibreOffice offline tarballs are not prepared: $tarball_dir" >&2
+    echo "Run debian/scripts/prepare-libreoffice-tarballs on a connected host." >&2
+    exit 1
+fi
+
+check_field()
+{
+    key=$1
+    expected=$2
+    actual=$(sed -n "s/^$key=//p" "$marker")
+    if [ "$actual" != "$expected" ]; then
+        echo "ERROR: tarball manifest $key is '$actual'; expected '$expected'" >&2
+        exit 1
+    fi
+}
+
+check_field format 1
+check_field inputs "$inputs"
+check_field os "$os"
+check_field cpu "$cpu"
+check_field build_type "$build_type"
+
+checksums=$(sed -n '/^--$/,$p' "$marker" | sed '1d')
+if [ -z "$checksums" ]; then
+    echo "ERROR: tarball manifest contains no checksums: $marker" >&2
+    exit 1
+fi
+
+manifest_files=$(printf '%s\n' "$checksums" | \
+    sed -n 's/^[0-9a-f]\{64\}  //p' | LC_ALL=C sort)
+actual_files=$(
+    cd "$tarball_dir"
+    find . -maxdepth 1 -type f \
+        ! -name '.loongoffice-offline-tarballs*' \
+        ! -name '.loongoffice-tarballs-preparing' \
+        ! -name 'fetch.log' -print | LC_ALL=C sort
+)
+if [ "$manifest_files" != "$actual_files" ]; then
+    echo "ERROR: LibreOffice tarball directory does not match its manifest." >&2
+    exit 1
+fi
+
+printf '%s\n' "$checksums" | \
+    (cd "$tarball_dir" && sha256sum --check --quiet -)
+
+echo "LibreOffice offline tarballs are consistent."
