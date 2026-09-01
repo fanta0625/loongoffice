@@ -3,3 +3,4 @@
 /ofdrw/
 /maven-repository/*
 !/maven-repository/.gitkeep
+/libreoffice-tarballs/

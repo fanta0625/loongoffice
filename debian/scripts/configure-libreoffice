@@ -1,0 +1,25 @@
+#!/bin/sh
+
+set -eu
+
+root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
+tarball_dir=${1:-"$root/vendor/libreoffice-tarballs"}
+
+cd "$root"
+exec ./autogen.sh \
+    --prefix=/usr \
+    --libdir=/opt \
+    --with-vendor='Loongson' \
+    --with-lang='zh-CN' \
+    --with-help \
+    --with-external-tar="$tarball_dir" \
+    --disable-firebird-sdbc \
+    --with-system-postgresql \
+    --disable-librelogo \
+    --enable-release-build \
+    --enable-qt6 \
+    --enable-kf6 \
+    --enable-qt6-multimedia \
+    --enable-gstreamer-1-0 \
+    --enable-odk \
+    --disable-fetch-external

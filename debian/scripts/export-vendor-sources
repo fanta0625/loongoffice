@@ -17,6 +17,8 @@ fi
 
 "$root/debian/scripts/check-vendor-sources" \
     "$root/vendor/maven-repository"
+"$root/debian/scripts/check-libreoffice-tarballs" \
+    "$root/vendor/libreoffice-tarballs"
 
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT HUP INT TERM
@@ -43,6 +45,11 @@ export_source translations "$LO_TRANSLATIONS_COMMIT"
 mkdir -p "$work/vendor/maven-repository"
 cp -a "$root/vendor/maven-repository/." \
     "$work/vendor/maven-repository/"
+
+mkdir -p "$work/vendor/libreoffice-tarballs"
+find "$root/vendor/libreoffice-tarballs" -maxdepth 1 -type f \
+    ! -name 'fetch.log' ! -name '.loongoffice-tarballs-preparing' \
+    -exec cp -p -- '{}' "$work/vendor/libreoffice-tarballs/" \;
 
 epoch=${SOURCE_DATE_EPOCH:-$(git -C "$root" show -s --format=%ct HEAD)}
 tar --sort=name --mtime="@$epoch" --owner=0 --group=0 --numeric-owner \

@@ -35,18 +35,33 @@ This creates vendor/maven-repository and then repeats both Maven builds with
 source submitted to an isolated CI system. debian/rules copies it to
 debian/.m2 before use so the supplied input is not modified.
 
+LibreOffice external tarballs
+-----------------------------
+
+LibreOffice also builds configuration-selected third-party projects. On the
+connected target platform, download the complete set with LibreOffice's own
+download rules:
+
+    debian/scripts/prepare-libreoffice-tarballs
+
+The script configures with the same flags as debian/rules, downloads into
+vendor/libreoffice-tarballs, and records the configuration, platform, build
+type, file list, and SHA256 checksums. Package builds keep automatic fetching
+disabled and reject a missing, changed, or incompatible tarball input.
+
 CI without access to GitHub
 ---------------------------
 
 A commit lock does not contain source files. After preparing the Maven
-repository, create a self-contained vendor archive:
+repository and LibreOffice tarballs, create a self-contained vendor archive:
 
     debian/scripts/export-vendor-sources ../loongoffice-vendor.tar.xz
 
 Extract that archive over the LoongOffice source tree used by CI. It contains
-helpcontent2, translations, the custom vendor sources, and the verified Maven
-repository. Exported source directories contain .source-commit markers, so the
-same lock validation works without Git metadata.
+helpcontent2, translations, the custom vendor sources, the verified Maven
+repository, and the verified LibreOffice tarballs. Exported source directories
+contain .source-commit markers, so the same lock validation works without Git
+metadata.
 
 Build layout
 ------------
