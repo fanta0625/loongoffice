@@ -65,6 +65,7 @@ override_dh_auto_install:
 	find "$(PKGDIR)" -maxdepth 1 -type f -name 'gid_Module_*' -delete
 	debian/scripts/install-custom-components \
 		"$(PKGDIR)" "$(OFD_OXT)" "$(BATCH_PRINT_SOURCE)"
+	debian/scripts/isolate-loongoffice-installation "$(PKGDIR)"
 
 override_dh_auto_clean:
 	if [ -f Makefile ]; then $(MAKE) clean; fi

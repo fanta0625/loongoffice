@@ -49,6 +49,8 @@ cp -a \
     "$batch_app/"
 find "$batch_app" -type d -name __pycache__ -prune -exec rm -rf '{}' +
 find "$batch_app" -type f \( -name '*.pyc' -o -name '*.pyo' \) -delete
+patch --batch --forward --fuzz=0 -d "$batch_app" -p1 \
+    < "$root/debian/batch-print-loongoffice-only.patch"
 
 install -D -m 0755 "$root/debian/loongoffice-batch-print" \
     "$destdir/usr/bin/loongoffice-batch-print"

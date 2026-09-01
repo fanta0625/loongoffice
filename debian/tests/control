@@ -1,3 +1,2 @@
 Tests: installed-layout
 Depends: @, python3
-Restrictions: superficial

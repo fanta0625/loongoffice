@@ -6,9 +6,12 @@ root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 tarball_dir=${1:-"$root/vendor/libreoffice-tarballs"}
 
 cd "$root"
+PYTHON=/usr/bin/python3
+export PYTHON
 exec ./autogen.sh \
     --prefix=/usr \
     --libdir=/opt \
+    --with-product-name='LoongOffice' \
     --with-vendor='Loongson' \
     --with-lang='zh-CN' \
     --with-help \
@@ -22,4 +25,5 @@ exec ./autogen.sh \
     --enable-qt6-multimedia \
     --enable-gstreamer-1-0 \
     --enable-odk \
+    --enable-python=system \
     --disable-fetch-external
