@@ -12,10 +12,15 @@ Fetch the exact source commits before building:
     debian/scripts/fetch-vendor-sources
 
 The repository URLs and expected commits are recorded in
-debian/vendor-sources.lock and checked at the start of every build. These
-directories are deliberately not Git submodules: LibreOffice's pre-commit hook
-rejects gitlink changes, and gitlinks alone are unusable in an isolated CI.
-Updating a source therefore requires an intentional lock-file update.
+debian/vendor-sources.lock and checked at the start of every build. The script
+also initializes the helpcontent2 and translations submodules required by
+--with-help and --with-lang=zh-CN. Their lock entries must match the gitlinks in
+the main repository.
+
+The custom vendor directories are deliberately not Git submodules:
+LibreOffice's pre-commit hook rejects gitlink changes, and gitlinks alone are
+unusable in an isolated CI. Updating a source therefore requires an intentional
+lock-file update.
 
 Offline Maven input
 -------------------
@@ -38,10 +43,10 @@ repository, create a self-contained vendor archive:
 
     debian/scripts/export-vendor-sources ../loongoffice-vendor.tar.xz
 
-Extract that archive over the LoongOffice source tree used by CI. Exported
-source directories contain .source-commit markers, so the same lock validation
-works without Git metadata. The archive also contains the verified Maven
-repository.
+Extract that archive over the LoongOffice source tree used by CI. It contains
+helpcontent2, translations, the custom vendor sources, and the verified Maven
+repository. Exported source directories contain .source-commit markers, so the
+same lock validation works without Git metadata.
 
 Build layout
 ------------
