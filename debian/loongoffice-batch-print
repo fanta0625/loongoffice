@@ -8,6 +8,8 @@ app_home=/opt/loongoffice/share/batch-print
 export LBP_LO_EXECUTABLE="$office_home/soffice"
 export URE_BOOTSTRAP="file://$office_home/fundamentalrc"
 export LD_LIBRARY_PATH="$office_home:$office_home/ure/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
-export PYTHONPATH="$office_home:$app_home${PYTHONPATH:+:$PYTHONPATH}"
+export PYTHONPATH="$app_home:$office_home${PYTHONPATH:+:$PYTHONPATH}"
+export PYTHONDONTWRITEBYTECODE=1
+export PYTHONNOUSERSITE=1
 
-exec python3 "$app_home/main.py" "$@"
+exec /usr/bin/python3 "$app_home/main.py" "$@"

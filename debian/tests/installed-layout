@@ -2,17 +2,76 @@
 
 set -eu
 
-test -x /opt/loongoffice/program/soffice
+office_home=/opt/loongoffice/program
+app_home=/opt/loongoffice/share/batch-print
+
+test -x "$office_home/soffice"
+test -x /usr/bin/loongoffice
+test "$(readlink /usr/bin/loongoffice)" = /opt/loongoffice/program/soffice
 test -x /usr/bin/loongoffice-batch-print
-test -f /opt/loongoffice/share/batch-print/main.py
+test -f "$app_home/main.py"
 test -f /opt/loongoffice/share/extensions/org.loongoffice.ofd.extension/description.xml
 test -f /opt/loongoffice/share/extensions/org.loongoffice.batchprint/description.xml
+test -f /usr/share/bash-completion/completions/loongoffice
+test -e /usr/share/applications/loongoffice-writer.desktop
+grep -Eq '^Exec=loongoffice([[:space:]]|$)' \
+    /usr/share/applications/loongoffice-writer.desktop
+grep -Fqx 'UserInstallation=$SYSUSERCONFIG/loongoffice/4' \
+    "$office_home/bootstraprc"
+grep -Fqx '  <id>loongoffice-writer.desktop</id>' \
+    /usr/share/metainfo/loongoffice-writer.appdata.xml
+grep -Fqx '  <id>org.loongoffice.kde</id>' \
+    /usr/share/metainfo/org.loongoffice.kde.metainfo.xml
+if grep -Eq '(^|[^[:alnum:]_])(libreoffice|loffice|lowriter|unopkg|ooffice)([^[:alnum:]_]|$)' \
+    /usr/share/bash-completion/completions/loongoffice; then
+    echo "LoongOffice completion must not register LibreOffice commands" >&2
+    exit 1
+fi
 
-python3 - <<'PY'
+package_files=$(mktemp)
+trap 'rm -f "$package_files"' EXIT HUP INT TERM
+dpkg-query -L loongoffice > "$package_files"
+if grep -Eq '^/usr/share/applications/(libreoffice|org\.libreoffice)' \
+    "$package_files"; then
+    echo "loongoffice must not own LibreOffice desktop entry names" >&2
+    exit 1
+fi
+for command in libreoffice soffice loffice lobase localc lodraw lomath \
+    loimpress loweb lowriter lofromtemplate unopkg ooffice oobase oocalc \
+    oodraw ooimpress oomath ooweb oowriter oofromtemplate; do
+    if grep -Fqx "/usr/bin/$command" "$package_files"; then
+        echo "loongoffice must not own /usr/bin/$command" >&2
+        exit 1
+    fi
+    if grep -Fqx "/usr/share/man/man1/$command.1.gz" "$package_files"; then
+        echo "loongoffice must not own the $command manual page" >&2
+        exit 1
+    fi
+done
+
+PYTHONDONTWRITEBYTECODE=1 python3 - <<'PY'
 import ast
 from pathlib import Path
 
 root = Path("/opt/loongoffice/share/batch-print")
 for source in root.rglob("*.py"):
     ast.parse(source.read_bytes(), filename=str(source))
+PY
+
+unset LBP_LO_EXECUTABLE
+PYTHONPATH="$app_home" PYTHONDONTWRITEBYTECODE=1 /usr/bin/python3 - <<'PY'
+from utils.utils import get_executable_path
+
+assert get_executable_path() == "/opt/loongoffice/program/soffice"
+PY
+
+URE_BOOTSTRAP="file://$office_home/fundamentalrc" \
+LD_LIBRARY_PATH="$office_home:$office_home/ure/lib" \
+PYTHONPATH="$office_home" \
+PYTHONDONTWRITEBYTECODE=1 \
+PYTHONNOUSERSITE=1 \
+/usr/bin/python3 - <<'PY'
+import uno
+
+assert uno.getComponentContext() is not None
 PY

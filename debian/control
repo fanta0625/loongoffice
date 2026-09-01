@@ -39,6 +39,7 @@ Build-Depends:
  maven,
  meson,
  ninja-build,
+ patch,
  pkg-config,
  python3-dev,
  python3-lxml,
@@ -66,18 +67,46 @@ Depends:
  python3-pyside6.qtwidgets
 Recommends:
  cups-client
+Provides:
+ loongbatchprint (= ${binary:Version}),
+ loongoffice-debian-menus (= ${binary:Version}),
+ loongoffice-extension-pdf-import (= ${binary:Version}),
+ loongoffice-graphicfilter (= ${binary:Version}),
+ loongoffice-help-zh-cn (= ${binary:Version}),
+ loongoffice-ogltrans (= ${binary:Version}),
+ loongoffice-pyuno (= ${binary:Version}),
+ loongoffice-sdk (= ${binary:Version}),
+ loongoffice-xsltfilter (= ${binary:Version}),
+ loongoffice-zh-cn (= ${binary:Version}),
+ loongofficebasis-kde-integration (= ${binary:Version}),
+ loongofficebasis-zh-cn (= ${binary:Version}),
+ loongofficebasis-zh-cn-help (= ${binary:Version})
 Replaces:
+ loongbatchprint,
  loongoffice-debian-menus,
+ loongoffice-extension-pdf-import,
+ loongoffice-graphicfilter,
  loongoffice-help-zh-cn,
+ loongoffice-ogltrans,
+ loongoffice-pyuno,
  loongoffice-sdk,
+ loongoffice-xsltfilter,
  loongoffice-zh-cn,
+ loongofficebasis-kde-integration,
  loongofficebasis-zh-cn,
  loongofficebasis-zh-cn-help
 Conflicts:
+ loongbatchprint,
  loongoffice-debian-menus,
+ loongoffice-extension-pdf-import,
+ loongoffice-graphicfilter,
  loongoffice-help-zh-cn,
+ loongoffice-ogltrans,
+ loongoffice-pyuno,
  loongoffice-sdk,
+ loongoffice-xsltfilter,
  loongoffice-zh-cn,
+ loongofficebasis-kde-integration,
  loongofficebasis-zh-cn,
  loongofficebasis-zh-cn-help
 Description: office productivity suite with OFD and batch printing

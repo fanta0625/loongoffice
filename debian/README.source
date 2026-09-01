@@ -75,7 +75,16 @@ LibreOffice is installed directly with:
     DESTDIR=debian/loongoffice make distro-pack-install
 
 The application lives below /opt/loongoffice while desktop integration and
-launchers use /usr. The OFD OXT is unpacked as a bundled extension. Batch print
-is installed as Python source and uses distribution-provided PySide6, PyMuPDF,
-CUPS, libmagic, and lru-dict modules. No intermediate DEB is generated or
-unpacked.
+launchers use /usr. Packaging removes the generic libreoffice, soffice, and
+component wrappers created by distro-pack-install, leaving only branded
+LoongOffice entry points. This allows the distribution LibreOffice packages to
+remain installed without shared command paths. The generated bootstraprc must
+also use the independent $SYSUSERCONFIG/loongoffice/4 profile. Bash completion
+and AppStream component IDs are rewritten to LoongOffice-only names rather than
+registering or replacing their LibreOffice equivalents.
+
+The OFD OXT is unpacked as a bundled extension. Batch print is installed as
+Python source and uses the system Python selected explicitly for PyUNO, plus
+distribution-provided PySide6, PyMuPDF, CUPS, libmagic, and lru-dict modules.
+Its packaged executable lookup never falls back to /usr/lib/libreoffice. No
+intermediate DEB is generated or unpacked.

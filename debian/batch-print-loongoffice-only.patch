@@ -1,0 +1,23 @@
+--- a/utils/utils.py
++++ b/utils/utils.py
+@@ -33,9 +33,3 @@ def get_executable_path() -> str:
+-    # 常见安装路径
+-    common_paths = [
+-        "/usr/lib/libreoffice/program/soffice",
+-        "/opt/loongoffice/program/soffice",
+-        "/usr/bin/soffice",
+-    ]
+-    for path in common_paths:
+-        if os.path.exists(path):
+-            return path
++    loongoffice_path = "/opt/loongoffice/program/soffice"
++    if os.path.exists(loongoffice_path):
++        return loongoffice_path
+@@ -43,2 +37,4 @@ def get_executable_path() -> str:
+-    # 若都找不到，回退到默认
+-    return common_paths[0]
+\ No newline at end of file
++    raise FileNotFoundError(
++        "LoongOffice was not found at /opt/loongoffice; "
++        "start batch print through /usr/bin/loongoffice-batch-print"
++    )
