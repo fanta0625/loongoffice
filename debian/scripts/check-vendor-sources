@@ -15,9 +15,9 @@ check_source()
     expected=$3
     required_file=$4
 
-    if [ ! -f "$path/$required_file" ]; then
+    if [ ! -e "$path/$required_file" ]; then
         echo "ERROR: $name source is missing at $path" >&2
-        echo "Fetch locked sources or overlay the exported vendor source bundle." >&2
+        echo "Fetch locked sources or overlay the exported offline source bundle." >&2
         exit 1
     fi
 
@@ -35,6 +35,29 @@ check_source()
         exit 1
     fi
 }
+
+check_gitlink()
+{
+    path=$1
+    expected=$2
+
+    if [ -e "$root/.git" ] && \
+       git -C "$root" rev-parse --git-dir >/dev/null 2>&1; then
+        actual=$(git -C "$root" ls-tree HEAD -- "$path" | \
+            awk '$1 == "160000" { print $3 }')
+        if [ "$actual" != "$expected" ]; then
+            echo "ERROR: $path gitlink is $actual; expected $expected" >&2
+            exit 1
+        fi
+    fi
+}
+
+check_gitlink helpcontent2 "$LO_HELP_COMMIT"
+check_gitlink translations "$LO_TRANSLATIONS_COMMIT"
+check_source "LibreOffice help" \
+    "$root/helpcontent2" "$LO_HELP_COMMIT" Module_helpcontent2.mk
+check_source "LibreOffice translations" \
+    "$root/translations" "$LO_TRANSLATIONS_COMMIT" source/zh-CN
 
 check_source "OFD extension" \
     "$root/vendor/libreoffice-ofd-extension" "$OFD_COMMIT" pom.xml

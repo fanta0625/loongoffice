@@ -25,7 +25,44 @@ fetch_source()
     echo "$name is locked at $commit"
 }
 
+fetch_submodule()
+{
+    name=$1
+    path=$2
+    url=$3
+    commit=$4
+
+    gitlink=$(git -C "$root" ls-tree HEAD -- "$path" | awk '$1 == "160000" { print $3 }')
+    if [ "$gitlink" != "$commit" ]; then
+        echo "ERROR: $path gitlink is $gitlink; expected $commit" >&2
+        exit 1
+    fi
+
+    if [ ! -e "$root/$path/.git" ]; then
+        if [ -d "$root/$path" ] && \
+           [ -n "$(find "$root/$path" -mindepth 1 -maxdepth 1 -print -quit)" ]; then
+            echo "ERROR: $path exists but is not a Git checkout" >&2
+            exit 1
+        fi
+        mkdir -p "$root/$path"
+        git init -q "$root/$path"
+    fi
+
+    if git -C "$root/$path" remote get-url origin >/dev/null 2>&1; then
+        git -C "$root/$path" remote set-url origin "$url"
+    else
+        git -C "$root/$path" remote add origin "$url"
+    fi
+    git -C "$root/$path" fetch --no-tags --depth 1 origin "$commit"
+    git -C "$root/$path" checkout --detach "$commit"
+    echo "$name is locked at $commit"
+}
+
 mkdir -p "$root/vendor"
+fetch_submodule "LibreOffice help" helpcontent2 \
+    "$LO_HELP_URL" "$LO_HELP_COMMIT"
+fetch_submodule "LibreOffice translations" translations \
+    "$LO_TRANSLATIONS_URL" "$LO_TRANSLATIONS_COMMIT"
 fetch_source "OFD extension" "$OFD_URL" "$OFD_COMMIT" \
     "$root/vendor/libreoffice-ofd-extension"
 fetch_source "batch print" "$BATCH_PRINT_URL" "$BATCH_PRINT_COMMIT" \
