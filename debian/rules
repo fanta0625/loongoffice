@@ -33,6 +33,14 @@ export PATH := /usr/lib/gcc-loongarch64-linux-gnu:$(PATH)
 %:
 	dh $@
 
+# LibreOffice owns its bootstrap process. Generic dh_autoreconf cannot process
+# this source tree; autogen.sh is invoked by override_dh_auto_configure below.
+override_dh_autoreconf:
+	@:
+
+override_dh_autoreconf_clean:
+	@:
+
 override_dh_auto_configure:
 	debian/scripts/check-vendor-sources "$(MAVEN_SEED_REPO)"
 	rm -rf "$(MAVEN_BUILD_REPO)"

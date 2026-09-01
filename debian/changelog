@@ -4,6 +4,7 @@ loongoffice (25.8.7.3-1.lnd.1) unstable; urgency=medium
   * Build the pinned OFD and batch print projects from source without network.
   * Replace the bundled batch print executable with distribution Python modules.
   * Use debhelper-generated MIME, desktop, and icon cache maintenance hooks.
+  * Let LibreOffice autogen.sh bootstrap the build instead of dh_autoreconf.
 
  -- Loongson <service@loongson.cn>  Mon, 31 Aug 2026 21:40:00 +0800
 
