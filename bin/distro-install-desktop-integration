@@ -1,6 +1,6 @@
 #!/bin/sh
 
-if test -z "${SRC_ROOT}"; then
+if test -z "${SRC_ROOT:-}"; then
     echo "distro-install-clean-up: No environment set!"
     exit 1
 fi
@@ -93,16 +93,22 @@ add_wrapper()
 }
 
 # install desktop integration from plain packages
-sysui_temp=`mktemp -d -t distro-pack-desktop-integration-XXXXXX`
-cp -a workdir/CustomTarget/sysui/share/libreoffice/* "$sysui_temp"
-cp -a "${SRCDIR?}"/sysui/desktop/share/create_tree.sh "$sysui_temp"
-cd $sysui_temp
+sysui_temp=`mktemp -d -t distro-pack-desktop-integration-XXXXXX` || exit 1
+sysui_source="$SRC_ROOT/workdir/CustomTarget/sysui/share/$INSTALLDIRNAME"
+if [ ! -f "$sysui_source/openoffice.org.xml" ] || \
+   [ ! -f "$sysui_source/launcherlist" ]; then
+    echo "ERROR: generated desktop integration is incomplete: $sysui_source" >&2
+    exit 1
+fi
+cp -a "$sysui_source/." "$sysui_temp/" || exit 1
+cp -a "${SRCDIR?}"/sysui/desktop/share/create_tree.sh "$sysui_temp" || exit 1
+cd $sysui_temp || exit 1
 # we want non-versioned stuff in the distro packages
 sed -i \
     -e "s/\($INSTALLDIRNAME\)$PRODUCTVERSION_NODOT/\1/" \
     -e "s/\($INSTALLDIRNAME\)$PRODUCTVERSION/\1/" \
     -e "s/\($PRODUCTNAME\) $PRODUCTVERSION/\1/" \
-    *
+    * || exit 1
 # call in subshell to do not malform PRODUCTVERSION, ...
 (
     export OFFICE_PREFIX=$LIBDIR
@@ -113,26 +119,31 @@ sed -i \
     export KDEMAINDIR=$PREFIXDIR
     export PREFIXDIR=${PREFIXDIR}
     export APPDATA_SOURCE_DIR="${SRCDIR?}"/sysui/desktop/appstream-appdata
-    bash ./create_tree.sh
-)
-cd -
+    export SOURCE_DIR="${SRCDIR?}"/sysui/desktop/share
+    bash -e ./create_tree.sh
+) || exit 1
+cd - || exit 1
 rm -rf $sysui_temp
 
 # we do not want some stuff from the plain packages
 if test -d $DESTDIR/opt ; then
-    rm -f $DESTDIR/opt/$INSTALLDIRNAME
+    # A non-LoongOffice product can leave a compatibility symlink here.  The
+    # configured LoongOffice installation is a real directory and must stay.
+    if test -L "$DESTDIR/opt/$INSTALLDIRNAME"; then
+        rm -f "$DESTDIR/opt/$INSTALLDIRNAME"
+    fi
     rmdir $DESTDIR/opt 2>/dev/null || true
 fi
 
 # we want non-versioned desktop files
-cd $DESTDIR/$INSTALLDIR/share/xdg
+cd $DESTDIR/$INSTALLDIR/share/xdg || exit 1
 # we want non-versioned stuff in the distro packages
 sed -i \
     -e "s/\($INSTALLDIRNAME\)$PRODUCTVERSION_NODOT/\1/" \
     -e "s/\($INSTALLDIRNAME\)$PRODUCTVERSION/\1/" \
     -e "s/\($PRODUCTNAME\) $PRODUCTVERSION/\1/" \
-    *.desktop
-cd -
+    *.desktop || exit 1
+cd - || exit 1
 
 # put the stuff installed by create_tree.sh into the right file lists
 # desktop files will be added by the corresponding add_wrapper command

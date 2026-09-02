@@ -17,6 +17,8 @@ loongoffice (25.8.7.3-1.lnd.1) unstable; urgency=medium
     whose files and functionality are merged into this package.
   * Skip the incompatible optional dwz debug-information optimization on
     Loongnix for the private LibreOffice ELF set.
+  * Install desktop integration from the generated LoongOffice sysui path and
+    fail packaging when its required inputs are absent.
 
  -- Loongson <service@loongson.cn>  Mon, 31 Aug 2026 21:40:00 +0800
 
