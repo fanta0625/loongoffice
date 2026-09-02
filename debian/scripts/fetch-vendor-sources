@@ -95,12 +95,7 @@ fetch_submodule "LibreOffice help" helpcontent2 \
     "$LO_HELP_URL" "$LO_HELP_COMMIT"
 fetch_submodule "LibreOffice translations" translations \
     "$LO_TRANSLATIONS_URL" "$LO_TRANSLATIONS_COMMIT"
-fetch_source "OFD extension" "$OFD_URL" "$OFD_COMMIT" \
-    "$root/vendor/libreoffice-ofd-extension"
 fetch_source "batch print" "$BATCH_PRINT_URL" "$BATCH_PRINT_COMMIT" \
     "$root/vendor/libreoffice-batch-print"
-fetch_source "OFDRW" "$OFDRW_URL" "$OFDRW_COMMIT" \
-    "$root/vendor/ofdrw"
 
-"$root/debian/scripts/check-vendor-sources" \
-    "$root/vendor/maven-repository" --skip-maven
+"$root/debian/scripts/check-vendor-sources"

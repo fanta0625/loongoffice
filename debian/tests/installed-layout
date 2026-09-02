@@ -12,6 +12,25 @@ test -x /usr/bin/loongoffice-batch-print
 test -f "$app_home/main.py"
 test -f /opt/loongoffice/share/extensions/org.loongoffice.ofd.extension/description.xml
 test -f /opt/loongoffice/share/extensions/org.loongoffice.batchprint/description.xml
+PYTHONDONTWRITEBYTECODE=1 python3 - <<'PY'
+from pathlib import Path
+from zipfile import ZipFile
+
+root = Path("/opt/loongoffice/share/extensions/org.loongoffice.ofd.extension")
+source_suffixes = (".java", ".kt", ".kts", ".groovy", ".scala", ".c",
+                   ".cc", ".cpp", ".cxx", ".h", ".hpp")
+
+for path in root.rglob("*"):
+    if path.is_file() and path.name.lower().endswith(source_suffixes):
+        raise SystemExit(f"OFD extension installs implementation source: {path}")
+    if path.suffix.lower() in (".jar", ".zip"):
+        with ZipFile(path) as archive:
+            for name in archive.namelist():
+                if name.lower().endswith(source_suffixes):
+                    raise SystemExit(
+                        f"OFD extension archive contains implementation source: {path}!{name}"
+                    )
+PY
 test -f /usr/share/bash-completion/completions/loongoffice
 test -f /usr/share/mime/packages/loongoffice.xml
 test -e /usr/share/applications/loongoffice-writer.desktop

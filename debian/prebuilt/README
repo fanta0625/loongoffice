@@ -1,0 +1,13 @@
+This directory carries binary inputs that must be included in the Debian
+source package.  It intentionally contains no OFD implementation source.
+
+On a trusted host that has access to the private OFD source, build the OXT and
+run:
+
+    debian/scripts/import-ofd-oxt /path/to/loongoffice-ofd-extension.oxt
+
+Commit the resulting loongoffice-ofd-extension.oxt and its .sha256 file.
+debian/source/include-binaries makes the binary OXT part of the 3.0 (quilt)
+source package; the text checksum is included with the other debian/ files.
+The normal package build verifies the digest and rejects OXT archives that
+contain common implementation-source file types.

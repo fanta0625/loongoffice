@@ -12,22 +12,10 @@ MAINPKG := loongoffice
 PKGDIR := $(CURDIR)/debian/$(MAINPKG)
 OFFICE_HOME := /opt/loongoffice
 
-OFD_SOURCE ?= $(CURDIR)/vendor/libreoffice-ofd-extension
-OFDRW_SOURCE ?= $(CURDIR)/vendor/ofdrw
 BATCH_PRINT_SOURCE ?= $(CURDIR)/vendor/libreoffice-batch-print
 LO_TARBALLS ?= $(CURDIR)/vendor/libreoffice-tarballs
-
-# The seed repository is prepared on a connected machine. Builds only use the
-# private copy under debian/, so the source-supplied repository stays unchanged.
-MAVEN_SEED_REPO ?= $(CURDIR)/vendor/maven-repository
-MAVEN_BUILD_REPO := $(CURDIR)/debian/.m2/repository
-SOURCE_DATE_EPOCH ?= $(shell dpkg-parsechangelog -STimestamp)
-MAVEN := mvn --batch-mode --no-transfer-progress --offline \
-	-Dmaven.repo.local=$(MAVEN_BUILD_REPO) \
-	-Dproject.build.outputTimestamp=$(SOURCE_DATE_EPOCH) \
-	-Dgpg.skip=true
-
-OFD_OXT := $(OFD_SOURCE)/target/loongoffice-ofd-extension.oxt
+OFD_OXT ?= $(CURDIR)/debian/prebuilt/loongoffice-ofd-extension.oxt
+OFD_OXT_SHA256 ?= $(OFD_OXT).sha256
 
 export PATH := /usr/lib/gcc-loongarch64-linux-gnu:$(PATH)
 
@@ -43,19 +31,12 @@ override_dh_autoreconf_clean:
 	@:
 
 override_dh_auto_configure:
-	debian/scripts/check-vendor-sources "$(MAVEN_SEED_REPO)"
-	rm -rf "$(MAVEN_BUILD_REPO)"
-	install -d "$(MAVEN_BUILD_REPO)"
-	cp -a "$(MAVEN_SEED_REPO)/." "$(MAVEN_BUILD_REPO)/"
+	debian/scripts/check-vendor-sources
+	debian/scripts/check-ofd-oxt "$(OFD_OXT)" "$(OFD_OXT_SHA256)"
 	debian/scripts/configure-libreoffice "$(LO_TARBALLS)"
 	debian/scripts/check-libreoffice-tarballs "$(LO_TARBALLS)"
 
 override_dh_auto_build:
-	$(MAVEN) -f "$(OFDRW_SOURCE)/pom.xml" \
-		-Dmaven.test.skip=true -Dmaven.javadoc.skip=true install
-	$(MAVEN) -f "$(OFD_SOURCE)/pom.xml" \
-		-Dmaven.test.skip=true -Ploongoffice clean package
-	test -s "$(OFD_OXT)"
 	$(MAKE) build
 
 override_dh_auto_install:
@@ -69,10 +50,6 @@ override_dh_auto_install:
 
 override_dh_auto_clean:
 	if [ -f Makefile ]; then $(MAKE) clean; fi
-	rm -rf "$(OFD_SOURCE)/target" "$(MAVEN_BUILD_REPO)"
-	if [ -d "$(OFDRW_SOURCE)" ]; then \
-		find "$(OFDRW_SOURCE)" -type d -name target -prune -exec rm -rf '{}' +; \
-	fi
 
 # Resolve LoongOffice's private libraries while still generating dependencies
 # for system libraries. Keeping ${shlibs:Depends} is safer than skipping this

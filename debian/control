@@ -36,7 +36,6 @@ Build-Depends:
  libxml2-utils,
  libxslt1-dev,
  libxt-dev,
- maven,
  meson,
  ninja-build,
  patch,
