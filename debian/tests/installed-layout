@@ -13,7 +13,10 @@ test -f "$app_home/main.py"
 test -f /opt/loongoffice/share/extensions/org.loongoffice.ofd.extension/description.xml
 test -f /opt/loongoffice/share/extensions/org.loongoffice.batchprint/description.xml
 test -f /usr/share/bash-completion/completions/loongoffice
+test -f /usr/share/mime/packages/loongoffice.xml
 test -e /usr/share/applications/loongoffice-writer.desktop
+test -f /usr/share/templates/loongoffice.odt.desktop
+test -f /usr/share/templates/.source/loongoffice.odt
 grep -Eq '^Exec=loongoffice([[:space:]]|$)' \
     /usr/share/applications/loongoffice-writer.desktop
 grep -Fqx 'UserInstallation=$SYSUSERCONFIG/loongoffice/4' \

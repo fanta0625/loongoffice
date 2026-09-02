@@ -83,6 +83,10 @@ also use the independent $SYSUSERCONFIG/loongoffice/4 profile. Bash completion
 and AppStream component IDs are rewritten to LoongOffice-only names rather than
 registering or replacing their LibreOffice equivalents.
 
+The distribution installer reads generated desktop inputs from the configured
+INSTALLDIRNAME path, currently workdir/CustomTarget/sysui/share/loongoffice.
+It fails before packaging if MIME, desktop, or template inputs are incomplete.
+
 The OFD OXT is unpacked as a bundled extension. Batch print is installed as
 Python source and uses the system Python selected explicitly for PyUNO, plus
 distribution-provided PySide6, PyMuPDF, CUPS, libmagic, and lru-dict modules.
