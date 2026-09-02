@@ -91,6 +91,8 @@ fetch_submodule()
 }
 
 mkdir -p "$root/vendor"
+fetch_submodule "LibreOffice dictionaries" dictionaries \
+    "$LO_DICTIONARIES_URL" "$LO_DICTIONARIES_COMMIT"
 fetch_submodule "LibreOffice help" helpcontent2 \
     "$LO_HELP_URL" "$LO_HELP_COMMIT"
 fetch_submodule "LibreOffice translations" translations \

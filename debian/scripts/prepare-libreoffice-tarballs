@@ -30,8 +30,7 @@ fi
 
 echo "Using $download_client to download LibreOffice tarballs."
 
-"$root/debian/scripts/check-vendor-sources" \
-    "$root/vendor/maven-repository" --skip-maven
+"$root/debian/scripts/check-vendor-sources"
 
 if [ -f "$marker" ]; then
     "$root/debian/scripts/configure-libreoffice" "$tarball_dir"

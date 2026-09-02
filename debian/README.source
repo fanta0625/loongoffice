@@ -8,15 +8,32 @@ source.
 Connected preparation checkout
 ------------------------------
 
-Fetch the exact source commits before building:
+On a connected, trusted preparation host, build the Gerrit submission input
+with one command:
+
+    debian/scripts/prepare-orig-tarball
+
+Run it from a clean Git checkout of the LoongOffice release branch, with
+dpkg-dev, Git, curl or wget, and the normal LibreOffice build prerequisites
+installed.
+
+It fetches the exact source commits, downloads and verifies LibreOffice's
+external tarballs, and writes ../loongoffice_<upstream-version>.orig.tar.xz.
+Submit that orig tarball together with the debian/ directory to the
+system-source Gerrit project. This replaces dh_make --createorig: the output
+contains the required submodules, batch-print source, and offline LibreOffice
+tarballs, but not private OFD or OFDRW source.
+
+The preparation script runs the following source fetch step itself. It can also
+be run independently when refreshing only the Git inputs:
 
     debian/scripts/fetch-vendor-sources
 
 The repository URLs and expected commits are recorded in
 debian/vendor-sources.lock and checked at the start of every build. The script
-also initializes the helpcontent2 and translations submodules required by
---with-help and --with-lang=zh-CN. Their lock entries must match the gitlinks in
-the main repository.
+also initializes the dictionaries, helpcontent2, and translations submodules
+required by the configured LibreOffice build. Their lock entries must match the
+gitlinks in the main repository.
 
 The custom vendor directories are deliberately not Git submodules:
 LibreOffice's pre-commit hook rejects gitlink changes, and gitlinks alone are
@@ -64,16 +81,11 @@ disabled and reject a missing, changed, or incompatible tarball input.
 CI without access to GitHub
 ---------------------------
 
-A commit lock does not contain source files. After preparing the LibreOffice
-tarballs, create a self-contained vendor archive:
-
-    debian/scripts/export-vendor-sources ../loongoffice-vendor.tar.xz
-
-Extract that archive over the LoongOffice source tree used by CI. It contains
-helpcontent2, translations, batch-print source, and the verified LibreOffice
-tarballs. The OFD OXT is carried by the source package itself, rather than by
-this vendor archive. Exported source directories contain .source-commit
-markers, so the same lock validation works without Git metadata.
+The orig tarball made by prepare-orig-tarball already contains all Git and
+tarball inputs required by the offline build. The OFD OXT is carried by the
+debian/ directory, rather than by the orig tarball. The older
+export-vendor-sources helper remains available only for environments that
+manage the vendor archive independently.
 
 Build layout
 ------------

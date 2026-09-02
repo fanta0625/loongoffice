@@ -1,9 +1,12 @@
 # Vendored build inputs
 
-The ignored batch-print source directory is pinned by
-`debian/vendor-sources.lock`:
+The ignored batch-print source directory and required LibreOffice submodules
+are pinned by `debian/vendor-sources.lock`:
 
 - `libreoffice-batch-print`
+- `dictionaries`
+- `helpcontent2`
+- `translations`
 
 Run `debian/scripts/fetch-vendor-sources` on a connected preparation host.
 The proprietary OFD and OFDRW source directories are also ignored, but are

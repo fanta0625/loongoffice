@@ -1,5 +1,7 @@
 # shellcheck shell=sh
 
+LO_DICTIONARIES_COMMIT=7d59c5eeec19771aa9208920865b5377445b2249
+LO_DICTIONARIES_URL=https://github.com/LibreOffice/dictionaries.git
 BATCH_PRINT_COMMIT=64786c024efcf9cc8dc3aa09388a64ebb55f2f57
 BATCH_PRINT_URL=https://github.com/fanta0625/libreoffice-batch-print.git
 LO_HELP_COMMIT=4742cb71469af698587a23c5ea026ce4287e3d9a

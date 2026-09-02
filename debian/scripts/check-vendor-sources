@@ -46,15 +46,18 @@ check_gitlink()
        git -C "$root" rev-parse --git-dir >/dev/null 2>&1; then
         actual=$(git -C "$root" ls-tree HEAD -- "$path" | \
             awk '$1 == "160000" { print $3 }')
-        if [ "$actual" != "$expected" ]; then
+        if [ -n "$actual" ] && [ "$actual" != "$expected" ]; then
             echo "ERROR: $path gitlink is $actual; expected $expected" >&2
             exit 1
         fi
     fi
 }
 
+check_gitlink dictionaries "$LO_DICTIONARIES_COMMIT"
 check_gitlink helpcontent2 "$LO_HELP_COMMIT"
 check_gitlink translations "$LO_TRANSLATIONS_COMMIT"
+check_source "LibreOffice dictionaries" \
+    "$root/dictionaries" "$LO_DICTIONARIES_COMMIT" Module_dictionaries.mk
 check_source "LibreOffice help" \
     "$root/helpcontent2" "$LO_HELP_COMMIT" Module_helpcontent2.mk
 check_source "LibreOffice translations" \

@@ -3,12 +3,13 @@ loongoffice (25.8.7.3-1.lnd.1) unstable; urgency=medium
   * Build the all-in-one package directly with distro-pack-install and DESTDIR.
   * Bundle a verified prebuilt OFD OXT without publishing its source code.
   * Build the pinned batch print project from source without network.
+  * Prepare a self-contained orig tarball for offline system-source builds.
   * Replace the bundled batch print executable with distribution Python modules.
   * Use debhelper-generated MIME, desktop, and icon cache maintenance hooks.
   * Let LibreOffice autogen.sh bootstrap the build instead of dh_autoreconf.
   * Use the configure-derived loongoffice installation directory name.
-  * Prepare and validate the help and translation submodules for offline builds,
-    including source trees carried over without Git metadata.
+  * Prepare and validate dictionary, help, and translation submodules for
+    offline builds, including source trees carried over without Git metadata.
   * Prepare and verify LibreOffice external tarballs as explicit offline input.
   * Select and validate the LibreOffice tarball download client explicitly.
   * Keep LoongOffice commands, user profiles, libraries, and Python UNO usage
