@@ -82,5 +82,11 @@ override_dh_shlibdeps:
 		-l$(PKGDIR)$(OFFICE_HOME)/program \
 		-l$(PKGDIR)$(OFFICE_HOME)/program/ure/lib
 
+# dwz only deduplicates DWARF data.  The Loongnix dwz tool cannot process the
+# full set of large, private LibreOffice ELF objects installed below /opt, so
+# do not let an optional debug-information optimization fail the package.
+override_dh_dwz:
+	@:
+
 override_dh_compress:
 	dh_compress -X.py -X.oxt -X.rdb -X.xcu -X.xcs
