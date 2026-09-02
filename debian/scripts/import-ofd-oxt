@@ -1,0 +1,26 @@
+#!/bin/sh
+
+set -eu
+
+root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
+input=${1:?Usage: $0 PATH/TO/loongoffice-ofd-extension.oxt}
+destination="$root/debian/prebuilt/loongoffice-ofd-extension.oxt"
+checksum="$destination.sha256"
+temporary_checksum=$(mktemp)
+trap 'rm -f "$temporary_checksum"' EXIT HUP INT TERM
+
+[ -s "$input" ] || {
+    echo "ERROR: OFD OXT artifact is missing or empty: $input" >&2
+    exit 1
+}
+
+digest=$(sha256sum "$input" | awk '{print $1}')
+printf '%s\n' "$digest" > "$temporary_checksum"
+"$root/debian/scripts/check-ofd-oxt" "$input" "$temporary_checksum"
+
+install -d "$(dirname "$destination")"
+install -m 0644 "$input" "$destination"
+printf '%s\n' "$digest" > "$checksum"
+
+echo "Imported prebuilt OFD OXT: $destination"
+echo "Add the OXT and checksum to the source-package commit."

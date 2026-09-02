@@ -1,0 +1,61 @@
+#!/bin/sh
+
+set -eu
+
+artifact=${1:?missing OFD OXT artifact}
+checksum_file=${2:?missing OFD OXT checksum file}
+
+die()
+{
+    echo "ERROR: $*" >&2
+    exit 1
+}
+
+[ -s "$artifact" ] || die "OFD OXT artifact is missing or empty: $artifact"
+[ -f "$checksum_file" ] || die "OFD OXT checksum is missing: $checksum_file"
+
+expected=$(sed -n '1p' "$checksum_file")
+case "$expected" in
+    *[!0123456789abcdef]*|'')
+        die "OFD OXT checksum must be a lowercase SHA256 digest: $checksum_file"
+        ;;
+esac
+[ "${#expected}" -eq 64 ] || \
+    die "OFD OXT checksum must be a 64-character SHA256 digest: $checksum_file"
+
+actual=$(sha256sum "$artifact" | awk '{print $1}')
+[ "$actual" = "$expected" ] || \
+    die "OFD OXT checksum does not match: $artifact"
+
+unzip -tqq "$artifact" || die "OFD OXT is not a valid ZIP archive: $artifact"
+entries=$(unzip -Z1 "$artifact")
+printf '%s\n' "$entries" | grep -Fxq 'description.xml' || \
+    die "OFD OXT does not contain description.xml: $artifact"
+
+# The public source package may carry the compiled extension only, never its
+# private implementation sources.
+source_pattern='\.(java|kt|kts|groovy|scala|c|cc|cpp|cxx|h|hpp)$'
+if printf '%s\n' "$entries" | grep -Eiq "$source_pattern"; then
+    die "OFD OXT contains source files and must not be published: $artifact"
+fi
+
+# The extension JAR is part of the public binary input as well. Check the
+# direct nested archives so a source JAR cannot bypass the OXT-level check.
+temporary_dir=$(mktemp -d)
+trap 'rm -rf "$temporary_dir"' EXIT HUP INT TERM
+printf '%s\n' "$entries" | while IFS= read -r entry; do
+    case "$entry" in
+        *.jar|*.zip)
+            nested="$temporary_dir/nested-archive"
+            unzip -p "$artifact" "$entry" > "$nested" || \
+                die "cannot inspect nested OFD archive: $entry"
+            unzip -tqq "$nested" || \
+                die "invalid nested OFD archive: $entry"
+            if unzip -Z1 "$nested" | grep -Eiq "$source_pattern"; then
+                die "OFD OXT contains source files in nested archive: $entry"
+            fi
+            ;;
+    esac
+done
+
+echo "OFD OXT artifact is valid: $artifact"

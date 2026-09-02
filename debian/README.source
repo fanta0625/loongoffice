@@ -2,7 +2,8 @@ LoongOffice Debian source inputs
 ================================
 
 The package is intentionally built without network access. debian/rules never
-clones a repository and Maven always runs with --offline.
+clones a repository and does not build the proprietary OFD extension from
+source.
 
 Connected preparation checkout
 ------------------------------
@@ -22,18 +23,25 @@ LibreOffice's pre-commit hook rejects gitlink changes, and gitlinks alone are
 unusable in an isolated CI. Updating a source therefore requires an intentional
 lock-file update.
 
-Offline Maven input
--------------------
+Proprietary OFD input
+---------------------
 
-The OFD extension and its custom OFDRW dependency use Maven. On a connected,
-trusted preparation host, populate and verify the private repository with:
+The private OFD and OFDRW sources must never be included in the exported
+vendor archive or a public source package. A trusted internal builder uses a
+separate private checkout to produce loongoffice-ofd-extension.oxt and imports
+only that artifact:
 
-    debian/scripts/prepare-offline-maven-repository
+    debian/scripts/import-ofd-oxt /path/to/loongoffice-ofd-extension.oxt
 
-This creates vendor/maven-repository and then repeats both Maven builds with
---offline. The directory is a build input, not a cache: it must accompany the
-source submitted to an isolated CI system. debian/rules copies it to
-debian/.m2 before use so the supplied input is not modified.
+This writes debian/prebuilt/loongoffice-ofd-extension.oxt and its SHA256 file.
+The OXT is explicitly listed in debian/source/include-binaries and the text
+checksum is included with the other debian/ files, so an upstream builder can
+create the complete binary package without access to OFD source. debian/rules
+validates the digest and rejects OXT archives containing common
+implementation-source file types before the LibreOffice build starts.
+debian/source/options also excludes any private OFD, OFDRW, and Maven working
+directories left on a trusted release host. This is defence in depth; do not
+add those directories to Git or an uploaded vendor archive.
 
 LibreOffice external tarballs
 -----------------------------
@@ -56,16 +64,16 @@ disabled and reject a missing, changed, or incompatible tarball input.
 CI without access to GitHub
 ---------------------------
 
-A commit lock does not contain source files. After preparing the Maven
-repository and LibreOffice tarballs, create a self-contained vendor archive:
+A commit lock does not contain source files. After preparing the LibreOffice
+tarballs, create a self-contained vendor archive:
 
     debian/scripts/export-vendor-sources ../loongoffice-vendor.tar.xz
 
 Extract that archive over the LoongOffice source tree used by CI. It contains
-helpcontent2, translations, the custom vendor sources, the verified Maven
-repository, and the verified LibreOffice tarballs. Exported source directories
-contain .source-commit markers, so the same lock validation works without Git
-metadata.
+helpcontent2, translations, batch-print source, and the verified LibreOffice
+tarballs. The OFD OXT is carried by the source package itself, rather than by
+this vendor archive. Exported source directories contain .source-commit
+markers, so the same lock validation works without Git metadata.
 
 Build layout
 ------------

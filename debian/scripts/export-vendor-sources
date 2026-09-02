@@ -15,8 +15,7 @@ if [ -e "$output" ]; then
     exit 1
 fi
 
-"$root/debian/scripts/check-vendor-sources" \
-    "$root/vendor/maven-repository"
+"$root/debian/scripts/check-vendor-sources"
 "$root/debian/scripts/check-libreoffice-tarballs" \
     "$root/vendor/libreoffice-tarballs"
 
@@ -36,15 +35,9 @@ export_source()
     printf '%s\n' "$commit" > "$destination/.source-commit"
 }
 
-export_source vendor/libreoffice-ofd-extension "$OFD_COMMIT"
 export_source vendor/libreoffice-batch-print "$BATCH_PRINT_COMMIT"
-export_source vendor/ofdrw "$OFDRW_COMMIT"
 export_source helpcontent2 "$LO_HELP_COMMIT"
 export_source translations "$LO_TRANSLATIONS_COMMIT"
-
-mkdir -p "$work/vendor/maven-repository"
-cp -a "$root/vendor/maven-repository/." \
-    "$work/vendor/maven-repository/"
 
 mkdir -p "$work/vendor/libreoffice-tarballs"
 find "$root/vendor/libreoffice-tarballs" -maxdepth 1 -type f \

@@ -5,9 +5,6 @@ set -eu
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 . "$root/debian/vendor-sources.lock"
 
-maven_repository=${1:-"$root/vendor/maven-repository"}
-skip_maven=${2:-}
-
 check_source()
 {
     name=$1
@@ -63,26 +60,7 @@ check_source "LibreOffice help" \
 check_source "LibreOffice translations" \
     "$root/translations" "$LO_TRANSLATIONS_COMMIT" source/zh-CN
 
-check_source "OFD extension" \
-    "$root/vendor/libreoffice-ofd-extension" "$OFD_COMMIT" pom.xml
 check_source "batch print" \
     "$root/vendor/libreoffice-batch-print" "$BATCH_PRINT_COMMIT" main.py
-check_source "OFDRW" \
-    "$root/vendor/ofdrw" "$OFDRW_COMMIT" pom.xml
 
-if [ "$skip_maven" != "--skip-maven" ]; then
-    marker="$maven_repository/.loongoffice-offline-repository"
-    if [ ! -f "$marker" ]; then
-        echo "ERROR: offline Maven repository is not prepared: $maven_repository" >&2
-        echo "Run debian/scripts/prepare-offline-maven-repository on a connected host." >&2
-        exit 1
-    fi
-
-    if ! grep -qx "ofd=$OFD_COMMIT" "$marker" || \
-       ! grep -qx "ofdrw=$OFDRW_COMMIT" "$marker"; then
-        echo "ERROR: offline Maven repository does not match vendor-sources.lock" >&2
-        exit 1
-    fi
-fi
-
-echo "Vendor sources and offline inputs are consistent."
+echo "Vendor sources are consistent."

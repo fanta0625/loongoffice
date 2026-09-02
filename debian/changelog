@@ -1,7 +1,8 @@
 loongoffice (25.8.7.3-1.lnd.1) unstable; urgency=medium
 
   * Build the all-in-one package directly with distro-pack-install and DESTDIR.
-  * Build the pinned OFD and batch print projects from source without network.
+  * Bundle a verified prebuilt OFD OXT without publishing its source code.
+  * Build the pinned batch print project from source without network.
   * Replace the bundled batch print executable with distribution Python modules.
   * Use debhelper-generated MIME, desktop, and icon cache maintenance hooks.
   * Let LibreOffice autogen.sh bootstrap the build instead of dh_autoreconf.
