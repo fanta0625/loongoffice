@@ -1,0 +1,110 @@
+#!/bin/sh
+
+set -eu
+
+root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
+. "$root/debian/vendor-sources.lock"
+
+if ! command -v dpkg-parsechangelog >/dev/null 2>&1; then
+    echo "ERROR: dpkg-parsechangelog is required; install dpkg-dev first." >&2
+    exit 1
+fi
+
+source_name=$(dpkg-parsechangelog -l"$root/debian/changelog" -SSource)
+source_version=$(dpkg-parsechangelog -l"$root/debian/changelog" -SVersion)
+upstream_version=${source_version#*:}
+upstream_version=${upstream_version%-*}
+release_dir="$source_name-$upstream_version"
+output=${1:-"$root/../${source_name}_${upstream_version}.orig.tar.xz"}
+
+case "$source_name" in
+    ''|*[!ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+.-]*)
+        echo "ERROR: unsafe Debian source name: $source_name" >&2
+        exit 1
+        ;;
+esac
+case "$upstream_version" in
+    ''|*[!ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+.:~_-]*)
+        echo "ERROR: unsafe upstream version: $upstream_version" >&2
+        exit 1
+        ;;
+esac
+
+if [ -e "$output" ]; then
+    echo "ERROR: output already exists: $output" >&2
+    exit 1
+fi
+
+# The orig tarball is a release artifact. Tracked source changes must be
+# committed first so git archive has one unambiguous revision to export.
+if ! git -C "$root" diff --quiet || ! git -C "$root" diff --cached --quiet; then
+    echo "ERROR: commit or stash tracked changes before preparing an orig tarball." >&2
+    exit 1
+fi
+
+"$root/debian/scripts/fetch-vendor-sources"
+"$root/debian/scripts/check-ofd-oxt" \
+    "$root/debian/prebuilt/loongoffice-ofd-extension.oxt" \
+    "$root/debian/prebuilt/loongoffice-ofd-extension.oxt.sha256"
+"$root/debian/scripts/prepare-libreoffice-tarballs"
+"$root/debian/scripts/check-libreoffice-tarballs" \
+    "$root/vendor/libreoffice-tarballs"
+
+work=$(mktemp -d)
+stage="$work/$release_dir"
+trap 'rm -rf "$work"' EXIT HUP INT TERM
+mkdir -p "$stage"
+
+# git archive excludes build products and .git metadata. Debian packaging is
+# submitted separately to the system-source Gerrit project.
+git -C "$root" archive --format=tar --prefix="$release_dir/" HEAD | \
+    tar -xf - -C "$work"
+rm -rf "$stage/debian"
+
+export_source()
+{
+    path=$1
+    commit=$2
+    destination="$stage/$path"
+
+    if [ ! -e "$root/$path/.git" ]; then
+        echo "ERROR: expected Git checkout is missing: $root/$path" >&2
+        exit 1
+    fi
+    actual=$(git -C "$root/$path" rev-parse HEAD)
+    if [ "$actual" != "$commit" ]; then
+        echo "ERROR: $path is at $actual; expected $commit" >&2
+        exit 1
+    fi
+
+    mkdir -p "$destination"
+    git -C "$root/$path" archive --format=tar "$commit" | \
+        tar -xf - -C "$destination"
+    printf '%s\n' "$commit" > "$destination/.source-commit"
+}
+
+export_source dictionaries "$LO_DICTIONARIES_COMMIT"
+export_source helpcontent2 "$LO_HELP_COMMIT"
+export_source translations "$LO_TRANSLATIONS_COMMIT"
+export_source vendor/libreoffice-batch-print "$BATCH_PRINT_COMMIT"
+
+tarball_destination="$stage/vendor/libreoffice-tarballs"
+mkdir -p "$tarball_destination"
+find "$root/vendor/libreoffice-tarballs" -maxdepth 1 -type f \
+    ! -name 'fetch.log' ! -name '.loongoffice-tarballs-preparing' \
+    -exec cp -p -- '{}' "$tarball_destination/" \;
+
+mkdir -p "$(dirname "$output")"
+epoch=${SOURCE_DATE_EPOCH:-$(git -C "$root" show -s --format=%ct HEAD)}
+tar --sort=name --mtime="@$epoch" --owner=0 --group=0 --numeric-owner \
+    -cJf "$output" -C "$work" "$release_dir"
+
+if tar -tJf "$output" | \
+     grep -Eq "/vendor/(libreoffice-ofd-extension|ofdrw|maven-repository)(/|$)"; then
+    rm -f -- "$output"
+    echo "ERROR: refusing to create an orig tarball containing private OFD input." >&2
+    exit 1
+fi
+
+echo "Orig tarball written to $output"
+echo "Submit this file together with debian/ to the system-source Gerrit project."
