@@ -88,3 +88,8 @@ Python source and uses the system Python selected explicitly for PyUNO, plus
 distribution-provided PySide6, PyMuPDF, CUPS, libmagic, and lru-dict modules.
 Its packaged executable lookup never falls back to /usr/lib/libreoffice. No
 intermediate DEB is generated or unpacked.
+
+The Loongnix dwz implementation cannot process the full private ELF set below
+/opt/loongoffice. Packaging therefore skips dh_dwz, which is only an optional
+DWARF deduplication optimization; normal stripping and dependency generation
+remain enabled.
