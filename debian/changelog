@@ -1,3 +1,20 @@
+loongoffice (26.2.6.3-1.lnd.1) unstable; urgency=medium
+
+  * Rebase LoongOffice customizations onto LibreOffice 26.2.6.3.
+  * Update dictionary, help, and translation locks to the upstream gitlinks.
+  * Refresh the Simplified Chinese rehearsal timing patch with only 16 entries.
+  * Adapt rehearsal timing to the upstream canvastools namespace and preserve
+    upstream menu styles while removing community help entries.
+  * Keep the libpng LoongArch LSX implementation, with per-file SIMD flags.
+  * Drop the obsolete EPM architecture naming customization from this branch.
+  * Require GNU Make 4.2, GTK 3.24, and ATK 2.36; keep experimental Rust features
+    disabled so the offline package does not require Cargo inputs.
+  * Replace the obsolete EPM build.sh workflow with dpkg-buildpackage.
+  * Retain the isolated single-package installation, prebuilt OFD extension,
+    pinned batch print sources, and Loongnix dwz workaround.
+
+ -- wangxin <wangxxin0625@gmail.com>  Thu, 10 Sep 2026 17:00:00 +0800
+
 loongoffice (25.8.7.3-1.lnd.1) unstable; urgency=medium
 
   * Build the all-in-one package directly with distro-pack-install and DESTDIR.

@@ -48,15 +48,22 @@ $(eval $(call gb_StaticLibrary_add_generated_cobjects,libpng,\
 	) \
 	$(if $(filter LOONGARCH64,$(CPUNAME)), \
 	    UnpackedTarball/libpng/loongarch/loongarch_lsx_init \
-	    UnpackedTarball/libpng/loongarch/filter_lsx_intrinsics \
 	) \
 ))
+
+# Keep LSX instructions in the filter implementation. The generic dispatcher
+# checks AT_HWCAP before calling these functions on LoongArch CPUs.
+ifeq ($(CPUNAME),LOONGARCH64)
+$(eval $(call gb_StaticLibrary_add_generated_cobjects,libpng,\
+	UnpackedTarball/libpng/loongarch/filter_lsx_intrinsics \
+,-mlsx))
+endif
 
 $(eval $(call gb_StaticLibrary_add_defs,libpng,\
 	$(if $(filter ARM AARCH64,$(CPUNAME)), -DPNG_ARM_NEON) \
 	$(if $(filter POWERPC POWERPC64,$(CPUNAME)), -DPNG_POWERPC_VSX ) \
 	$(if $(filter INTEL X86_64,$(CPUNAME)), -DPNG_INTEL_SSE_OPT) \
-	$(if $(filter LOONGARCH64,$(CPUNAME)), -DPNG_LOONGARCH_LSX_OPT) \
+	$(if $(filter LOONGARCH64,$(CPUNAME)), -DPNG_LOONGARCH_LSX_OPT=1) \
 ))
 
 # At least on Linux, with --enable-lto, when building both this external/libpng and external/skia,

@@ -26,4 +26,6 @@ exec ./autogen.sh \
     --enable-gstreamer-1-0 \
     --enable-odk \
     --enable-python=system \
+    --without-yrs \
+    --disable-rust-uno \
     --disable-fetch-external

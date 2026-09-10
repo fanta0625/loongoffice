@@ -1,10 +1,10 @@
 # shellcheck shell=sh
 
-LO_DICTIONARIES_COMMIT=7d59c5eeec19771aa9208920865b5377445b2249
+LO_DICTIONARIES_COMMIT=9925407d67e752a75cff6a1b2d7b713b7ef0380c
 LO_DICTIONARIES_URL=https://github.com/LibreOffice/dictionaries.git
 BATCH_PRINT_COMMIT=64786c024efcf9cc8dc3aa09388a64ebb55f2f57
 BATCH_PRINT_URL=https://github.com/fanta0625/libreoffice-batch-print.git
-LO_HELP_COMMIT=4742cb71469af698587a23c5ea026ce4287e3d9a
+LO_HELP_COMMIT=e040abb737f1aeee1b30ddffdac407535033d2b6
 LO_HELP_URL=https://github.com/LibreOffice/help.git
-LO_TRANSLATIONS_COMMIT=88f40d38afd161b8c05d666515134818ed9e9d2d
+LO_TRANSLATIONS_COMMIT=767aed986038ca632ce2a7285a04f4d4b9a9c29e
 LO_TRANSLATIONS_URL=https://github.com/LibreOffice/translations.git

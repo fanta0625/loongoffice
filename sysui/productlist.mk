@@ -9,7 +9,7 @@
 
 PRODUCTLIST := loongoffice loongofficedev
 PKGVERSION := $(LIBO_VERSION_MAJOR).$(LIBO_VERSION_MINOR).$(LIBO_VERSION_MICRO)
-PKGVERSIONSHORT := 
+PKGVERSIONSHORT :=
 PRODUCTNAME.loongoffice := LoongOffice
 PRODUCTNAME.loongofficedev := LoongOfficeDev
 UNIXFILENAME.loongoffice := loongoffice

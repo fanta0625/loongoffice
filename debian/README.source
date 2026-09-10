@@ -1,6 +1,10 @@
 LoongOffice Debian source inputs
 ================================
 
+This branch is based on LibreOffice tag libreoffice-26.2.6.3. The Debian
+version is 26.2.6.3-1.lnd.1. See README.26.2.6.md for migration details and
+the remaining target-platform validation.
+
 The package is intentionally built without network access. debian/rules never
 clones a repository and does not build the proprietary OFD extension from
 source.
@@ -89,6 +93,22 @@ manage the vendor archive independently.
 
 Build layout
 ------------
+
+After preparing the locked inputs, run ./build.sh (or
+dpkg-buildpackage -b -us -uc) to build the single Debian package. build.sh
+no longer invokes EPM or combines intermediate DEBs. The build host needs
+GCC 12 or newer with C++20 support, GNU Make 4.2 or newer, GTK 3.24 or newer,
+and ATK 2.36 or newer, in addition to the declared Debian build dependencies.
+The LoongArch compiler must support -mlsx for the bundled libpng filters.
+
+Use a fresh vendor/libreoffice-tarballs directory when moving from 25.8.
+The old manifest belongs to different download rules and source inputs;
+move that directory aside before running prepare-orig-tarball. Do not reuse
+25.8 workdir, instdir, or generated configuration files for this build.
+
+Experimental YRS and Rust UNO are explicitly disabled. Enabling them would
+require extending the offline input export and checksum checks to cover Cargo
+dependencies as well as the top-level third-party tarballs.
 
 LibreOffice is installed directly with:
 
