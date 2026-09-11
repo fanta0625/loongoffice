@@ -4544,7 +4544,8 @@ $(call gb_LinkTarget_set_include,$(1),\
 endef
 endif
 
-ifneq ($(WITH_YRS),)
+# --without-yrs sets WITH_YRS=no, which must not add a link dependency.
+ifeq ($(WITH_YRS),yes)
 
 define gb_LinkTarget__use_yrs
 $(call gb_LinkTarget_use_external_project,$(1),y-crdt)
