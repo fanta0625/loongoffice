@@ -2,14 +2,6 @@ From e1bf3ab137bc79eb724edb16eebcdbd035384314 Mon Sep 17 00:00:00 2001
 From: WANG Xuerui <git@xen0n.name>
 Date: Sun, 6 Oct 2024 21:09:00 +0800
 Subject: [PATCH 4/4] [loong64] Fix the remaining implicit vector casts
-X-Developer-Signature: v=1; a=openpgp-sha256; l=20810; i=xtex@aosc.io;
- h=from:subject; bh=1UrATZzIPMUS1cxzVsIuckeoCgGcUcx1bqBHm1XVQFY=;
- b=owGbwMvMwCW2U4Ij7wZL9ETG02pJDOmr/ib0cTzIc+w+/XJhdv+2X37JPt57bP6crPyXVGG3d
- N7vvM8NHaUsDGJcDLJiiixFhg3erDrp/KLLymVh5rAygQxh4OIUgIlsqGL4wxXdeZD/v+775UcW
- XfCd0pa0KljQ+9af08veRUT/kH5/sIOR4QKzwIsKh0L/xB6T1mdTjy5aWvl/umNU4LQHRhLes3r
- r2AA=
-X-Developer-Key: i=xtex@aosc.io; a=openpgp;
- fpr=7231804B052C670F15A6771DB918086ED8045B91
 
 CL 909436 fixed a few implicit vector casts, but they are not tested
 with a proper Skia build (in fact it was mainly for fixing those errors
@@ -24,18 +16,20 @@ builds yet, at least for Clang < 19.1.4 [2].
 [1]: https://github.com/llvm/llvm-project/issues/110834
 [2]: https://github.com/llvm/llvm-project/pull/114958
 
+LoongOffice: refresh SkBlurEngine.cpp for Skia m142. Restore the full
+LSX conversion hunk, use src32/dst32, and cast the second vinsgr2vr input.
+
 Change-Id: I3b4e9479cb6f9628b4cf796a0ac25098bc1836a2
 Signed-off-by: Bingwu Zhang <xtex@aosc.io>
 ---
- src/core/SkBlurEngine.cpp        |  36 +++----
- src/opts/SkRasterPipeline_opts.h | 172 +++++++++++++++----------------
- 2 files changed, 103 insertions(+), 105 deletions(-)
+ src/core/SkBlurEngine.cpp        |   38 ++++----
+ src/opts/SkRasterPipeline_opts.h |  172 +++++++++++++++++++-------------------
+ 2 files changed, 104 insertions(+), 106 deletions(-)
 
 diff --git a/src/core/SkBlurEngine.cpp b/src/core/SkBlurEngine.cpp
-index 2c18eb0fb2e7..1c8e9bdb7945 100644
 --- a/src/core/SkBlurEngine.cpp
 +++ b/src/core/SkBlurEngine.cpp
-@@ -556,33 +556,33 @@
+@@ -556,61 +556,61 @@
          skvx::Vec<4, uint32_t>* buffer0Cursor = fBuffer0Cursor;
          skvx::Vec<4, uint32_t>* buffer1Cursor = fBuffer1Cursor;
          skvx::Vec<4, uint32_t>* buffer2Cursor = fBuffer2Cursor;
@@ -53,10 +47,11 @@ index 2c18eb0fb2e7..1c8e9bdb7945 100644
  
 -          v4u32 divisorFactor = __lsx_vreplgr2vr_w(fDivider.divisorFactor());
 -          v4u32 blurred = __lsx_vmuh_w(divisorFactor, sum2);
+-
+-          v4u32 buffer2Value = __lsx_vld(buffer2Cursor, 0); //Not fBuffer0Cursor, out of bounds.
 +          v4u32 divisorFactor = (v4u32)__lsx_vreplgr2vr_w(fDivider.divisorFactor());
 +          v4u32 blurred = (v4u32)__lsx_vmuh_w((__m128i)divisorFactor, (__m128i)sum2);
- 
--          v4u32 buffer2Value = __lsx_vld(buffer2Cursor, 0); //Not fBuffer0Cursor, out of bounds.
++
 +          v4u32 buffer2Value = (v4u32)__lsx_vld(buffer2Cursor, 0); // Not fBuffer0Cursor, out of bounds.
            sum2 -= buffer2Value;
            __lsx_vst(sum1, (void *)buffer2Cursor, 0);
@@ -80,41 +75,41 @@ index 2c18eb0fb2e7..1c8e9bdb7945 100644
  
 -        v4u32 zero = __lsx_vldi(0x0);
 +        v4u32 zero = (v4u32)__lsx_vldi(0x0);
-         if (!src && !dst) {
+         if (!src32 && !dst32) {
              while (n --> 0) {
                  (void)processValue(zero);
              }
-         } else if (src && !dst) {
+         } else if (src32 && !dst32) {
              while (n --> 0) {
--                v4u32 edge = __lsx_vinsgr2vr_w(zero, *src, 0);
+-                v4u32 edge = __lsx_vinsgr2vr_w(zero, *src32, 0);
 -                edge = __lsx_vilvl_b(zero, edge);
 -                edge = __lsx_vilvl_h(zero, edge);
-+                v4u32 edge = (v4u32)__lsx_vinsgr2vr_w((__m128i)zero, *src, 0);
++                v4u32 edge = (v4u32)__lsx_vinsgr2vr_w((__m128i)zero, *src32, 0);
 +                edge = (v4u32)__lsx_vilvl_b((__m128i)zero, (__m128i)edge);
 +                edge = (v4u32)__lsx_vilvl_h((__m128i)zero, (__m128i)edge);
                  (void)processValue(edge);
-                 src += srcStride;
+                 src32 += srcStride;
              }
-         } else if (!src && dst) {
+         } else if (!src32 && dst32) {
              while (n --> 0) {
 -                v4u32 ret = processValue(zero);
 +                v4u32 ret = (v4u32)processValue(zero);
-                 __lsx_vstelm_w(ret, dst, 0, 0); // 3rd is offset, 4th is idx.
-                 dst += dstStride;
+                 __lsx_vstelm_w(ret, dst32, 0, 0); // 3rd is offset, 4th is idx.
+                 dst32 += dstStride;
              }
-         } else if (src && dst) {
+         } else if (src32 && dst32) {
              while (n --> 0) {
--                v4u32 edge = __lsx_vinsgr2vr_w(zero, *src, 0);
+-                v4u32 edge = __lsx_vinsgr2vr_w(zero, *src32, 0);
 -                edge = __lsx_vilvl_b(zero, edge);
 -                edge = __lsx_vilvl_h(zero, edge);
 -                v4u32 ret = processValue(edge);
-+                v4u32 edge = (v4u32)__lsx_vinsgr2vr_w(zero, *src, 0);
++                v4u32 edge = (v4u32)__lsx_vinsgr2vr_w((__m128i)zero, *src32, 0);
 +                edge = (v4u32)__lsx_vilvl_b((__m128i)zero, (__m128i)edge);
 +                edge = (v4u32)__lsx_vilvl_h((__m128i)zero, (__m128i)edge);
 +                v4u32 ret = (v4u32)processValue(edge);
-                 __lsx_vstelm_w(ret, dst, 0, 0);
-                 src += srcStride;
-                 dst += dstStride;
+                 __lsx_vstelm_w(ret, dst32, 0, 0);
+                 src32 += srcStride;
+                 dst32 += dstStride;
 diff --git a/src/opts/SkRasterPipeline_opts.h b/src/opts/SkRasterPipeline_opts.h
 index 42e9cd8aa229..97dfe7213d42 100644
 --- a/src/opts/SkRasterPipeline_opts.h
@@ -436,4 +431,3 @@ index 42e9cd8aa229..97dfe7213d42 100644
          ty = cast<I16>(qy ^ 0x8000);
 -- 
 2.48.1
-
