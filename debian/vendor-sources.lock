@@ -2,7 +2,7 @@
 
 LO_DICTIONARIES_COMMIT=9925407d67e752a75cff6a1b2d7b713b7ef0380c
 LO_DICTIONARIES_URL=https://github.com/LibreOffice/dictionaries.git
-BATCH_PRINT_COMMIT=64786c024efcf9cc8dc3aa09388a64ebb55f2f57
+BATCH_PRINT_COMMIT=b0235a86b5b70a652d056e6f8bf8ea76f795f5c0
 BATCH_PRINT_URL=https://github.com/fanta0625/libreoffice-batch-print.git
 LO_HELP_COMMIT=e040abb737f1aeee1b30ddffdac407535033d2b6
 LO_HELP_URL=https://github.com/LibreOffice/help.git
