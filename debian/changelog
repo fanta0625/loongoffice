@@ -1,7 +1,8 @@
-loongoffice (25.8.7.3-1.lnd.1) unstable; urgency=medium
+loongoffice (25.8.7.3-1.lnd.2) unstable; urgency=medium
 
   * Build the all-in-one package directly with distro-pack-install and DESTDIR.
-  * Bundle a verified prebuilt OFD OXT without publishing its source code.
+  * Fetch and validate the OFD OXT during connected source preparation and
+    carry it in the orig tarball without publishing its source code.
   * Build the pinned batch print project from source without network.
   * Prepare a self-contained orig tarball for offline system-source builds.
   * Replace the bundled batch print executable with distribution Python modules.
@@ -22,7 +23,7 @@ loongoffice (25.8.7.3-1.lnd.1) unstable; urgency=medium
   * Install desktop integration from the generated LoongOffice sysui path and
     fail packaging when its required inputs are absent.
 
- -- Loongson <service@loongson.cn>  Mon, 31 Aug 2026 21:40:00 +0800
+ -- Loongson <service@loongson.cn>  Tue, 15 Sep 2026 21:40:00 +0800
 
 loongoffice (25.8.7.0.0-1.lnd.1.0.0002) unstable; urgency=medium
 

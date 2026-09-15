@@ -1,0 +1,93 @@
+#!/bin/sh
+
+set -eu
+
+root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
+tarball_dir=${1:-"$root/vendor/libreoffice-tarballs"}
+url_file="$root/debian/ofd-oxt.url"
+artifact="$tarball_dir/loongoffice-ofd-extension.oxt"
+checksum="$artifact.sha256"
+temporary_dir=$(mktemp -d)
+temporary_artifact="$temporary_dir/loongoffice-ofd-extension.oxt"
+temporary_checksum="$temporary_artifact.sha256"
+
+cleanup()
+{
+    rm -rf "$temporary_dir"
+}
+trap cleanup EXIT HUP INT TERM
+
+die()
+{
+    echo "ERROR: $*" >&2
+    exit 1
+}
+
+[ -f "$url_file" ] || die "OFD OXT URL file is missing: $url_file"
+url=$(sed -n '1{s/\r$//;p;}' "$url_file")
+[ -n "$url" ] || die "OFD OXT URL is empty: $url_file"
+printf '%s\n' "$url" | grep -Eq '[[:space:]]' && \
+    die "OFD OXT URL must be a single line: $url_file"
+case "$url" in
+    https://*) ;;
+    *) die "OFD OXT URL must use HTTPS: $url" ;;
+esac
+
+mkdir -p "$tarball_dir"
+logfile="$tarball_dir/fetch.log"
+{
+    echo "Fetching OFD OXT from $url"
+    if [ -n "${OFD_OXT_CURL:-}" ]; then
+        if [ -n "${GITHUB_TOKEN:-}" ]; then
+            "$OFD_OXT_CURL" -fL --retry 3 \
+                -H "Authorization: Bearer $GITHUB_TOKEN" \
+                --output "$temporary_artifact" "$url"
+        else
+            "$OFD_OXT_CURL" -fL --retry 3 \
+                --output "$temporary_artifact" "$url"
+        fi
+    elif [ -n "${OFD_OXT_WGET:-}" ]; then
+        if [ -n "${GITHUB_TOKEN:-}" ]; then
+            "$OFD_OXT_WGET" --tries=3 \
+                --header="Authorization: Bearer $GITHUB_TOKEN" \
+                --output-document="$temporary_artifact" "$url"
+        else
+            "$OFD_OXT_WGET" --tries=3 \
+                --output-document="$temporary_artifact" "$url"
+        fi
+    elif command -v curl >/dev/null 2>&1; then
+        if [ -n "${GITHUB_TOKEN:-}" ]; then
+            curl -fL --retry 3 \
+                -H "Authorization: Bearer $GITHUB_TOKEN" \
+                --output "$temporary_artifact" "$url"
+        else
+            curl -fL --retry 3 \
+                --output "$temporary_artifact" "$url"
+        fi
+    elif command -v wget >/dev/null 2>&1; then
+        if [ -n "${GITHUB_TOKEN:-}" ]; then
+            wget --tries=3 \
+                --header="Authorization: Bearer $GITHUB_TOKEN" \
+                --output-document="$temporary_artifact" "$url"
+        else
+            wget --tries=3 \
+                --output-document="$temporary_artifact" "$url"
+        fi
+    else
+        die "curl or wget is required to download the OFD OXT"
+    fi
+} >> "$logfile" 2>&1 || {
+    echo "ERROR: failed to download OFD OXT from $url" >&2
+    tail -n 20 "$logfile" >&2 || true
+    exit 1
+}
+
+[ -s "$temporary_artifact" ] || die "downloaded OFD OXT is empty: $url"
+sha256sum "$temporary_artifact" | awk '{print $1}' > "$temporary_checksum"
+"$root/debian/scripts/check-ofd-oxt" \
+    "$temporary_artifact" "$temporary_checksum"
+
+install -m 0644 "$temporary_artifact" "$artifact"
+install -m 0644 "$temporary_checksum" "$checksum"
+echo "Prepared OFD OXT: $artifact"
+echo "OFD OXT SHA256: $(cat "$checksum")"
