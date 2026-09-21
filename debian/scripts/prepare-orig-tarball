@@ -43,12 +43,12 @@ if ! git -C "$root" diff --quiet || ! git -C "$root" diff --cached --quiet; then
 fi
 
 "$root/debian/scripts/fetch-vendor-sources"
+"$root/debian/scripts/check-ofd-oxt" \
+    "$root/debian/prebuilt/loongoffice-ofd-extension.oxt" \
+    "$root/debian/prebuilt/loongoffice-ofd-extension.oxt.sha256"
 "$root/debian/scripts/prepare-libreoffice-tarballs"
 "$root/debian/scripts/check-libreoffice-tarballs" \
     "$root/vendor/libreoffice-tarballs"
-ofd_oxt="$root/vendor/libreoffice-tarballs/loongoffice-ofd-extension.oxt"
-"$root/debian/scripts/check-ofd-oxt" \
-    "$ofd_oxt" "$ofd_oxt.sha256"
 
 work=$(mktemp -d)
 stage="$work/$release_dir"

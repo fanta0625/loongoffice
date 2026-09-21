@@ -9,10 +9,9 @@ are pinned by `debian/vendor-sources.lock`:
 - `translations`
 
 Run `debian/scripts/fetch-vendor-sources` on a connected preparation host.
-The proprietary OFD and OFDRW source directories are also ignored. They are
-not needed by `debian/rules`: a connected preparation run downloads the
-compiled OFD OXT from the URL in `debian/ofd-oxt.url` and places it in the
-offline tarball input directory.
+The proprietary OFD and OFDRW source directories are also ignored, but are
+used only on trusted hosts to produce the prebuilt OXT described in
+`debian/README.source`. `debian/rules` does not download any input.
 
 LibreOffice's configuration-selected third-party archives are stored in the
 ignored `libreoffice-tarballs` directory. Prepare them on a connected host with

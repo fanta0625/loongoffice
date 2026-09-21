@@ -1,5 +1,4 @@
 # Private OFD preparation checkouts may coexist with this tree on trusted
-# release hosts.  They are never part of the Debian source package.  The
-# connected preparation script downloads only the compiled OXT into the orig
-# tarball; no OFD implementation source is exported.
+# release hosts. They are never part of the Debian source package; the only
+# releasable OFD input is debian/prebuilt/loongoffice-ofd-extension.oxt.
 extend-diff-ignore = ^vendor/(libreoffice-ofd-extension|ofdrw|maven-repository)(/|$)
