@@ -1,7 +1,7 @@
 loongoffice (26.2.6.3-1.lnd.2) unstable; urgency=medium
 
-  * Fetch and validate the OFD OXT during connected source preparation and
-    carry it in the orig tarball for offline package builds.
+  * Bundle and validate the refreshed prebuilt OFD OXT so public and offline
+    package builds do not require access to the private extension repository.
   * Refresh the bundled-extension registry after package installation or
     upgrade so existing user profiles detect the replacement.
 
