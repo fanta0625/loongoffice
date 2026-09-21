@@ -2,12 +2,12 @@ LoongOffice Debian source inputs
 ================================
 
 This branch is based on LibreOffice tag libreoffice-26.2.6.3. The Debian
-version is 26.2.6.3-1.lnd.1. See README.26.2.6.md for migration details and
+version is 26.2.6.3-1.lnd.2. See README.26.2.6.md for migration details and
 the remaining target-platform validation.
 
 The package is intentionally built without network access. debian/rules never
-clones a repository and does not build the proprietary OFD extension from
-source.
+clones a repository, downloads an OXT, or builds the proprietary OFD extension
+from source.
 
 Connected preparation checkout
 ------------------------------
@@ -25,8 +25,8 @@ It fetches the exact source commits, downloads and verifies LibreOffice's
 external tarballs, and writes ../loongoffice_<upstream-version>.orig.tar.xz.
 Submit that orig tarball together with the debian/ directory to the
 system-source Gerrit project. This replaces dh_make --createorig: the output
-contains the required submodules, batch-print source, and offline LibreOffice
-tarballs, but not private OFD or OFDRW source.
+contains the required submodules, batch-print source, offline LibreOffice
+tarballs, and the compiled OFD OXT input, but not private OFD or OFDRW source.
 
 The preparation script runs the following source fetch step itself. It can also
 be run independently when refreshing only the Git inputs:
@@ -48,18 +48,26 @@ Proprietary OFD input
 ---------------------
 
 The private OFD and OFDRW sources must never be included in the exported
-vendor archive or a public source package. A trusted internal builder uses a
-separate private checkout to produce loongoffice-ofd-extension.oxt and imports
-only that artifact:
+vendor archive or a public source package. The URL in debian/ofd-oxt.url points
+to a versioned CI Release asset containing only the compiled OXT. On a
+connected preparation host, debian/scripts/prepare-libreoffice-tarballs
+downloads that URL, computes the SHA256 automatically, validates the archive,
+and places both files in vendor/libreoffice-tarballs. prepare-orig-tarball then
+copies them into the orig tarball.
 
-    debian/scripts/import-ofd-oxt /path/to/loongoffice-ofd-extension.oxt
+For a private GitHub Release, export a read-only token only on the trusted
+preparation host before running the preparation command:
 
-This writes debian/prebuilt/loongoffice-ofd-extension.oxt and its SHA256 file.
-The OXT is explicitly listed in debian/source/include-binaries and the text
-checksum is included with the other debian/ files, so an upstream builder can
-create the complete binary package without access to OFD source. debian/rules
-validates the digest and rejects OXT archives containing common
-implementation-source file types before the LibreOffice build starts.
+    GITHUB_TOKEN=... debian/scripts/prepare-orig-tarball
+
+The token is never written to Git or to the source package, and offline CI does
+not need it.
+
+The OXT is therefore not tracked in Git or in debian/. An offline builder gets
+the exact compiled input from the submitted orig tarball and does not need OFD
+source access. debian/rules validates the generated digest and rejects OXT
+archives containing common implementation-source file types before the
+LibreOffice build starts.
 debian/source/options also excludes any private OFD, OFDRW, and Maven working
 directories left on a trusted release host. This is defence in depth; do not
 add those directories to Git or an uploaded vendor archive.
@@ -85,9 +93,8 @@ disabled and reject a missing, changed, or incompatible tarball input.
 CI without access to GitHub
 ---------------------------
 
-The orig tarball made by prepare-orig-tarball already contains all Git and
-tarball inputs required by the offline build. The OFD OXT is carried by the
-debian/ directory, rather than by the orig tarball. The older
+The orig tarball made by prepare-orig-tarball already contains all Git,
+tarball, and compiled-OXT inputs required by the offline build. The older
 export-vendor-sources helper remains available only for environments that
 manage the vendor archive independently.
 
@@ -101,10 +108,11 @@ GCC 12 or newer with C++20 support, GNU Make 4.2 or newer, GTK 3.24 or newer,
 and ATK 2.36 or newer, in addition to the declared Debian build dependencies.
 The LoongArch compiler must support -mlsx for the bundled libpng filters.
 
-Use a fresh vendor/libreoffice-tarballs directory when moving from 25.8.
-The old manifest belongs to different download rules and source inputs;
-move that directory aside before running prepare-orig-tarball. Do not reuse
-25.8 workdir, instdir, or generated configuration files for this build.
+Use a fresh vendor/libreoffice-tarballs directory when moving from 25.8 or
+from Debian revision 26.2.6.3-1.lnd.1. The old manifest belongs to different
+download rules and does not include the OFD OXT; move that directory aside
+before running prepare-orig-tarball. Do not reuse 25.8 workdir, instdir, or
+generated configuration files for this build.
 
 Experimental YRS and Rust UNO are explicitly disabled. Enabling them would
 require extending the offline input export and checksum checks to cover Cargo

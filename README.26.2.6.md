@@ -5,7 +5,7 @@
 - 分支：`loongoffice/26.2.6`
 - 上游标签：`libreoffice-26.2.6.3`
 - 上游提交：`8221e31b3ac356a1623c672912a3d2b492f7e3d1`
-- Debian 版本：`26.2.6.3-1.lnd.1`
+- Debian 版本：`26.2.6.3-1.lnd.2`
 - 定制来源：`debian/single-package-source-build`，提交
   `34883c770a7c`，原基线 `libreoffice-25.8.7.3`。
 

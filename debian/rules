@@ -14,7 +14,7 @@ OFFICE_HOME := /opt/loongoffice
 
 BATCH_PRINT_SOURCE ?= $(CURDIR)/vendor/libreoffice-batch-print
 LO_TARBALLS ?= $(CURDIR)/vendor/libreoffice-tarballs
-OFD_OXT ?= $(CURDIR)/debian/prebuilt/loongoffice-ofd-extension.oxt
+OFD_OXT ?= $(CURDIR)/vendor/libreoffice-tarballs/loongoffice-ofd-extension.oxt
 OFD_OXT_SHA256 ?= $(OFD_OXT).sha256
 
 export PATH := /usr/lib/gcc-loongarch64-linux-gnu:$(PATH)

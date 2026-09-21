@@ -1,3 +1,12 @@
+loongoffice (26.2.6.3-1.lnd.2) unstable; urgency=medium
+
+  * Fetch and validate the OFD OXT during connected source preparation and
+    carry it in the orig tarball for offline package builds.
+  * Refresh the bundled-extension registry after package installation or
+    upgrade so existing user profiles detect the replacement.
+
+ -- wangxin <wangxxin0625@gmail.com>  Mon, 21 Sep 2026 11:50:00 +0800
+
 loongoffice (26.2.6.3-1.lnd.1) unstable; urgency=medium
 
   * Rebase LoongOffice customizations onto LibreOffice 26.2.6.3.

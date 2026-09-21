@@ -66,3 +66,9 @@ install -D -m 0644 "$batch_source/packager/batch-print.desktop" \
     "$destdir/usr/share/kio/servicemenus/loongoffice-batch-print.desktop"
 sed -i 's|^Exec=.*|Exec=/usr/bin/loongoffice-batch-print %F|' \
     "$destdir/usr/share/kio/servicemenus/loongoffice-batch-print.desktop"
+
+# The bundled-extension synchronizer compares this directory's mtime with
+# each user's lastsynchronized marker.  cp -a preserves the source mtime, so
+# explicitly invalidate that marker in the staged installation.  LibreOffice
+# compares the parent repository directory, not an individual extension.
+touch "$destdir$office_home/share/extensions"
