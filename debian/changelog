@@ -4,6 +4,7 @@ loongoffice (26.2.6.3-1.lnd.2) unstable; urgency=medium
     package builds do not require access to the private extension repository.
   * Refresh the bundled-extension registry after package installation or
     upgrade so existing user profiles detect the replacement.
+  * Keep the Math and Draw launchers exclusively in the Office menu category.
 
  -- wangxin <wangxxin0625@gmail.com>  Mon, 21 Sep 2026 11:50:00 +0800
 

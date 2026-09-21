@@ -34,10 +34,16 @@ PY
 test -f /usr/share/bash-completion/completions/loongoffice
 test -f /usr/share/mime/packages/loongoffice.xml
 test -e /usr/share/applications/loongoffice-writer.desktop
+test -e /usr/share/applications/loongoffice-draw.desktop
+test -e /usr/share/applications/loongoffice-math.desktop
 test -f /usr/share/templates/loongoffice.odt.desktop
 test -f /usr/share/templates/.source/loongoffice.odt
 grep -Eq '^Exec=loongoffice([[:space:]]|$)' \
     /usr/share/applications/loongoffice-writer.desktop
+grep -Fqx 'Categories=Office;FlowChart;2DGraphics;VectorGraphics;X-Red-Hat-Base;' \
+    /usr/share/applications/loongoffice-draw.desktop
+grep -Fqx 'Categories=Office;Math;X-Red-Hat-Base;' \
+    /usr/share/applications/loongoffice-math.desktop
 grep -Fqx 'UserInstallation=$SYSUSERCONFIG/loongoffice/4' \
     "$office_home/bootstraprc"
 grep -Fqx '  <id>loongoffice-writer.desktop</id>' \
