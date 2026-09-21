@@ -1,0 +1,15 @@
+#!/bin/sh
+
+set -e
+
+# The custom extensions are added after LibreOffice's install-set is built.
+# Touch the repository root after unpacking so every user's next office start
+# notices the replacement and refreshes the bundled-extension registry.
+if [ "${1:-}" = configure ]; then
+    extension_root=/opt/loongoffice/share/extensions
+    if [ -d "$extension_root" ]; then
+        touch "$extension_root"
+    fi
+fi
+
+exit 0

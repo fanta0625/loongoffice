@@ -51,6 +51,9 @@ rm -f "$root/workdir/download"
 make -C "$root" DO_FETCH_TARBALLS=TRUE \
     TARFILE_LOCATION="$tarball_dir" CURL="$curl" WGET="$wget" download
 
+OFD_OXT_CURL="$curl" OFD_OXT_WGET="$wget" \
+    "$root/debian/scripts/prepare-ofd-oxt" "$tarball_dir"
+
 "$root/debian/scripts/check-libreoffice-tarballs" \
     "$tarball_dir" --write
 rm -f "$preparing"
