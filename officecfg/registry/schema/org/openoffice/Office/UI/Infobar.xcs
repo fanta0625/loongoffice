@@ -40,7 +40,7 @@
         <info>
           <desc>Whether the Infobar showing the call to 'Get Involved' is enabled</desc>
         </info>
-        <value>true</value>
+        <value>false</value>
       </prop>
       <prop oor:name="HyphenationMissing" oor:type="xs:boolean" oor:nillable="false">
         <info>
