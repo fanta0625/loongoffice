@@ -34,7 +34,7 @@ echo "Using $download_client to download LibreOffice tarballs."
 
 if [ -f "$marker" ]; then
     "$root/debian/scripts/configure-libreoffice" "$tarball_dir"
-    "$root/debian/scripts/check-libreoffice-tarballs" "$tarball_dir"
+    "$root/debian/scripts/check-libreoffice-tarballs" "$tarball_dir" --check-cache
 else
     mkdir -p "$tarball_dir"
     if [ ! -f "$preparing" ] && \
@@ -47,8 +47,10 @@ else
     "$root/debian/scripts/configure-libreoffice" "$tarball_dir"
 fi
 
+# Keep offline builds blocked until both the download and manifest succeed.
+: > "$preparing"
 rm -f "$root/workdir/download"
-make -C "$root" DO_FETCH_TARBALLS=TRUE \
+make -C "$root" DO_FETCH_TARBALLS=TRUE VERIFY_EXISTING_TARBALLS=TRUE \
     TARFILE_LOCATION="$tarball_dir" CURL="$curl" WGET="$wget" download
 
 "$root/debian/scripts/check-libreoffice-tarballs" \

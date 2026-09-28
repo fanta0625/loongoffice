@@ -1,2 +1,5 @@
 Tests: installed-layout
 Depends: @, python3
+
+Test-Command: sh debian/tests/tarball-refresh
+Depends: make, curl

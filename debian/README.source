@@ -95,6 +95,15 @@ vendor/libreoffice-tarballs, and records the configuration, platform, build
 type, file list, and SHA256 checksums. Package builds keep automatic fetching
 disabled and reject a missing, changed, or incompatible tarball input.
 
+After updating this branch, run the same preparation command again. On the
+same platform it verifies the previous cache, checks existing selected
+archives against the current download checksums, downloads missing archives,
+and refreshes the manifest for changed rules or build options. There is no
+need to remove the cache or edit its manifest. Corrupt archives and platform
+changes remain errors rather than being accepted into a new manifest.
+Interrupted preparation blocks offline builds; rerun the preparation command
+to resume and finish the manifest update.
+
 CI without access to GitHub
 ---------------------------
 

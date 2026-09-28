@@ -1,0 +1,147 @@
+#!/bin/sh
+
+set -eu
+
+source_root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
+work=$(mktemp -d)
+trap 'rm -rf "$work"' 0 HUP INT TERM
+root="$work/repo"
+cache="$root/vendor/libreoffice-tarballs"
+mkdir -p "$root/debian/scripts" "$root/workdir" "$work/bin" "$work/payloads"
+cp "$source_root/Makefile.fetch" "$root/Makefile.fetch"
+cp "$source_root/debian/scripts/prepare-libreoffice-tarballs" \
+    "$source_root/debian/scripts/check-libreoffice-tarballs" "$root/debian/scripts/"
+
+cat > "$root/debian/scripts/check-vendor-sources" <<'EOF'
+#!/bin/sh
+exit 0
+EOF
+cat > "$root/debian/scripts/configure-libreoffice" <<'EOF'
+#!/bin/sh
+set -eu
+root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
+cp "$root/config.input" "$root/config_host.mk"
+EOF
+cat > "$work/bin/curl" <<'EOF'
+#!/bin/sh
+set -eu
+for url do :; done
+name=${url##*/}
+if [ "$name" = "${FAIL_DOWNLOAD:-}" ]; then
+    echo "Simulated download failure: $name" >&2
+    exit 1
+fi
+cp "$TEST_PAYLOADS/$name" "$name"
+EOF
+chmod +x "$root/debian/scripts/"* "$work/bin/curl"
+PATH="$work/bin:$PATH"
+TEST_PAYLOADS="$work/payloads"
+export PATH TEST_PAYLOADS
+
+cat > "$root/Makefile" <<'EOF'
+include config_host.mk
+include download.lst
+WORKDIR := $(CURDIR)/workdir
+BUILDDIR := $(CURDIR)
+SRCDIR := $(CURDIR)
+gb_Side := host
+include Makefile.fetch
+EOF
+cat > "$root/config.input" <<'EOF'
+export OS=LINUX
+export CPUNAME=LOONGARCH64
+export BUILD_TYPE=BZIP2
+export SHA256SUM=sha256sum
+EOF
+printf 'bzip2 version one\n' > "$work/payloads/bzip2-v1.tar"
+printf 'bzip2 version two\n' > "$work/payloads/bzip2-v2.tar"
+printf 'zlib version one\n' > "$work/payloads/zlib-v1.tar"
+bzip1=$(sha256sum "$work/payloads/bzip2-v1.tar" | awk '{print $1}')
+bzip2=$(sha256sum "$work/payloads/bzip2-v2.tar" | awk '{print $1}')
+zlib=$(sha256sum "$work/payloads/zlib-v1.tar" | awk '{print $1}')
+
+write_downloads()
+{
+    {
+        printf 'BZIP2_TARBALL := %s\n' "$1"
+        printf 'BZIP2_SHA256SUM := %s\n' "$2"
+        printf 'ZLIB_TARBALL := zlib-v1.tar\n'
+        printf 'ZLIB_SHA256SUM := %s\n' "$zlib"
+    } > "$root/download.lst"
+}
+
+prepare()
+{
+    sh "$root/debian/scripts/prepare-libreoffice-tarballs" "$cache"
+}
+
+check()
+{
+    sh "$root/debian/scripts/check-libreoffice-tarballs" "$cache"
+}
+
+expect_failure()
+{
+    pattern=$1
+    shift
+    if "$@" > "$work/failure.log" 2>&1; then
+        echo "ERROR: expected failure: $*" >&2
+        exit 1
+    fi
+    if ! grep -Fq "$pattern" "$work/failure.log"; then
+        echo "ERROR: failure did not contain: $pattern" >&2
+        cat "$work/failure.log" >&2
+        exit 1
+    fi
+}
+
+write_downloads bzip2-v1.tar "$bzip1"
+prepare > "$work/prepare.log" 2>&1
+check
+
+# A branch update must refresh the manifest without replacing valid archives.
+printf '# updated download rules\n' >> "$root/download.lst"
+expect_failure 'tarball manifest inputs' check
+prepare > "$work/prepare.log" 2>&1
+check
+cmp "$cache/bzip2-v1.tar" "$work/payloads/bzip2-v1.tar"
+echo 'PASS: input changes refresh automatically and reuse the cache.'
+
+# Fail after downloading one new archive, then resume with the old manifest.
+sed 's/BUILD_TYPE=BZIP2/BUILD_TYPE=BZIP2 ZLIB/' "$root/config.input" > "$work/config.new"
+mv "$work/config.new" "$root/config.input"
+write_downloads bzip2-v2.tar "$bzip2"
+FAIL_DOWNLOAD=zlib-v1.tar
+export FAIL_DOWNLOAD
+expect_failure 'Simulated download failure' prepare
+[ -f "$cache/bzip2-v2.tar" ]
+expect_failure 'preparation is incomplete' check
+unset FAIL_DOWNLOAD
+prepare > "$work/prepare.log" 2>&1
+check
+[ ! -e "$cache/.loongoffice-tarballs-preparing" ]
+[ -f "$cache/zlib-v1.tar" ]
+echo 'PASS: changed options and interrupted downloads resume safely.'
+
+# Corruption must never be signed into a freshly generated manifest.
+cp "$cache/.loongoffice-offline-tarballs" "$work/manifest.before"
+printf 'corruption\n' >> "$cache/bzip2-v2.tar"
+expect_failure 'did NOT match' prepare
+cmp "$cache/.loongoffice-offline-tarballs" "$work/manifest.before"
+cp "$work/payloads/bzip2-v2.tar" "$cache/bzip2-v2.tar"
+echo 'PASS: corrupt cached archives are rejected.'
+
+# A filename alone is insufficient when its current upstream checksum changes.
+write_downloads bzip2-v2.tar "$bzip1"
+expect_failure 'ERROR: expected checksum' prepare
+cmp "$cache/.loongoffice-offline-tarballs" "$work/manifest.before"
+expect_failure 'preparation is incomplete' check
+write_downloads bzip2-v2.tar "$bzip2"
+prepare > "$work/prepare.log" 2>&1
+check
+echo 'PASS: current download checksums are enforced for existing files.'
+
+sed 's/CPUNAME=LOONGARCH64/CPUNAME=X86_64/' "$root/config.input" > "$work/config.new"
+mv "$work/config.new" "$root/config.input"
+expect_failure 'tarball manifest cpu' prepare
+echo 'PASS: cross-platform cache reuse is rejected.'

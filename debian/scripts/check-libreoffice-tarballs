@@ -7,6 +7,20 @@ tarball_dir=${1:-"$root/vendor/libreoffice-tarballs"}
 mode=${2:-}
 marker="$tarball_dir/.loongoffice-offline-tarballs"
 
+case "$mode" in
+    ''|--write|--check-cache) ;;
+    *)
+        echo "ERROR: unknown tarball check mode: $mode" >&2
+        exit 1
+        ;;
+esac
+
+if [ -z "$mode" ] && [ -f "$tarball_dir/.loongoffice-tarballs-preparing" ]; then
+    echo "ERROR: LibreOffice tarball preparation is incomplete: $tarball_dir" >&2
+    echo "Run debian/scripts/prepare-libreoffice-tarballs again." >&2
+    exit 1
+fi
+
 if [ ! -f "$root/config_host.mk" ]; then
     echo "ERROR: LibreOffice is not configured; config_host.mk is missing." >&2
     exit 1
@@ -82,10 +96,14 @@ check_field()
 }
 
 check_field format 1
-check_field inputs "$inputs"
 check_field os "$os"
 check_field cpu "$cpu"
-check_field build_type "$build_type"
+# Connected preparation can refresh inputs and build options, but must verify
+# the old cache before the download rules check it against current inputs.
+if [ "$mode" != "--check-cache" ]; then
+    check_field inputs "$inputs"
+    check_field build_type "$build_type"
+fi
 
 checksums=$(sed -n '/^--$/,$p' "$marker" | sed '1d')
 if [ -z "$checksums" ]; then
@@ -102,7 +120,8 @@ actual_files=$(
         ! -name '.loongoffice-tarballs-preparing' \
         ! -name 'fetch.log' -print | LC_ALL=C sort
 )
-if [ "$manifest_files" != "$actual_files" ]; then
+# Interrupted downloads may have added files beyond the previous manifest.
+if [ "$mode" != "--check-cache" ] && [ "$manifest_files" != "$actual_files" ]; then
     echo "ERROR: LibreOffice tarball directory does not match its manifest." >&2
     exit 1
 fi
