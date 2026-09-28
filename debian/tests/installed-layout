@@ -42,7 +42,7 @@ grep -Eq '^Exec=loongoffice([[:space:]]|$)' \
     /usr/share/applications/loongoffice-writer.desktop
 grep -Fqx 'Categories=Office;FlowChart;2DGraphics;VectorGraphics;X-Red-Hat-Base;' \
     /usr/share/applications/loongoffice-draw.desktop
-grep -Fqx 'Categories=Office;Math;X-Red-Hat-Base;' \
+grep -Fqx 'Categories=Office;X-Red-Hat-Base;' \
     /usr/share/applications/loongoffice-math.desktop
 grep -Fqx 'UserInstallation=$SYSUSERCONFIG/loongoffice/4' \
     "$office_home/bootstraprc"
