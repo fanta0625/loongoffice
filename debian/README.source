@@ -48,13 +48,26 @@ Proprietary OFD input
 ---------------------
 
 The private OFD and OFDRW sources must never be included in the exported
-vendor archive or a public source package. A trusted internal builder uses a
-separate private checkout to produce loongoffice-ofd-extension.oxt and imports
-only that artifact:
+vendor archive or a public source package. On a connected preparation host,
+download and import the prebuilt v1.1.0 release artifact:
 
-    debian/scripts/import-ofd-oxt /path/to/loongoffice-ofd-extension.oxt
+    debian/scripts/import-ofd-oxt
 
-This writes debian/prebuilt/loongoffice-ofd-extension.oxt and its SHA256 file.
+The download URL is:
+
+    https://github.com/fanta0625/libreoffice-ofd-extension/releases/download/v1.1.0/ofd-extension.oxt
+
+The release must be accessible to the preparation host. For the private
+repository, install GitHub CLI and run gh auth login with an account that has
+repository access; the import script prefers gh when available. Otherwise it
+uses curl or wget, which require a publicly accessible release. A failed
+download leaves the existing artifact and checksum unchanged. To import an
+already downloaded artifact instead, run:
+
+    debian/scripts/import-ofd-oxt /path/to/ofd-extension.oxt
+
+This writes debian/prebuilt/ofd-extension.oxt and its SHA256 file.
+Commit both files before preparing the orig tarball.
 The OXT is explicitly listed in debian/source/include-binaries and the text
 checksum is included with the other debian/ files, so an upstream builder can
 create the complete binary package without access to OFD source. debian/rules

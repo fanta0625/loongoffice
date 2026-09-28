@@ -36,7 +36,7 @@ Files: vendor/libreoffice-batch-print/*
 Copyright: Copyright (c) LoongOffice extension contributors.
 License: MPL-2.0
 
-Files: debian/prebuilt/loongoffice-ofd-extension.oxt
+Files: debian/prebuilt/ofd-extension.oxt
 Copyright: Copyright (c) LoongOffice extension contributors.
 License: LicenseRef-LoongOffice-OFD-Proprietary
  This prebuilt extension is distributed without implementation source. Its

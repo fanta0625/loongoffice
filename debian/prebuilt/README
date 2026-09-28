@@ -1,12 +1,23 @@
 This directory carries binary inputs that must be included in the Debian
 source package. It intentionally contains no OFD implementation source.
 
-On a trusted host that has access to the private OFD source, build the OXT and
-run:
+On a connected preparation host, download and import the v1.1.0 release:
 
-    debian/scripts/import-ofd-oxt /path/to/loongoffice-ofd-extension.oxt
+    debian/scripts/import-ofd-oxt
 
-Commit the resulting loongoffice-ofd-extension.oxt and its .sha256 file.
+The script downloads from:
+
+    https://github.com/fanta0625/libreoffice-ofd-extension/releases/download/v1.1.0/ofd-extension.oxt
+
+For this private repository, install GitHub CLI and run gh auth login with an
+account that has repository access. The script prefers gh when available;
+curl or wget are fallbacks for publicly accessible releases. Failed downloads
+do not replace existing inputs. An already downloaded OXT can also be imported
+with:
+
+    debian/scripts/import-ofd-oxt /path/to/ofd-extension.oxt
+
+Commit the resulting ofd-extension.oxt and its .sha256 file.
 debian/source/include-binaries makes the binary OXT part of the 3.0 (quilt)
 source package; the text checksum is included with the other debian/ files.
 The normal package build verifies the digest and rejects OXT archives that

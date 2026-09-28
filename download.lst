@@ -738,9 +738,9 @@ ZXING_TARBALL := zxing-cpp-2.3.0.tar.gz
 # will not run into conflicts
 OPENSYMBOL_SHA256SUM := f543e6e2d7275557a839a164941c0a86e5f2c3f2a0042bfc434c88c6dde9e140
 OPENSYMBOL_TTF := f543e6e2d7275557a839a164941c0a86e5f2c3f2a0042bfc434c88c6dde9e140-opens___.ttf
-# The Debian preparation script downloads this compiled input from the URL in
-# debian/ofd-oxt.url and places it in the offline tarball directory.
-OFDREADER_TARBALL := loongoffice-ofd-extension.oxt
+# Debian carries this compiled input in debian/prebuilt/ofd-extension.oxt.
+# Refresh it on a connected host with debian/scripts/import-ofd-oxt.
+OFDREADER_TARBALL := ofd-extension.oxt
 # three static lines
 # so that git cherry-pick
 # will not run into conflicts

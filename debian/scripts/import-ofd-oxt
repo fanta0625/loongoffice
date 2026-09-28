@@ -3,11 +3,30 @@
 set -eu
 
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
-input=${1:?Usage: $0 PATH/TO/loongoffice-ofd-extension.oxt}
-destination="$root/debian/prebuilt/loongoffice-ofd-extension.oxt"
+url=https://github.com/fanta0625/libreoffice-ofd-extension/releases/download/v1.1.0/ofd-extension.oxt
+input=${1:-}
+destination="$root/debian/prebuilt/ofd-extension.oxt"
 checksum="$destination.sha256"
-temporary_checksum=$(mktemp)
-trap 'rm -f "$temporary_checksum"' EXIT HUP INT TERM
+temporary_dir=$(mktemp -d)
+temporary_checksum="$temporary_dir/sha256"
+trap 'rm -rf "$temporary_dir"' EXIT HUP INT TERM
+
+# Download only during connected preparation, never during a package build.
+if [ -z "$input" ]; then
+    input="$temporary_dir/ofd-extension.oxt"
+    if command -v gh >/dev/null 2>&1; then
+        gh release download v1.1.0 \
+            --repo fanta0625/libreoffice-ofd-extension \
+            --pattern ofd-extension.oxt --dir "$temporary_dir"
+    elif command -v curl >/dev/null 2>&1; then
+        curl -fL --retry 3 --connect-timeout 20 -o "$input" "$url"
+    elif command -v wget >/dev/null 2>&1; then
+        wget -O "$input" "$url"
+    else
+        echo "ERROR: gh, curl or wget is required to download the OFD OXT." >&2
+        exit 1
+    fi
+fi
 
 [ -s "$input" ] || {
     echo "ERROR: OFD OXT artifact is missing or empty: $input" >&2
