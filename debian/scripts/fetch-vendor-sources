@@ -17,11 +17,24 @@ fetch_source()
             echo "ERROR: $path exists but is not a Git checkout" >&2
             exit 1
         fi
-        git clone --no-checkout "$url" "$path"
+        mkdir -p "$path"
+        git -C "$path" init -q
     fi
 
-    git -C "$path" fetch --no-tags origin "$commit"
+    if git -C "$path" remote get-url origin >/dev/null 2>&1; then
+        git -C "$path" remote set-url origin "$url"
+    else
+        git -C "$path" remote add origin "$url"
+    fi
+    if ! git -C "$path" cat-file -e "$commit^{commit}" 2>/dev/null; then
+        git -C "$path" fetch --no-tags --depth 1 origin "$commit"
+    fi
     git -C "$path" checkout --detach "$commit"
+    if ! git -C "$path" diff --quiet "$commit" -- || \
+       [ -n "$(git -C "$path" clean -ndx)" ]; then
+        echo "ERROR: $path contains changes outside locked commit $commit" >&2
+        exit 1
+    fi
     echo "$name is locked at $commit"
 }
 
@@ -62,7 +75,9 @@ fetch_submodule()
     else
         git -C "$root/$path" remote add origin "$url"
     fi
-    git -C "$root/$path" fetch --no-tags --depth 1 origin "$commit"
+    if ! git -C "$root/$path" cat-file -e "$commit^{commit}" 2>/dev/null; then
+        git -C "$root/$path" fetch --no-tags --depth 1 origin "$commit"
+    fi
 
     if [ "$existing_tree" = yes ]; then
         temporary_index=$(mktemp)

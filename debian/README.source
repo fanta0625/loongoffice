@@ -34,8 +34,10 @@ be run independently when refreshing only the Git inputs:
     debian/scripts/fetch-vendor-sources
 
 The repository URLs and expected commits are recorded in
-debian/vendor-sources.lock and checked at the start of every build. The script
-also initializes the dictionaries, helpcontent2, and translations submodules
+debian/vendor-sources.lock and checked at the start of every build. The fetch
+script reuses local Git objects for unchanged locked commits, so repeat runs
+do not contact those remotes; only missing commits are fetched with depth 1.
+It also initializes the dictionaries, helpcontent2, and translations submodules
 required by the configured LibreOffice build. Their lock entries must match the
 gitlinks in the main repository.
 

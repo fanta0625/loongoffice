@@ -1,0 +1,93 @@
+#!/bin/sh
+
+set -eu
+
+source_root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
+work=$(mktemp -d)
+trap 'rm -rf "$work"' EXIT HUP INT TERM
+root="$work/tree"
+mkdir -p "$root/debian/scripts" "$root/vendor" "$work/remotes"
+cp "$source_root/debian/scripts/fetch-vendor-sources" \
+    "$source_root/debian/scripts/check-vendor-sources" \
+    "$root/debian/scripts/"
+
+git_init()
+{
+    git -C "$1" init -q
+    git -C "$1" config user.name Test
+    git -C "$1" config user.email test@example.org
+}
+
+make_source()
+{
+    path="$work/remotes/$1"
+    mkdir -p "$path/$(dirname "$2")"
+    git_init "$path"
+    printf '%s\n' "$1" > "$path/$2"
+    git -C "$path" add .
+    git -C "$path" commit -qm initial
+    git -C "$path" rev-parse HEAD
+}
+
+dictionaries=$(make_source dictionaries Module_dictionaries.mk)
+help=$(make_source helpcontent2 Module_helpcontent2.mk)
+translations=$(make_source translations source/zh-CN)
+batch=$(make_source batch-print main.py)
+
+git_init "$root"
+lock_sources()
+{
+    {
+        printf 'LO_DICTIONARIES_COMMIT=%s\n' "$dictionaries"
+        printf 'LO_DICTIONARIES_URL=%s\n' "$work/remotes/dictionaries"
+        printf 'LO_HELP_COMMIT=%s\n' "$help"
+        printf 'LO_HELP_URL=%s\n' "$work/remotes/helpcontent2"
+        printf 'LO_TRANSLATIONS_COMMIT=%s\n' "$translations"
+        printf 'LO_TRANSLATIONS_URL=%s\n' "$work/remotes/translations"
+        printf 'BATCH_PRINT_COMMIT=%s\n' "$batch"
+        printf 'BATCH_PRINT_URL=%s\n' "$1"
+    } > "$root/debian/vendor-sources.lock"
+    git -C "$root" add debian/vendor-sources.lock
+    git -C "$root" update-index --add --cacheinfo "160000,$dictionaries,dictionaries"
+    git -C "$root" update-index --add --cacheinfo "160000,$help,helpcontent2"
+    git -C "$root" update-index --add --cacheinfo "160000,$translations,translations"
+    git -C "$root" commit -qm lock
+}
+
+lock_sources "$work/remotes/batch-print"
+sh "$root/debian/scripts/fetch-vendor-sources" > "$work/first.log"
+for path in dictionaries helpcontent2 translations; do
+    [ "$(git -C "$root/$path" rev-parse HEAD)" = \
+      "$(git -C "$work/remotes/$path" rev-parse HEAD)" ]
+done
+[ "$(git -C "$root/vendor/libreoffice-batch-print" rev-parse HEAD)" = "$batch" ]
+
+# All objects are now local. A nonexistent remote must not be contacted.
+lock_sources "$work/remotes/unreachable"
+sh "$root/debian/scripts/fetch-vendor-sources" > "$work/cached.log"
+
+printf 'updated batch print\n' >> "$work/remotes/batch-print/main.py"
+git -C "$work/remotes/batch-print" commit -qam update
+batch=$(git -C "$work/remotes/batch-print" rev-parse HEAD)
+lock_sources "$work/remotes/batch-print"
+sh "$root/debian/scripts/fetch-vendor-sources" > "$work/updated.log"
+[ "$(git -C "$root/vendor/libreoffice-batch-print" rev-parse HEAD)" = "$batch" ]
+
+printf 'updated dictionaries\n' >> "$work/remotes/dictionaries/Module_dictionaries.mk"
+git -C "$work/remotes/dictionaries" commit -qam update
+dictionaries=$(git -C "$work/remotes/dictionaries" rev-parse HEAD)
+lock_sources "$work/remotes/batch-print"
+sh "$root/debian/scripts/fetch-vendor-sources" > "$work/submodule.log"
+[ "$(git -C "$root/dictionaries" rev-parse HEAD)" = "$dictionaries" ]
+
+# A missing remote must fail if the newly locked object is not present.
+printf 'another update\n' >> "$work/remotes/batch-print/main.py"
+git -C "$work/remotes/batch-print" commit -qam update-again
+batch=$(git -C "$work/remotes/batch-print" rev-parse HEAD)
+lock_sources "$work/remotes/unreachable"
+if sh "$root/debian/scripts/fetch-vendor-sources" > "$work/missing.log" 2>&1; then
+    echo 'ERROR: fetch unexpectedly succeeded with a missing locked commit' >&2
+    exit 1
+fi
+
+echo 'Vendor fetch reuses locked commits offline and fetches changed commits.'

@@ -3,3 +3,6 @@ Depends: @, python3
 
 Test-Command: sh debian/tests/tarball-refresh
 Depends: make, curl
+
+Test-Command: sh debian/tests/vendor-fetch-cache
+Depends: git
