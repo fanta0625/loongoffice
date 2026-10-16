@@ -29,7 +29,7 @@ GenericName=Office
 Comment=Launch applications to create text documents, spreadsheets, presentations, drawings, formulas, and databases, or open recently used documents.
 StartupNotify=true
 X-GIO-NoFuse=true
-StartupWMClass=libreoffice-startcenter
+StartupWMClass=loongoffice-startcenter
 X-KDE-Protocols=file,http,webdav,webdavs
 
 ##Define Actions

@@ -31,7 +31,7 @@ StartupNotify=true
 X-GIO-NoFuse=true
 Keywords=Accounting;Stats;OpenDocument Spreadsheet;Chart;Microsoft Excel;Microsoft Works;OpenOffice Calc;ods;xls;xlsx;
 InitialPreference=5
-StartupWMClass=libreoffice-calc
+StartupWMClass=loongoffice-calc
 X-KDE-Protocols=file,http,webdav,webdavs
 
 Actions=NewDocument;

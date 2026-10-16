@@ -31,7 +31,7 @@ StartupNotify=true
 X-GIO-NoFuse=true
 Keywords=Slideshow;Slides;OpenDocument Presentation;Microsoft PowerPoint;Microsoft Works;OpenOffice Impress;odp;ppt;pptx;
 InitialPreference=5
-StartupWMClass=libreoffice-impress
+StartupWMClass=loongoffice-impress
 X-KDE-Protocols=file,http,webdav,webdavs
 
 Actions=NewDocument;

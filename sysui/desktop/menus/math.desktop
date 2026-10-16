@@ -32,7 +32,7 @@ StartupNotify=true
 X-GIO-NoFuse=true
 Keywords=Equation;OpenDocument Formula;Formula;odf;MathML;
 InitialPreference=5
-StartupWMClass=libreoffice-math
+StartupWMClass=loongoffice-math
 X-KDE-Protocols=file,http,webdav,webdavs
 
 Actions=NewDocument;
