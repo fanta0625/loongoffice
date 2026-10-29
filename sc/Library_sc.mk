@@ -222,6 +222,7 @@ $(eval $(call gb_Library_add_exception_objects,sc,\
     sc/source/core/tool/adiasync \
     sc/source/core/tool/appoptio \
     sc/source/core/tool/arraysumSSE2 \
+    sc/source/core/tool/arraysumLSX \
     sc/source/core/tool/autoform \
     sc/source/core/tool/calcconfig \
     sc/source/core/tool/callform \

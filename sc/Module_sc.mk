@@ -15,6 +15,13 @@ include $(SRCDIR)/sc/subsequent_setup.mk
 
 $(eval $(call gb_Module_Module,sc))
 
+# Explicit opt-in: a generic LoongArch build may run on a CPU without LSX.
+ifeq ($(SC_ARRAYSUM_TEST_LSX),TRUE)
+$(eval $(call gb_Module_add_check_targets,sc,\
+    CppunitTest_sc_arraysum_lsx \
+))
+endif
+
 $(eval $(call gb_Module_add_targets,sc,\
 	Library_sc \
 	Library_scd \
@@ -40,6 +47,7 @@ endif
 ifneq ($(OS),iOS)
 ifneq ($(filter SCRIPTING,$(BUILD_TYPE)),)
 $(eval $(call gb_Module_add_check_targets,sc,\
+    CppunitTest_sc_arraysum \
 	Library_scqahelper \
 	$(if $(and $(filter $(COM),MSC),$(MERGELIBS)),, \
 		CppunitTest_sc_ucalc) \

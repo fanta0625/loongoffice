@@ -54,6 +54,8 @@ static inline KahanSum executeFast(size_t& i, size_t nSize, const double* pCurre
 {
 #if SC_USE_SSE2
     return executeSSE2(i, nSize, pCurrent);
+#elif SC_USE_LSX
+    return executeLSX(i, nSize, pCurrent);
 #else
     return executeUnrolled(i, nSize, pCurrent);
 #endif

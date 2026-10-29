@@ -31,6 +31,15 @@ KahanSum executeSSE2(size_t& i, size_t nSize, const double* pCurrent);
 #else
 #define SC_USE_SSE2 0
 #endif
+
+// Use LSX only when it is already part of the compiler's target baseline.
+// Do not enable -mlsx just for this file: callers must agree on this selection.
+#if defined(__loongarch_sx)
+#define SC_USE_LSX 1
+KahanSum executeLSX(size_t& i, size_t nSize, const double* pCurrent);
+#else
+#define SC_USE_LSX 0
+#endif
 }
 
 /**
