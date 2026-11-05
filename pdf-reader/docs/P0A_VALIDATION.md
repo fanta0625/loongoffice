@@ -34,3 +34,14 @@ python3 pdf-reader/tools/p0a_draw_host_probe.py \
 ## 结论记录
 
 记录机器、LoongOffice 版本、脚本提交、显示后端、手工结果和截图。若交互满意，再进入 P0-A1：在 `sd` 的绘制入口接入阅读核心图像；若不满意，转向“插件阅读窗口＋Draw 编辑窗口”备用方案。
+
+## 首次目标环境验证
+
+2026-11-05，用户在目标 LoongOffice 环境运行 `p0a_draw_host_probe.py`，使用 `/usr/bin/loongoffice` 并保存 `/tmp/p0a-draw-host.odg`。以下四项均通过：
+
+- 三段画布可以连续滚动到达；
+- 缩放后布局和页面坐标保持稳定；
+- 中间区域 Draw 对象可以选择、移动、修改和撤销；
+- 关闭后没有残留 `soffice.bin` 进程。
+
+该结果确认 Draw 窗口适合作为 P0-A 的交互宿主。它不证明阅读核心图像接入、真实多 `SdPage` 混合绘制或 PDF 保存能力；下一步进入 P0-A1 源码适配评估。
