@@ -3,13 +3,13 @@
 """Real PDF previews on a locked Draw layer, alongside native editable objects.
 
 An intermediate host experiment, not a multi-SdPage reader implementation.
-pdftoppm is an external prototype renderer, not the final PDFium backend.
+Uses the private Office process's PDFium graphics import and PNG rasterization.
 """
 import argparse
+import hashlib
 import json
 import os
 from pathlib import Path
-import shutil
 import subprocess
 import tempfile
 import time
@@ -44,21 +44,47 @@ def write_fixture(path):
     path.write_bytes(data)
 
 
-def render(pdf, directory):
-    renderer = shutil.which('pdftoppm')
-    if not renderer:
-        raise RuntimeError('Install poppler-utils (pdftoppm) for this prototype renderer')
-    images = []
-    for page in (1, 3):
-        prefix = directory / f'page-{page}'
-        subprocess.run([renderer, '-f', str(page), '-l', str(page), '-singlefile',
-                        '-scale-to', '1400', '-png', str(pdf), str(prefix)],
-                       check=True, timeout=60, capture_output=True)
-        image = prefix.with_suffix('.png')
-        if not image.is_file():
-            raise RuntimeError(f'PDF has no renderable page {page}')
-        images.append(image)
-    return images
+def render(remote, pdf, directory):
+    """Force the internal PDF graphics route; do not editable-import the PDF.
+
+    This route still enumerates all input pages/annotations. It is a host probe,
+    not the eventual standalone reader API or a first-page performance test.
+    """
+    services = remote.ServiceManager
+    desktop = services.createInstanceWithContext('com.sun.star.frame.Desktop', remote)
+    source = desktop.loadComponentFromURL(pdf.as_uri(), '_blank', 0, (
+        prop('Hidden', True), prop('ReadOnly', True),
+        prop('FilterName', 'draw_pdf_import'), prop('UpdateDocMode', 0),
+        prop('MacroExecutionMode', 0),  # MacroExecMode.NEVER_EXECUTE
+    ))
+    if source is None:
+        raise RuntimeError('Internal Office PDF import failed; no external fallback')
+    try:
+        pages = source.getDrawPages()
+        if pages.getCount() < 3:
+            raise RuntimeError('Input PDF must contain at least three pages')
+        provider = services.createInstanceWithContext('com.sun.star.graphic.GraphicProvider', remote)
+        images = []
+        for index in (0, 2):
+            page = pages.getByIndex(index)
+            # SdPdfFilter inserts a full-page PDF graphic first. Reject editable
+            # import or unexpected models rather than rendering the wrong path.
+            if page.getCount() == 0:
+                raise RuntimeError(f'No PDF graphic on page {index + 1}')
+            shape = page.getByIndex(0)
+            if shape.getShapeType() != 'com.sun.star.drawing.GraphicObjectShape':
+                raise RuntimeError('Expected PDFium page graphic, got editable import')
+            image = directory / f'page-{index + 1}.png'
+            provider.storeGraphic(shape.Graphic, (
+                prop('URL', image.as_uri()), prop('MimeType', 'image/png'),
+            ))
+            data = image.read_bytes()
+            if not data.startswith(b'\x89PNG\r\n\x1a\n') or len(data) < 24:
+                raise RuntimeError('Internal PDF rasterization produced no valid PNG')
+            images.append(image)
+        return images, pages.getCount()
+    finally:
+        source.dispose()
 
 
 def build(remote, images):
@@ -107,7 +133,7 @@ def build(remote, images):
                   'preview_layer_printable': bool(layer.IsPrintable),
                   'native_text_verified': 'EDITABLE DRAW REGION' in text.getString(),
                   'multi_page_layout_verified': False,
-                  'renderer': 'external pdftoppm; synchronous setup only'}
+                  'renderer': 'Office internal PDFium graphics route; synchronous setup only'}
         return doc, desktop, report
     except BaseException:
         doc.dispose()
@@ -121,7 +147,6 @@ def run(args):
         pdf = Path(args.pdf).resolve(strict=True) if args.pdf else directory / 'fixture.pdf'
         if not args.pdf:
             write_fixture(pdf)
-        images = render(pdf, directory)
         pipe = 'p0a_preview_' + uuid.uuid4().hex
         command = [args.office, '-env:UserInstallation=' + (directory / 'profile').as_uri(),
                    '--nologo', '--nodefault', '--nofirststartwizard', '--norestore',
@@ -130,7 +155,11 @@ def run(args):
             command.append('--headless')
         doc = desktop = None
         with (directory / 'office.log').open('w+') as log:
-            process = subprocess.Popen(command, env=os.environ.copy(), stdout=log, stderr=subprocess.STDOUT)
+            env = os.environ.copy()
+            # Private process only. Normal load uses SdPdfFilter instead of the
+            # XmlFilterAdaptor editable importer (see sfx2 objstor.cxx).
+            env['LO_IMPORT_USE_PDFIUM'] = '1'
+            process = subprocess.Popen(command, env=env, stdout=log, stderr=subprocess.STDOUT)
             try:
                 local = uno.getComponentContext()
                 resolver = local.ServiceManager.createInstanceWithContext('com.sun.star.bridge.UnoUrlResolver', local)
@@ -143,7 +172,15 @@ def run(args):
                         if process.poll() is not None or time.monotonic() > deadline:
                             raise RuntimeError('Cannot connect to private Office')
                         time.sleep(0.1)
+                desktop = remote.ServiceManager.createInstanceWithContext('com.sun.star.frame.Desktop', remote)
+                images, page_count = render(remote, pdf, directory)
+                hashes = [hashlib.sha256(image.read_bytes()).hexdigest() for image in images]
+                if not args.pdf and hashes[0] == hashes[1]:
+                    raise RuntimeError('Fixture pages 1 and 3 rasterized identically')
                 doc, desktop, report = build(remote, images)
+                report.update(source_pages=page_count, preview_source_pages=[1, 3],
+                              preview_sha256=hashes, external_renderer_used=False,
+                              pdfium_environment_forced=True)
                 if args.save:
                     path = Path(args.save).resolve()
                     if path.exists():
