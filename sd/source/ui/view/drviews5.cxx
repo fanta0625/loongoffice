@@ -412,6 +412,7 @@ void DrawViewShell::PrePaint()
  */
 void DrawViewShell::Paint(const ::tools::Rectangle& rRect, ::sd::Window* pWin)
 {
+    UpdatePdfHybridViewProbe();
     /* This is done before each text edit, so why not do it before every paint.
                 The default language is only used if the outliner only contains one
                 character in a symbol font */

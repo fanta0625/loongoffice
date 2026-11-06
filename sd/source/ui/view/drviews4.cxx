@@ -317,6 +317,13 @@ void DrawViewShell::FreshNavigatrTree()
 void DrawViewShell::MouseButtonDown(const MouseEvent& rMEvt,
     ::sd::Window* pWin)
 {
+    if (mpPdfHybridViewProbe && !mpDrawView->IsAction()
+        && IsPdfHybridPreviewPoint(pWin->PixelToLogic(rMEvt.GetPosPixel())))
+    {
+        mbPdfHybridBlockedMouse = true;
+        return;
+    }
+    mbPdfHybridBlockedMouse = false;
     mbMouseButtonDown = true;
     mbMouseSelecting = false;
 
@@ -351,6 +358,13 @@ void DrawViewShell::MouseButtonDown(const MouseEvent& rMEvt,
 
 void DrawViewShell::MouseMove(const MouseEvent& rMEvt, ::sd::Window* pWin)
 {
+    if (mbPdfHybridBlockedMouse
+        || (!mbMouseButtonDown
+            && IsPdfHybridPreviewPoint(pWin->PixelToLogic(rMEvt.GetPosPixel()))))
+    {
+        pWin->SetPointer(PointerStyle::Arrow);
+        return;
+    }
     if ( IsMouseButtonDown() )
         mbMouseSelecting = true;
 
@@ -462,6 +476,11 @@ void DrawViewShell::MouseMove(const MouseEvent& rMEvt, ::sd::Window* pWin)
 
 void DrawViewShell::MouseButtonUp(const MouseEvent& rMEvt, ::sd::Window* pWin)
 {
+    if (mbPdfHybridBlockedMouse)
+    {
+        mbPdfHybridBlockedMouse = false;
+        return;
+    }
     mbMouseButtonDown = false;
 
     if ( !IsInputLocked() )
@@ -506,6 +525,9 @@ void DrawViewShell::MouseButtonUp(const MouseEvent& rMEvt, ::sd::Window* pWin)
 
 void DrawViewShell::Command(const CommandEvent& rCEvt, ::sd::Window* pWin)
 {
+    if (rCEvt.GetCommand() == CommandEventId::ContextMenu && rCEvt.IsMouseEvent()
+        && IsPdfHybridPreviewPoint(pWin->PixelToLogic(rCEvt.GetMousePosPixel())))
+        return;
     // The command event is send to the window after a possible context
     // menu from an inplace client is closed. Now we have the chance to
     // deactivate the inplace client without any problem regarding parent

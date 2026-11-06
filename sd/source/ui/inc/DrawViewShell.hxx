@@ -57,6 +57,7 @@ class LayerTabBar;
 class Ruler;
 class AnnotationManager;
 class ViewOverlayManager;
+class PdfHybridViewProbe;
 
 template <typename MIN_T, typename T, typename MAX_T>
 constexpr bool CHECK_RANGE(MIN_T nMin, T nValue, MAX_T nMax)
@@ -420,6 +421,9 @@ private:
 
     void ImplDestroy();
 
+    void UpdatePdfHybridViewProbe();
+    bool IsPdfHybridPreviewPoint(const Point& rPoint) const;
+
     /** Depending on the given request create a new page or duplicate an
         existing one.  See ViewShell::CreateOrDuplicatePage() for more
         information.
@@ -466,6 +470,8 @@ private:
 
 private:
     std::unique_ptr<DrawView> mpDrawView;
+    std::unique_ptr<PdfHybridViewProbe> mpPdfHybridViewProbe;
+    bool mbPdfHybridBlockedMouse = false;
     SdPage*             mpActualPage;
     ::tools::Rectangle           maMarkRect;
     Point               maMousePos;

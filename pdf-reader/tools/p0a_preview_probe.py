@@ -140,7 +140,7 @@ def build(remote, images):
         raise
 
 
-def run(args, builder=build, interaction=None):
+def run(args, builder=build, interaction=None, office_env=None):
     import uno
     with tempfile.TemporaryDirectory(prefix='p0a-preview-') as tmp:
         directory = Path(tmp)
@@ -159,6 +159,8 @@ def run(args, builder=build, interaction=None):
             # Private process only. Normal load uses SdPdfFilter instead of the
             # XmlFilterAdaptor editable importer (see sfx2 objstor.cxx).
             env['LO_IMPORT_USE_PDFIUM'] = '1'
+            if office_env:
+                env.update(office_env)
             process = subprocess.Popen(command, env=env, stdout=log, stderr=subprocess.STDOUT)
             try:
                 local = uno.getComponentContext()

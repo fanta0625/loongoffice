@@ -18,6 +18,7 @@
  */
 
 #include <DrawViewShell.hxx>
+#include <PdfHybridViewProbe.hxx>
 #include <com/sun/star/scanner/ScannerManager.hpp>
 #include <cppuhelper/implbase.hxx>
 #include <comphelper/processfactory.hxx>
@@ -216,6 +217,7 @@ void DrawViewShell::ImplDestroy()
         mxClipEvtLstnr.clear();
     }
 
+    mpPdfHybridViewProbe.reset();
     mpDrawView.reset();
     // Set mpView to NULL so that the destructor of the ViewShell base class
     // does not access it.

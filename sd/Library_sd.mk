@@ -479,6 +479,7 @@ $(eval $(call gb_Library_add_exception_objects,sd,\
 	sd/source/ui/view/drtxtob \
 	sd/source/ui/view/drtxtob1 \
 	sd/source/ui/view/drviews1 \
+	sd/source/ui/view/PdfHybridViewProbe \
 	sd/source/ui/view/drviews2 \
 	sd/source/ui/view/drviews3 \
 	sd/source/ui/view/drviews4 \
