@@ -49,3 +49,11 @@ JSON 仅记录结构检查，不能代替上述 GUI 验收。`--headless` 用于
 内部引擎版本在 WSL / LibreOffice 25.2.3.2 上实际 headless 运行通过。报告确认源文档三页、第 1／3 页预览哈希不同、锁定图层和原生文本存在、`external_renderer_used=false`。解包 ODG 验证两张不同 PNG 实际嵌入及原生文本保留；查看嵌入图片确认页面标识分别为 PAGE 1／PAGE 3。Python 语法与差异格式检查通过。此结果不能代替目标 LoongOffice / loong64 验证。
 
 本地无目标 LoongOffice GUI 实测；滚动缩放、锁定图层选择行为、对象编辑与撤销由目标机验证。多 SdPage、阅读核心和异步调度均未在此实验验证。
+
+## 目标机器验证（2026-11-06，用户反馈）
+
+用户在 loongson-pc 的 `/usr/bin/loongoffice` 运行提交 `29718beac5d1` 对应原型。程序报告：源 PDF 三页、两张预览来自第 1／3 页、阅读图层锁定且可打印、原生文本存在，`external_renderer_used=false`，`pdfium_environment_forced=true`。预览哈希与开发环境一致。本次未重新采集安装包完整版本号，不从分支版本推断产品版本。
+
+用户确认以下 GUI 检查通过：上下预览不能普通选中、移动或删除；中间文字可编辑并可撤销、重做；滚动缩放布局正常。
+
+结论：内置 PDFium 预览与 Draw 编辑对象在单个高页面中共存的宿主实验通过。尚未证明多真实页面连续布局、异步渲染、按需编辑导入或 PDF 保存。下一项宿主验证为多页面布局与活动编辑视图的配合。
