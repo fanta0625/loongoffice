@@ -140,7 +140,7 @@ def build(remote, images):
         raise
 
 
-def run(args):
+def run(args, builder=build, interaction=None):
     import uno
     with tempfile.TemporaryDirectory(prefix='p0a-preview-') as tmp:
         directory = Path(tmp)
@@ -177,7 +177,7 @@ def run(args):
                 hashes = [hashlib.sha256(image.read_bytes()).hexdigest() for image in images]
                 if not args.pdf and hashes[0] == hashes[1]:
                     raise RuntimeError('Fixture pages 1 and 3 rasterized identically')
-                doc, desktop, report = build(remote, images)
+                doc, desktop, report = builder(remote, images)
                 report.update(source_pages=page_count, preview_source_pages=[1, 3],
                               preview_sha256=hashes, external_renderer_used=False,
                               pdfium_environment_forced=True)
@@ -191,7 +191,10 @@ def run(args):
                     with Path(args.report).open('x', encoding='utf-8') as output:
                         json.dump(report, output, indent=2)
                 if not args.headless:
-                    input('Check scroll/zoom, locked previews, editable text and undo. Enter closes the private Office: ')
+                    if interaction is not None:
+                        interaction(doc)
+                    else:
+                        input('Check scroll/zoom, locked previews, editable text and undo. Enter closes the private Office: ')
             except BaseException:
                 log.flush()
                 log.seek(0)
@@ -200,9 +203,15 @@ def run(args):
             finally:
                 try:
                     if doc is not None:
-                        doc.dispose()
+                        try:
+                            doc.dispose()
+                        except uno.getClass('com.sun.star.lang.DisposedException'):
+                            pass  # The private window/process may already be closed.
                     if desktop is not None:
-                        desktop.terminate()
+                        try:
+                            desktop.terminate()
+                        except uno.getClass('com.sun.star.lang.DisposedException'):
+                            pass  # Closing the last document can terminate Office.
                 finally:
                     try:
                         process.wait(timeout=5)
