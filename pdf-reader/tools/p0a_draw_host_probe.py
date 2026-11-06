@@ -47,6 +47,8 @@ def add_shape(document, page, service, x, y, width, height, text="", color=0xFFF
     shape = document.createInstance(service)
     shape.setPosition(point(x, y))
     shape.setSize(size(width, height))
+    # Draw text ranges become usable after attaching the shape to its page.
+    page.add(shape)
     if hasattr(shape, "FillColor"):
         shape.FillColor = color
         shape.FillTransparence = 0
@@ -55,14 +57,13 @@ def add_shape(document, page, service, x, y, width, height, text="", color=0xFFF
     if text and hasattr(shape, "String"):
         shape.String = text
         shape.CharHeight = 18
-    page.add(shape)
     return shape
 
 
 def add_panel(document, page, y, title, description, color, editable):
     # Values are 1/100 mm. A tall page makes the normal Draw scroll bar useful.
     add_shape(document, page, "com.sun.star.drawing.RectangleShape",
-              1000, y, 18000, 8500, color)
+              1000, y, 18000, 8500, color=color)
     label = add_shape(document, page, "com.sun.star.drawing.TextShape",
                       1600, y + 800, 16800, 1600, title, color)
     label.CharColor = 0x202020
