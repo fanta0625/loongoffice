@@ -87,6 +87,12 @@ make PARALLELISM=4 build 2>&1 | tee ../pdf-page-edit-build.log
 
 ## 开发机验证边界
 
+### InfoBar 容器初始化兼容修复
+
+目标机十页文件已完成阅读加载，但 `appendInfobar()` 抛出 `Could not create Infobar`，随后启动器清理窗口。这与 PDF 编辑导入无关。26.2.6 基线的 `SfxViewFrame::AppendInfoBar()` 在原生 InfoBar 子窗口尚未创建时直接返回空值，UNO 接口将其转为上述异常；本会话采用隐藏加载后显示窗口，不能假定此时子窗口已经初始化。
+
+现在每次新增／重建提示条前，先调用原生 `.uno:InfoBar` 并显式传入 `InfoBar=True`，创建／启用容器，再使用原有 `XInfobarProvider` 添加按钮。不使用切换命令、延时重试或外部窗口替代，也不修改全局产品配置。此修复仅涉及 Python。图形检查先显式关闭容器，再验证初始化与阅读／编辑／重试提示条重建；目标机仍需更新后复测原文件。
+
 - GCC 14.2 独立 C++ 测试覆盖选页参数、Windows 宽字符参数及溢出／范围拒绝；既有布局测试继续通过。
 - WSL LibreOffice 25.2.3.2 上 `--adapter-only` 使用单页替代导入器实际验证同文档对象克隆、转换失败与克隆失败回滚、编辑保留、避免重复转换及撤销历史保留。它不证明原生 `Page=` 入口运行成功。
 - 在 WSLg 图形环境运行 `--adapter-only --panel-smoke`，实际验证只读 InfoBar、编辑命令只执行一次且不替换文档、页面自动转换、关闭否决与保存命令拦截；创建并销毁原生关闭确认框验证父窗口。未自动点击关闭确认框，也未做像素截图验收。

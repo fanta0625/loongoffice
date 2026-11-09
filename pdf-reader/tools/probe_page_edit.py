@@ -107,6 +107,15 @@ def run(args):
                     from reader_infobar import ReaderInfoBar, BAR_ID, command_url, EDIT, SAVE
                     from edit_mode import EditMode
                     commands = SimpleQueue()
+                    # Hidden-load compatibility: do not rely on Office having
+                    # eagerly created the native InfoBar container. Explicitly
+                    # hide it before constructing our UI, then exercise repeated
+                    # recreation (reading/editing/failure/retry button changes).
+                    container = command_url('.uno:InfoBar')
+                    native = doc.getCurrentController().getFrame().queryDispatch(container, '', 0)
+                    if native is None:
+                        raise RuntimeError('Native InfoBar container dispatch is unavailable')
+                    native.dispatch(container, (prop('InfoBar', False),))
                     ui = ReaderInfoBar(doc, commands)
                     engine = EditMode(session, lambda: session.enable_editing(ui.native_edit))
                     if not doc.isReadonly() or not doc.getCurrentController().hasInfobar(BAR_ID):
@@ -273,12 +282,17 @@ def run(args):
                         '关闭 PDF', '放弃修改并关闭？')
                     box.dispose()  # Validate the native parent without blocking for user input.
                     ui.show('PDF 编辑模式', 'InfoBar integration verified')
+                    ui.show('当前页转换失败', 'Test retry button recreation', edit=True, error=True)
+                    ui.show('PDF 编辑模式', 'InfoBar integration verified')
+                    if not controller.hasInfobar(BAR_ID):
+                        raise RuntimeError('Recreated InfoBar is missing')
                 print(json.dumps({'status': 'passed', 'native_page_selection_verified': not args.adapter_only,
                                   'source_pages': session.count,
                                   'same_document': True, 'failure_retains_preview': True,
                                   'panel_smoke': args.panel_smoke, 'readonly_infobar_mode_verified': bool(engine),
                                   'automatic_settled_page_edit_verified': bool(engine),
                                   'partial_pdf_save_blocked': bool(engine),
+                                  'infobar_container_bootstrap_verified': bool(engine),
                                   'clone_failure_rollback': True, 'previous_undo_history_retained': True,
                                   'owned_previews_verified': True, 'replacement_graphic_rejected': True,
                                   'distinct_preview_rendering_verified': True,

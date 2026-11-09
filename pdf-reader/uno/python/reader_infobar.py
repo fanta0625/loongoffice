@@ -19,6 +19,23 @@ def command_url(command):
     return url
 
 
+def show_infobar_container(frame):
+    """Explicitly create the native child window after a Hidden=True load.
+
+    In the 26.2.6 baseline SfxViewFrame::AppendInfoBar returns null when
+    SfxInfoBarContainerChild does not exist. Showing the top-level window
+    alone does not guarantee child-window creation. Use an explicit TRUE,
+    never a toggle (which could hide an existing container).
+    """
+    url = command_url('.uno:InfoBar')
+    dispatch = frame.queryDispatch(url, '', 0)
+    if dispatch is None:
+        raise RuntimeError('Native InfoBar container command is unavailable')
+    value = uno.createUnoStruct('com.sun.star.beans.PropertyValue')
+    value.Name, value.Value = 'InfoBar', True
+    dispatch.dispatch(url, (value,))
+
+
 class ReaderInfoBar(unohelper.Base, XDispatchProviderInterceptor, XInterceptorInfo,
                     XDispatch, XCloseListener):
     def __init__(self, document, commands):
@@ -60,6 +77,7 @@ class ReaderInfoBar(unohelper.Base, XDispatchProviderInterceptor, XInterceptorIn
         else:
             if self.controller.hasInfobar(BAR_ID):
                 self.controller.removeInfobar(BAR_ID)
+            show_infobar_container(self.frame)
             self.controller.appendInfobar(BAR_ID, title, message,
                 uno.getConstantByName('com.sun.star.frame.InfobarType.WARNING' if error else
                                       'com.sun.star.frame.InfobarType.INFO'), tuple(buttons), False)
