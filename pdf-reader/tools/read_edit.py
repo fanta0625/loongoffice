@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MPL-2.0
-"""Open a real PDF in Draw and explicitly convert the selected page on request."""
+"""Read a PDF in Draw; enter edit mode once and convert settled pages on demand."""
 import argparse
 import hashlib
 import json
@@ -16,72 +16,13 @@ import uuid
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'uno' / 'python'))
 from reader_session import ReaderSession
-from edit_bridge import property_value as prop
+from reader_infobar import ReaderInfoBar
+from edit_mode import EditMode
 
 
 def file_digest(path):
     with path.open('rb') as stream:
         return hashlib.file_digest(stream, 'sha256').hexdigest()
-
-
-def panel(context, document, commands):
-    import unohelper
-    from com.sun.star.awt import XActionListener, XTopWindowListener
-
-    class Listener(unohelper.Base, XActionListener, XTopWindowListener):
-        def actionPerformed(self, event):
-            commands.put(event.ActionCommand)  # No nested import in an AWT callback.
-
-        def disposing(self, event):
-            pass
-
-        def windowClosing(self, event):
-            commands.put('close')
-
-        def windowOpened(self, event):
-            pass
-
-        def windowClosed(self, event):
-            pass
-
-        def windowMinimized(self, event):
-            pass
-
-        def windowNormalized(self, event):
-            pass
-
-        def windowActivated(self, event):
-            pass
-
-        def windowDeactivated(self, event):
-            pass
-
-    services = context.ServiceManager
-    model = services.createInstanceWithContext('com.sun.star.awt.UnoControlDialogModel', context)
-    model.Width, model.Height, model.Title = 260, 82, 'PDF 阅读与按页编辑'
-    for name, service, label, x, y, width, height in (
-        ('status', 'FixedText', '阅读模式：在 Draw 左侧选择页面', 8, 7, 244, 22),
-        ('edit', 'Button', '编辑当前页', 8, 32, 112, 18),
-        ('close', 'Button', '关闭此阅读会话', 132, 32, 120, 18),
-        ('notice', 'FixedText', '开发版：尚不支持保存回 PDF；编辑转换不可撤销。', 8, 56, 244, 20),
-    ):
-        control = model.createInstance('com.sun.star.awt.UnoControl' + service + 'Model')
-        control.PositionX, control.PositionY = x, y
-        control.Width, control.Height, control.Label = width, height, label
-        model.insertByName(name, control)
-    dialog = services.createInstanceWithContext('com.sun.star.awt.UnoControlDialog', context)
-    dialog.setModel(model)
-    toolkit = services.createInstanceWithContext('com.sun.star.awt.Toolkit', context)
-    parent = document.getCurrentController().getFrame().getContainerWindow()
-    dialog.createPeer(toolkit, parent)
-    listener = Listener()
-    dialog.addTopWindowListener(listener)
-    for name in ('edit', 'close'):
-        button = dialog.getControl(name)
-        button.setActionCommand(name)
-        button.addActionListener(listener)
-    dialog.setVisible(True)  # Modeless: Draw remains usable while panel is open.
-    return dialog, listener, toolkit
 
 
 def main(args):
@@ -103,7 +44,7 @@ def main(args):
         env = os.environ.copy()
         env['LO_IMPORT_USE_PDFIUM'] = '1'
         env.pop('LO_PDF_HYBRID_VIEW_PROBE', None)  # Do not activate fixed three-page test hooks.
-        session = desktop = dialog = None
+        session = desktop = ui = engine = None
         failure = None
         events = []
         with (directory / 'office.log').open('w+') as log:
@@ -121,56 +62,65 @@ def main(args):
                             raise RuntimeError('Cannot connect to private Office')
                         time.sleep(.1)
                 desktop = context.ServiceManager.createInstanceWithContext('com.sun.star.frame.Desktop', context)
-                session = ReaderSession(context, snapshot.as_uri())
+                session = ReaderSession(context, snapshot.as_uri(), read_only=True)
                 session.document.setTitle(source.name + ' — PDF 阅读／按页编辑（开发版）')
                 print(f'Reading {session.count} pages; editable imports so far: 0', flush=True)
                 commands = SimpleQueue()
-                dialog, listener, toolkit = panel(context, session.document, commands)
-                last_status = None
+                ui = ReaderInfoBar(session.document, commands)
+                engine = EditMode(session, lambda: session.enable_editing(ui.native_edit))
+                toolkit = context.ServiceManager.createInstanceWithContext('com.sun.star.awt.Toolkit', context)
+                transition_error = None
                 while process.poll() is None:
-                    if commands.empty():
-                        try:
-                            page = session.current_page()
-                            status = f'第 {page}/{session.count} 页：' + ('已导入，可直接编辑' if page in session.edited else '阅读预览')
-                            if status != last_status:
-                                dialog.getControl('status').setText(status)
-                                dialog.getControl('edit').setEnable(page not in session.edited)
-                                last_status = status
-                        except uno.getClass('com.sun.star.lang.DisposedException'):
-                            break
-                        except RuntimeError as error:
-                            dialog.getControl('status').setText(str(error))
-                            dialog.getControl('edit').setEnable(False)
-                            last_status = None
-                        time.sleep(.1)
-                        continue
-                    action = commands.get()
-                    if action == 'close':
-                        if session.document.isModified():
-                            dialog.setVisible(True)
-                            box = toolkit.createMessageBox(dialog.getPeer(),
-                                uno.Enum('com.sun.star.awt.MessageBoxType', 'QUERYBOX'),
-                                uno.getConstantByName('com.sun.star.awt.MessageBoxButtons.BUTTONS_YES_NO'), '关闭阅读会话',
-                                '修改尚未保存。本开发版不能保存回 PDF，确定放弃修改并关闭？')
-                            answer = box.execute()
-                            box.dispose()
-                            if answer != uno.getConstantByName('com.sun.star.awt.MessageBoxResults.YES'):
-                                continue
-                        break
                     try:
-                        dialog.getControl('edit').setEnable(False)
-                        dialog.getControl('status').setText('正在转换当前页，请稍候…')
-                        result = session.edit_current_page()
-                        events.append(result)
-                        print(json.dumps(result, ensure_ascii=False), flush=True)
-                        last_status = None
-                    except Exception as error:
-                        print(f'Edit failed; reading page retained: {error}', flush=True)
-                        box = toolkit.createMessageBox(dialog.getPeer(), uno.Enum('com.sun.star.awt.MessageBoxType', 'ERRORBOX'),
-                            1, '页面编辑转换失败', str(error))
-                        box.execute()
-                        box.dispose()
-                        last_status = None
+                        if not commands.empty():
+                            action = commands.get()
+                            if action == 'closed':
+                                break
+                            if action == 'save-unsupported':
+                                transition_error = '本开发版尚不支持保存完整 PDF；原文件不会被覆盖。'
+                            if action == 'close':
+                                if session.document.isModified():
+                                    box = toolkit.createMessageBox(ui.frame.getContainerWindow(),
+                                        uno.Enum('com.sun.star.awt.MessageBoxType', 'QUERYBOX'),
+                                        uno.getConstantByName('com.sun.star.awt.MessageBoxButtons.BUTTONS_YES_NO'),
+                                        '关闭 PDF', '修改尚未保存。本开发版不能保存回 PDF，确定放弃修改并关闭？')
+                                    try:
+                                        if box.execute() != uno.getConstantByName('com.sun.star.awt.MessageBoxResults.YES'):
+                                            continue
+                                    finally:
+                                        box.dispose()
+                                ui.allow_close = True
+                                break
+                            if action == 'edit':
+                                try:
+                                    ui.show('正在进入编辑模式', '请稍候…')
+                                    engine.request_edit()
+                                    ui.set_edit_mode()
+                                    transition_error = None
+                                except Exception as error:
+                                    transition_error = str(error)
+                                finally:
+                                    ui.edit_queued = False
+                        result = engine.tick(time.monotonic())
+                        if result:
+                            events.append(result)
+                            print(json.dumps(result, ensure_ascii=False), flush=True)
+                        page = session.current_page()
+                        if transition_error:
+                            ui.show('PDF 会话提示', transition_error,
+                                    edit=engine.mode == 'reading', error=True)
+                        elif engine.mode == 'reading':
+                            ui.show('PDF 阅读模式', f'第 {page}/{session.count} 页；点击“编辑”进入文档编辑模式。', edit=True)
+                        elif page in engine.failures:
+                            ui.show('当前页转换失败，预览已保留', engine.failures[page], edit=True, error=True)
+                        else:
+                            state = '可直接编辑' if page in session.edited else '页面停留后自动准备编辑'
+                            ui.show('PDF 编辑模式', f'第 {page}/{session.count} 页：{state}。开发版暂不支持保存回 PDF。')
+                    except uno.getClass('com.sun.star.lang.DisposedException'):
+                        break
+                    except RuntimeError as error:
+                        ui.show('页面状态异常', str(error), error=True)
+                    time.sleep(.1)
             except BaseException as error:
                 failure = {'type': type(error).__name__, 'message': str(error)}
                 log.flush()
@@ -183,8 +133,10 @@ def main(args):
                           'edited_pages': sorted(session.edited) if session else [],
                           'import_calls': session.import_calls if session else [],
                           'renderer': 'Office internal PDFium graphics',
+                          'mode': engine.mode if engine else 'reading', 'ui': 'Draw InfoBar',
+                          'page_failures': engine.failures if engine else {},
                           'tiles': False, 'continuous_layout': False, 'pdf_save_supported': False}
-                for resource in (dialog, session):
+                for resource in (ui, session):
                     if resource:
                         try:
                             resource.close() if resource is session else resource.dispose()

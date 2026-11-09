@@ -18,7 +18,7 @@ def set_graphic(shape, graphic):
 
 
 class ReaderSession:
-    def __init__(self, context, pdf_url, *, hidden=False, importer=open_for_edit):
+    def __init__(self, context, pdf_url, *, hidden=False, importer=open_for_edit, read_only=False):
         self.context, self.pdf_url, self.importer = context, pdf_url, importer
         self.edited = set()
         self.import_calls = []
@@ -26,76 +26,79 @@ class ReaderSession:
             'com.sun.star.frame.Desktop', context)
         self.document = self.desktop.loadComponentFromURL(pdf_url, '_blank', 0, (
             prop('Hidden', True), prop('FilterName', 'draw_pdf_import'),
-            prop('ReadOnly', False), prop('UpdateDocMode', 0),
+            prop('ReadOnly', read_only), prop('UpdateDocMode', 0),
             prop('MacroExecutionMode', 0),
         ))
         if self.document is None:
             raise RuntimeError('Internal PDFium graphic loading failed')
         try:
-            self.pages = self.document.getDrawPages()
-            self.count = self.pages.getCount()
-            if not self.count:
-                raise RuntimeError('PDF has no pages')
-            self.previews = []
-            self.page_refs = []
-            for i in range(self.count):
-                page = self.pages.getByIndex(i)
-                # Acquire once and retain BEFORE querying any interface. A
-                # temporary getByIndex(...).getShapeType() proxy can be released
-                # while the next wrapper is being acquired. SdrObject caches its
-                # UNO shape weakly; do not churn wrappers around the same object.
-                original = page.getByIndex(0) if page.getCount() == 1 else None
-                if (original is None or original.getShapeType()
-                        != 'com.sun.star.drawing.GraphicObjectShape'):
-                    raise RuntimeError('Expected one PDFium page graphic per page; '
-                                       'annotations or a different import route are unsupported')
-                # Own the preview's lifecycle instead of using an importer-owned
-                # shape as a mutable session token. Keep the internal PDF Graphic
-                # (including its source page), without rasterizing it or invoking
-                # an editable converter. Hold the new UNO reference throughout
-                # the session, and verify the page's actual object below.
-                # Read everything before adding a second object to this page.
-                # In particular, never pass a null Graphic into the setter:
-                # SvxGraphicObject rejects it with an uninformative argument error.
-                graphic = original.getPropertyValue('Graphic')
-                position, size = original.getPosition(), original.getSize()
-                if graphic is None:
-                    raise RuntimeError(f'Internal PDF preview page {i + 1} has no XGraphic '
-                                       f'before initialization (objects={page.getCount()}, '
-                                       f'name={original.getName()!r}, layer={original.LayerName!r})')
-                preview = self.document.createInstance('com.sun.star.drawing.GraphicObjectShape')
-                page.add(preview)
-                set_graphic(preview, graphic)
-                preview.setPosition(position)
-                preview.setSize(size)
-                preview.setName(f'PDF reader preview {i + 1}')
-                preview.setPropertyValue('MoveProtect', True)
-                preview.setPropertyValue('SizeProtect', True)
-                page.remove(original)
-                self.previews.append(preview)
-                self.page_refs.append(page)
-                page.Name = f'PDF source page {i + 1}'
-            layers = self.document.getLayerManager()
-            preview_layer = layers.insertNewByIndex(layers.getCount())
-            preview_layer.Name = 'PDF reader locked previews'
-            preview_layer.IsVisible = preview_layer.IsPrintable = True
-            for shape in self.previews:
-                layers.attachShapeToLayer(shape, preview_layer)
-            preview_layer.IsLocked = True
-            self.edit_layer = layers.insertNewByIndex(layers.getCount())
-            self.edit_layer.Name = 'PDF imported edit objects'
-            self.edit_layer.IsVisible = self.edit_layer.IsPrintable = True
-            self.edit_layer.IsLocked = False
-            for number in range(1, self.count + 1):
-                self._reading_preview(number, phase='initialization')
-            self.document.getUndoManager().clear()  # Initial session setup only.
-            self.document.setModified(False)
-            self.document.getCurrentController().setCurrentPage(self.pages.getByIndex(0))
+            self._setup_previews()
             if not hidden:
                 self.document.getCurrentController().getFrame().getContainerWindow().setVisible(True)
         except BaseException:
             self.document.dispose()
             raise
+
+    def _setup_previews(self):
+        self.pages = self.document.getDrawPages()
+        self.count = self.pages.getCount()
+        if not self.count:
+            raise RuntimeError('PDF has no pages')
+        self.previews = []
+        self.page_refs = []
+        for i in range(self.count):
+            page = self.pages.getByIndex(i)
+            # Acquire once and retain BEFORE querying any interface. A
+            # temporary getByIndex(...).getShapeType() proxy can be released
+            # while the next wrapper is being acquired. SdrObject caches its
+            # UNO shape weakly; do not churn wrappers around the same object.
+            original = page.getByIndex(0) if page.getCount() == 1 else None
+            if (original is None or original.getShapeType()
+                    != 'com.sun.star.drawing.GraphicObjectShape'):
+                raise RuntimeError('Expected one PDFium page graphic per page; '
+                                   'annotations or a different import route are unsupported')
+            # Own the preview's lifecycle instead of using an importer-owned
+            # shape as a mutable session token. Keep the internal PDF Graphic
+            # (including its source page), without rasterizing it or invoking
+            # an editable converter. Hold the new UNO reference throughout
+            # the session, and verify the page's actual object below.
+            # Read everything before adding a second object to this page.
+            # In particular, never pass a null Graphic into the setter:
+            # SvxGraphicObject rejects it with an uninformative argument error.
+            graphic = original.getPropertyValue('Graphic')
+            position, size = original.getPosition(), original.getSize()
+            if graphic is None:
+                raise RuntimeError(f'Internal PDF preview page {i + 1} has no XGraphic '
+                                   f'before initialization (objects={page.getCount()}, '
+                                   f'name={original.getName()!r}, layer={original.LayerName!r})')
+            preview = self.document.createInstance('com.sun.star.drawing.GraphicObjectShape')
+            page.add(preview)
+            set_graphic(preview, graphic)
+            preview.setPosition(position)
+            preview.setSize(size)
+            preview.setName(f'PDF reader preview {i + 1}')
+            preview.setPropertyValue('MoveProtect', True)
+            preview.setPropertyValue('SizeProtect', True)
+            page.remove(original)
+            self.previews.append(preview)
+            self.page_refs.append(page)
+            page.Name = f'PDF source page {i + 1}'
+        layers = self.document.getLayerManager()
+        preview_layer = layers.insertNewByIndex(layers.getCount())
+        preview_layer.Name = 'PDF reader locked previews'
+        preview_layer.IsVisible = preview_layer.IsPrintable = True
+        for shape in self.previews:
+            layers.attachShapeToLayer(shape, preview_layer)
+        preview_layer.IsLocked = True
+        self.edit_layer = layers.insertNewByIndex(layers.getCount())
+        self.edit_layer.Name = 'PDF imported edit objects'
+        self.edit_layer.IsVisible = self.edit_layer.IsPrintable = True
+        self.edit_layer.IsLocked = False
+        for number in range(1, self.count + 1):
+            self._reading_preview(number, phase='initialization')
+        self.document.getUndoManager().clear()  # Initial session setup only.
+        self.document.setModified(False)
+        self.document.getCurrentController().setCurrentPage(self.pages.getByIndex(0))
 
     def current_page(self):
         current = self.document.getCurrentController().getCurrentPage()
@@ -133,6 +136,8 @@ class ReaderSession:
         return preview
 
     def edit_current_page(self):
+        if self.document.isReadonly():
+            raise RuntimeError('Enter document edit mode before converting pages')
         page_number = self.current_page()
         if page_number in self.edited:
             return {'page': page_number, 'reused': True}
@@ -187,3 +192,29 @@ class ReaderSession:
 
     def close(self):
         self.document.dispose()
+
+    def enable_editing(self, native_dispatch):
+        """Use the native edit command, bypassing our frame interceptor once.
+
+        Refuse a product that reloads/replaces the model: all page identities,
+        preview ownership and later edit history must remain valid.
+        """
+        import time
+        import uno
+        page = self.current_page()
+        frame = self.document.getCurrentController().getFrame()
+        url = uno.createUnoStruct('com.sun.star.util.URL')
+        url.Complete = '.uno:EditDoc'
+        url.Main, url.Protocol, url.Path = '.uno:EditDoc', '.uno:', 'EditDoc'
+        native_dispatch.dispatch(url, (prop('Edit', True),))
+        deadline = time.monotonic() + 10
+        while True:
+            if frame.getController().getModel() != self.document:
+                raise RuntimeError('Native edit command replaced the reading model; unsupported Office build')
+            if not self.document.isReadonly():
+                break
+            if time.monotonic() >= deadline:
+                raise RuntimeError('Native edit command did not leave read-only mode')
+            time.sleep(.05)
+        self.document.getCurrentController().setCurrentPage(self.page_refs[page - 1])
+        self.current_page()  # Validate retained page mapping before any import.
