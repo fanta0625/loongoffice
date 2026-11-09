@@ -8,7 +8,11 @@ import tempfile
 import time
 
 from p0a_draw_host_probe import add_shape, point, prop, size
-from p0a_preview_probe import run
+from p0a_preview_probe import run, write_fixture
+
+
+def page_dimensions(mixed_sizes=False):
+    return [(18000, 24000), (21000, 29700), (24000, 32000)] if mixed_sizes else [(21000, 29700)] * 3
 
 
 def build(remote, images, ready_path, mixed_sizes=False):
@@ -21,7 +25,7 @@ def build(remote, images, ready_path, mixed_sizes=False):
         pages.insertNewByIndex(1)
         pages.insertNewByIndex(2)
         names = ['P0A1 reading before', 'P0A1 active edit', 'P0A1 reading after']
-        dimensions = [(18000, 9000), (20000, 10000), (24000, 12000)] if mixed_sizes else [(20000, 10000)] * 3
+        dimensions = page_dimensions(mixed_sizes)
         # Each page gets its own master to avoid size propagation in 26.2.6.
         masters = doc.getMasterPages()
         for index in range(3):
@@ -59,6 +63,14 @@ def build(remote, images, ready_path, mixed_sizes=False):
                   0, 0, middle.Width, middle.Height, color=0xFFF4D6)
         text = add_shape(doc, middle, 'com.sun.star.drawing.TextShape', 1000, 2000, 18000, 5000,
                          'INLINE EDIT PAGE 2\nEdit this text while both PDF neighbours remain visible.')
+        # These objects deliberately cross real paper edges. Their hidden
+        # portions remain in the model: clipping must not delete or resize them.
+        add_shape(doc, middle, 'com.sun.star.drawing.RectangleShape',
+                  -1000, 12000, 3000, 3000, color=0xCC3333)
+        overflow = add_shape(doc, middle, 'com.sun.star.drawing.TextShape',
+                             1000, middle.Height - 1500, 18000, 5000,
+                             '\n'.join(f'BOTTOM OVERFLOW LINE {i}' for i in range(1, 13)))
+        overflow.TextAutoGrowHeight = True
         # Names are the final opt-in fixture marker. Publish only after setup.
         for index in range(3):
             pages.getByIndex(index).Name = names[index]
@@ -83,12 +95,17 @@ def build(remote, images, ready_path, mixed_sizes=False):
                                'GUI Office (instdir/program/soffice), not the previous installed package.')
         if hook.get('active_page_origin_x') != 0 or hook.get('active_page_origin_y') != 0:
             raise RuntimeError('The native edit page origin changed')
+        if hook.get('content_clip_revision') != 1:
+            raise RuntimeError('This Office lacks the content clipping update; rebuild this branch.')
         if hook.get('before_y') != -dimensions[0][1] - 1000 or hook.get('after_y') != dimensions[1][1] + 1000:
             raise RuntimeError('Native neighbour positions do not match the real page sizes')
         return doc, desktop, {
             'status': 'native-host-attached-gui-validation-pending',
             'draw_pages': pages.getCount(), 'synthetic_overview_pages': 0,
             'content_page_sizes': actual, 'native_host': hook,
+            'page_format': 'mixed with A4 active page' if mixed_sizes else 'A4 portrait',
+            'content_clip_verified': False,
+            'overflow_fixtures': ['left-edge rectangle', 'bottom-edge multiline text'],
             'preview_images': 2, 'preview_layer_locked': bool(layer.IsLocked),
             'native_text_verified': 'INLINE EDIT PAGE 2' in text.getString(),
             'multi_page_layout_verified': False, 'inline_editing_verified': False,
@@ -104,7 +121,7 @@ def interact(doc):
     controller = doc.getCurrentController()
     middle = doc.getDrawPages().getByIndex(1)
     print('Do not switch pages: scroll through the neighbours and edit real page 2 in place.', flush=True)
-    input('Check text/caret, selection, move, undo/redo, zoom and locked previews. Enter closes: ')
+    input('Check page-edge clipping during AND after text edit, caret, move, undo/redo and zoom. Enter closes: ')
     if controller.getCurrentPage().Name != middle.Name:
         print('The active page was changed; this run does not validate continuous inline editing.', flush=True)
 
@@ -123,4 +140,6 @@ if __name__ == '__main__':
             interaction=interact, office_env={
                 'LO_PDF_HYBRID_VIEW_PROBE': '1',
                 'LO_PDF_HYBRID_VIEW_PROBE_REPORT': str(ready_path),
-            })
+            }, fixture_writer=lambda path: write_fixture(path, [
+                (w * 72 / 2540, h * 72 / 2540) for w, h in page_dimensions(args.mixed_sizes)
+            ]))

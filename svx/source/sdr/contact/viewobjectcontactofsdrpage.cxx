@@ -30,6 +30,7 @@
 #include <drawinglayer/primitive2d/PolyPolygonColorPrimitive2D.hxx>
 #include <drawinglayer/primitive2d/gridprimitive2d.hxx>
 #include <drawinglayer/primitive2d/helplineprimitive2d.hxx>
+#include <drawinglayer/primitive2d/maskprimitive2d.hxx>
 #include <basegfx/polygon/b2dpolygon.hxx>
 #include <sdr/primitive2d/sdrprimitivetools.hxx>
 
@@ -368,7 +369,19 @@ void ViewObjectContactOfPageHierarchy::getPrimitive2DSequenceHierarchy(DisplayIn
     if(!nSubHierarchyCount)
         return;
 
-    getPrimitive2DSequenceSubHierarchy(rDisplayInfo, rVisitor);
+    const SdrPageView* pPageView = GetObjectContact().TryToGetSdrPageView();
+    const auto clip = pPageView ? pPageView->GetView().GetPageContentClip() : std::nullopt;
+    if (clip)
+    {
+        drawinglayer::primitive2d::Primitive2DContainer content;
+        getPrimitive2DSequenceSubHierarchy(rDisplayInfo, content);
+        if (!content.empty())
+            rVisitor.visit(new drawinglayer::primitive2d::MaskPrimitive2D(
+                basegfx::B2DPolyPolygon(basegfx::utils::createPolygonFromRect(*clip)),
+                std::move(content)));
+    }
+    else
+        getPrimitive2DSequenceSubHierarchy(rDisplayInfo, rVisitor);
 }
 
 ViewObjectContactOfPageGrid::ViewObjectContactOfPageGrid(ObjectContact& rObjectContact, ViewContact& rViewContact)

@@ -47,6 +47,8 @@ int main()
 {
     try
     {
+        check({ Extent{ 21000, 29700 }, Extent{ 21000, 29700 }, Extent{ 21000, 29700 } }, 1000);
+        check({ Extent{ 18000, 24000 }, Extent{ 21000, 29700 }, Extent{ 24000, 32000 } }, 1000);
         check({ Extent{ 20000, 10000 }, Extent{ 20000, 10000 }, Extent{ 20000, 10000 } }, 1000);
         check({ Extent{ 18000, 9000 }, Extent{ 20000, 10000 }, Extent{ 24000, 12000 } }, 1000);
         check({ Extent{ 1, 1 }, Extent{ 10000000, 10000000 }, Extent{ 1, 10000000 } }, 10000000);

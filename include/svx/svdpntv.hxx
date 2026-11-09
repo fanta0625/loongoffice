@@ -32,6 +32,8 @@
 #include <vcl/idle.hxx>
 #include <vcl/timer.hxx>
 #include <memory>
+#include <optional>
+#include <basegfx/range/b2drange.hxx>
 
 
 // Pre defines
@@ -280,6 +282,10 @@ public:
 
     // Info about TextEdit. Default is sal_False.
     virtual bool IsTextEdit() const;
+
+    // Optional view-only content boundary. Decorations and interaction feedback
+    // remain outside this mask; ordinary views and export views are unbounded.
+    virtual std::optional<basegfx::B2DRange> GetPageContentClip() const { return std::nullopt; }
 
     // Must be called for every Window change as well as MapMode (Scaling) change:
     // If the SdrView is shown in multiple windows at the same time (e.g.

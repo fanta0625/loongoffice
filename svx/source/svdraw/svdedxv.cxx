@@ -496,6 +496,7 @@ protected:
 
     /// local definition depends on active OutlinerView
     OutlinerView& mrOutlinerView;
+    const SdrObjEditView& mrEditView;
 
     /// geometry definitions with buffering
     basegfx::B2DRange maLastRange;
@@ -510,7 +511,8 @@ protected:
     createOverlayObjectPrimitive2DSequence() override;
 
 public:
-    TextEditOverlayObject(const Color& rColor, OutlinerView& rOutlinerView);
+    TextEditOverlayObject(const Color& rColor, OutlinerView& rOutlinerView,
+                          const SdrObjEditView& rEditView);
     virtual ~TextEditOverlayObject() override;
 
     sdr::overlay::OverlayObject* getOverlaySelection();
@@ -528,9 +530,23 @@ public:
     void checkSelectionChange();
 
     const basegfx::B2DRange& getRange() const { return maRange; }
-    const drawinglayer::primitive2d::Primitive2DContainer& getTextPrimitives() const
+    drawinglayer::primitive2d::Primitive2DContainer clipText(
+        drawinglayer::primitive2d::Primitive2DContainer content) const
     {
-        return maTextPrimitives;
+        const auto clip = mrEditView.GetPageContentClip();
+        if (clip && !content.empty())
+        {
+            drawinglayer::primitive2d::Primitive2DContainer masked;
+            masked.push_back(new drawinglayer::primitive2d::MaskPrimitive2D(
+                basegfx::B2DPolyPolygon(basegfx::utils::createPolygonFromRect(*clip)),
+                std::move(content)));
+            return masked;
+        }
+        return content;
+    }
+    drawinglayer::primitive2d::Primitive2DContainer getTextPrimitives() const
+    {
+        return clipText(maTextPrimitives);
     }
 };
 
@@ -666,9 +682,11 @@ TextEditFrameOverlayObject::createOverlayObjectPrimitive2DSequence()
     return aRetval;
 }
 
-TextEditOverlayObject::TextEditOverlayObject(const Color& rColor, OutlinerView& rOutlinerView)
+TextEditOverlayObject::TextEditOverlayObject(const Color& rColor, OutlinerView& rOutlinerView,
+                                           const SdrObjEditView& rEditView)
     : OverlayObject(rColor)
     , mrOutlinerView(rOutlinerView)
+    , mrEditView(rEditView)
 {
     // no AA for TextEdit overlay
     allowAntiAliase(false);
@@ -736,7 +754,9 @@ TextEditOverlayObject::getOverlayObjectPrimitive2DSequence() const
     }
 
     // call base implementation
-    return OverlayObject::getOverlayObjectPrimitive2DSequence();
+    // Apply on retrieval, not in the cached decomposition: switching the
+    // view boundary must also affect unchanged text while editing.
+    return clipText(OverlayObject::getOverlayObjectPrimitive2DSequence());
 }
 
 void TextEditOverlayObject::checkDataChange(const basegfx::B2DRange& rMinTextEditArea)
@@ -1489,7 +1509,7 @@ bool SdrObjEditView::SdrBeginTextEdit(SdrObject* pObj_, SdrPageView* pPV, vcl::W
                             {
                                 std::unique_ptr<TextEditOverlayObject> pNewTextEditOverlayObject(
                                     new TextEditOverlayObject(aHilightColor,
-                                                              *mpTextEditOutlinerView));
+                                                              *mpTextEditOutlinerView, *this));
 
                                 xManager->add(*pNewTextEditOverlayObject);
                                 if (bVisualizeSurroundingFrame)

@@ -99,6 +99,7 @@ void writeReady(const pdfhybrid::Layout& rLayout)
     tools::JsonWriter json;
     json.put("status", std::string_view("host-attached"));
     json.put("overlays", 2);
+    json.put("content_clip_revision", 1);
     json.put("active_page_origin_x", 0);
     json.put("active_page_origin_y", 0);
     json.put("before_y", rLayout.pages[0].y);
@@ -140,6 +141,7 @@ void DrawViewShell::UpdatePdfHybridViewProbe()
                                                             : mpDrawView->GetWorkArea();
     const bool hadProbe = bool(mpPdfHybridViewProbe);
     mpPdfHybridViewProbe.reset(); // Detach overlays before changing view geometry.
+    mpDrawView->SetPageContentClip(std::nullopt);
 
     auto setWorkspace = [&](const Point& rOrigin, const Size& rSize,
                             const tools::Rectangle& rWorkArea) {
@@ -165,6 +167,8 @@ void DrawViewShell::UpdatePdfHybridViewProbe()
     const auto& work = layout->workspace;
     setWorkspace(Point(-work.x, -work.y), Size(work.width, work.height),
                  rectangle(layout->pages[1]));
+    const auto& active = layout->pages[1];
+    mpDrawView->SetPageContentClip(basegfx::B2DRange(0, 0, active.width, active.height));
     for (sal_uInt16 i : { 0, 2 })
         addPreview(*probe, *manager,
                    *static_cast<SdrGrafObj*>(GetDoc()->GetSdPage(i, PageKind::Standard)->GetObj(0)),

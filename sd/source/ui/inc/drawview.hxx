@@ -41,6 +41,15 @@ public:
         DrawViewShell* pShell);
     virtual ~DrawView() override;
 
+    std::optional<basegfx::B2DRange> GetPageContentClip() const override
+    {
+        return maPageContentClip;
+    }
+    void SetPageContentClip(std::optional<basegfx::B2DRange> aClip)
+    {
+        maPageContentClip = std::move(aClip);
+    }
+
     virtual void MarkListHasChanged() override;
     void CompleteRedraw(OutputDevice* pOutDev, const vcl::Region& rReg, sdr::contact::ViewObjectContactRedirector* pRedirector = nullptr) override;
 
@@ -62,6 +71,7 @@ protected:
 
 private:
     DrawViewShell*  mpDrawViewShell;
+    std::optional<basegfx::B2DRange> maPageContentClip;
 
     sal_uInt16          mnPOCHSmph; ///< for blocking PageOrderChangedHint
 };

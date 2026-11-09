@@ -18,16 +18,18 @@ import uuid
 from p0a_draw_host_probe import add_shape, point, prop, size
 
 
-def write_fixture(path):
+def write_fixture(path, page_sizes=None):
     objects = [b'<< /Type /Catalog /Pages 2 0 R >>',
                b'<< /Type /Pages /Kids [4 0 R 6 0 R 8 0 R] /Count 3 >>',
                b'<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>']
     for index in range(3):
+        width, height = page_sizes[index] if page_sizes else (400, 200)
+        text_y = height - 60 if page_sizes else 140
         stream_id = 5 + index * 2
-        objects.append((f'<< /Type /Page /Parent 2 0 R /MediaBox [0 0 400 200] '
+        objects.append((f'<< /Type /Page /Parent 2 0 R /MediaBox [0 0 {width} {height}] '
                         f'/Resources << /Font << /F1 3 0 R >> >> /Contents {stream_id} 0 R >>').encode())
-        content = (f'0.85 0.92 1 rg 0 0 400 200 re f '
-                   f'0 0 0 rg BT /F1 22 Tf 25 140 Td (PDF SOURCE PAGE {index + 1}) Tj '
+        content = (f'0.85 0.92 1 rg 0 0 {width} {height} re f '
+                   f'0 0 0 rg BT /F1 22 Tf 25 {text_y} Td (PDF SOURCE PAGE {index + 1}) Tj '
                    '0 -40 Td /F1 12 Tf (Real PDF preview - not editable Draw text) Tj ET\n').encode()
         objects.append(f'<< /Length {len(content)} >>\nstream\n'.encode() + content + b'endstream')
     data = bytearray(b'%PDF-1.4\n')
@@ -140,13 +142,13 @@ def build(remote, images):
         raise
 
 
-def run(args, builder=build, interaction=None, office_env=None):
+def run(args, builder=build, interaction=None, office_env=None, fixture_writer=write_fixture):
     import uno
     with tempfile.TemporaryDirectory(prefix='p0a-preview-') as tmp:
         directory = Path(tmp)
         pdf = Path(args.pdf).resolve(strict=True) if args.pdf else directory / 'fixture.pdf'
         if not args.pdf:
-            write_fixture(pdf)
+            fixture_writer(pdf)
         pipe = 'p0a_preview_' + uuid.uuid4().hex
         command = [args.office, '-env:UserInstallation=' + (directory / 'profile').as_uri(),
                    '--nologo', '--nodefault', '--nofirststartwizard', '--norestore',
