@@ -30,6 +30,11 @@
 #include <vcl/stdtext.hxx>
 #include <vcl/wmfexternal.hxx>
 #include <vcl/virdev.hxx>
+#include <vcl/pdfread.hxx>
+#include <vcl/vectorgraphicdata.hxx>
+#include <com/sun/star/awt/Rectangle.hpp>
+#include <com/sun/star/awt/Size.hpp>
+#include <com/sun/star/lang/IllegalArgumentException.hpp>
 #include <com/sun/star/awt/XBitmap.hpp>
 #include <com/sun/star/graphic/XGraphicProvider2.hpp>
 #include <com/sun/star/io/XStream.hpp>
@@ -768,7 +773,48 @@ void SAL_CALL GraphicProvider::storeGraphic( const uno::Reference< ::graphic::XG
         if( pGraphic && ( pGraphic->GetType() != GraphicType::NONE ) )
         {
             ::Graphic aGraphic( *pGraphic );
-            ImplApplyFilterData( aGraphic, aFilterDataSeq );
+            // Experimental opt-in bridge for the PDF reader. Existing graphic
+            // exports keep their normal filter path. The input Graphic retains
+            // the source PDF bytes and source page index; it is never changed.
+            bool bTileRect = false, bTileSize = false, bValidTile = true;
+            awt::Rectangle aTile;
+            awt::Size aPagePixels;
+            for (const auto& rProperty : aFilterDataSeq)
+            {
+                if (rProperty.Name == "PdfTileRect")
+                {
+                    bTileRect = true;
+                    bValidTile &= bool(rProperty.Value >>= aTile);
+                }
+                else if (rProperty.Name == "PdfTilePageSize")
+                {
+                    bTileSize = true;
+                    bValidTile &= bool(rProperty.Value >>= aPagePixels);
+                }
+            }
+            if (bTileRect || bTileSize)
+            {
+                const auto& pVector = aGraphic.getVectorGraphicData();
+                if (!bValidTile || !bTileRect || !bTileSize || sFilterShortName != "png"
+                    || !pVector || pVector->getType() != VectorGraphicDataType::Pdf)
+                    throw lang::IllegalArgumentException(
+                        u"PDF tile: expected PDF Graphic, PNG output and typed rectangle/page size"_ustr,
+                        nullptr, 1);
+                const auto& rData = pVector->getBinaryDataContainer();
+                Bitmap aTileBitmap;
+                if (rData.getSize() > SAL_MAX_INT32
+                    || !vcl::RenderPDFTile(rData.getData(), static_cast<int>(rData.getSize()), pVector->getPageIndex(),
+                                          Size(aPagePixels.Width, aPagePixels.Height),
+                                          Point(aTile.X, aTile.Y), Size(aTile.Width, aTile.Height),
+                                          aTileBitmap))
+                    throw lang::IllegalArgumentException(
+                        u"PDF tile: invalid bounds, resource limit or PDFium rendering failure"_ustr,
+                        nullptr, 1);
+                aGraphic = ::Graphic(aTileBitmap);
+                aFilterDataSeq.realloc(0); // Do not scale the tile a second time.
+            }
+            else
+                ImplApplyFilterData( aGraphic, aFilterDataSeq );
 
             /* sj: using a temporary memory stream, because some graphic filters are seeking behind
                stream end (which leads to an invalid argument exception then). */

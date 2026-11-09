@@ -24,6 +24,44 @@ using namespace com::sun::star;
 
 namespace vcl
 {
+bool RenderPDFTile(const void* pBuffer, int nSize, sal_Int32 nPage,
+                   const Size& rPagePixels, const Point& rTileOrigin,
+                   const Size& rTilePixels, Bitmap& rResult)
+{
+    // Bound allocations and PDFium's signed integer coordinate calculations.
+    if (!pBuffer || nSize <= 0 || nPage < 0 || rPagePixels.Width() <= 0
+        || rPagePixels.Height() <= 0 || rPagePixels.Width() > 131072
+        || rPagePixels.Height() > 131072 || rTileOrigin.X() < 0 || rTileOrigin.Y() < 0
+        || rTilePixels.Width() <= 0 || rTilePixels.Height() <= 0
+        || rTilePixels.Width() > 2048 || rTilePixels.Height() > 2048
+        || rTileOrigin.X() > rPagePixels.Width() - rTilePixels.Width()
+        || rTileOrigin.Y() > rPagePixels.Height() - rTilePixels.Height())
+        return false;
+    auto pPdfium = vcl::pdf::PDFiumLibrary::get();
+    if (!pPdfium)
+        return false;
+    auto pDocument = pPdfium->openDocument(pBuffer, nSize, OString());
+    if (!pDocument || nPage >= pDocument->getPageCount())
+        return false;
+    auto pPage = pDocument->openPage(nPage);
+    if (!pPage)
+        return false;
+    const int nWidth = static_cast<int>(rTilePixels.Width());
+    const int nHeight = static_cast<int>(rTilePixels.Height());
+    auto pBitmap = pPdfium->createBitmap(nWidth, nHeight, 1);
+    if (!pBitmap)
+        return false;
+    pBitmap->fillRect(0, 0, nWidth, nHeight, 0xFFFFFFFF);
+    // PDFium clips into the small destination. A negative origin selects the
+    // requested region at full zoom resolution, rather than cropping a preview.
+    pBitmap->renderPageBitmap(pDocument.get(), pPage.get(), -static_cast<int>(rTileOrigin.X()),
+                              -static_cast<int>(rTileOrigin.Y()),
+                              static_cast<int>(rPagePixels.Width()),
+                              static_cast<int>(rPagePixels.Height()));
+    rResult = pBitmap->createBitmapFromBuffer().CreateColorBitmap();
+    return !rResult.IsEmpty();
+}
+
 size_t RenderPDFBitmaps(const void* pBuffer, int nSize, std::vector<Bitmap>& rBitmaps,
                         const size_t nFirstPage, int nPages, const basegfx::B2DTuple* pSizeHint)
 {

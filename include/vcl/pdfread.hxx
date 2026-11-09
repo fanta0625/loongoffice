@@ -29,6 +29,12 @@ VCL_DLLPUBLIC size_t RenderPDFBitmaps(const void* pBuffer, int nSize, std::vecto
                                       size_t nFirstPage = 0, int nPages = 1,
                                       const basegfx::B2DTuple* pSizeHint = nullptr);
 
+/// Render only a viewport-sized bitmap. Coordinates are top-left pixels in a
+/// virtual full-page raster; no full-page bitmap is allocated. White background.
+VCL_DLLPUBLIC bool RenderPDFTile(const void* pBuffer, int nSize, sal_Int32 nPage,
+                                const Size& rPagePixels, const Point& rTileOrigin,
+                                const Size& rTilePixels, Bitmap& rResult);
+
 VCL_DLLPUBLIC bool
 ImportPDF(SvStream& rStream, Graphic& rGraphic, sal_Int32 nPageIndex,
           const css::uno::Reference<css::task::XInteractionHandler>& xInteractionHandler,

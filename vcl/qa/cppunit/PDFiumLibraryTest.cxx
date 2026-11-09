@@ -8,6 +8,7 @@
  */
 
 #include <string_view>
+#include <cstdlib>
 
 #include <cppunit/TestAssert.h>
 #include <cppunit/extensions/HelperMacros.h>
@@ -629,6 +630,54 @@ CPPUNIT_TEST_FIXTURE(PDFiumLibraryTest, testStructureTree)
             CPPUNIT_ASSERT(!pThis);
         }
     }
+}
+
+CPPUNIT_TEST_FIXTURE(PDFiumLibraryTest, testPdfTileMatchesFullRaster)
+{
+    SvFileStream aStream(getFullUrl(u"Pangram.pdf"), StreamMode::READ);
+    Graphic aGraphic = GraphicFilter::GetGraphicFilter().ImportUnloadedGraphic(aStream);
+    aGraphic.makeAvailable();
+    auto pVector = aGraphic.getVectorGraphicData();
+    CPPUNIT_ASSERT(pVector);
+    const auto& rData = pVector->getBinaryDataContainer();
+    Bitmap aFull, aTile;
+    const Size aPage(1224, 1584);
+    CPPUNIT_ASSERT(vcl::RenderPDFTile(rData.getData(), rData.getSize(), 0,
+                                    aPage, Point(0, 0), aPage, aFull));
+    CPPUNIT_ASSERT(vcl::RenderPDFTile(rData.getData(), rData.getSize(), 0,
+                                    aPage, Point(200, 100), Size(512, 512), aTile));
+    CPPUNIT_ASSERT(aFull.Crop(tools::Rectangle(Point(200, 100), Size(512, 512))));
+    BitmapScopedReadAccess pFull(aFull), pTile(aTile);
+    CPPUNIT_ASSERT(pFull);
+    CPPUNIT_ASSERT(pTile);
+    sal_uInt64 nError = 0, nLargeErrors = 0;
+    for (int y = 0; y < 512; ++y)
+        for (int x = 0; x < 512; ++x)
+        {
+            const auto a = pFull->GetPixelColor(y, x);
+            const auto b = pTile->GetPixelColor(y, x);
+            for (int nDifference : { std::abs(int(a.GetRed()) - b.GetRed()),
+                                     std::abs(int(a.GetGreen()) - b.GetGreen()),
+                                     std::abs(int(a.GetBlue()) - b.GetBlue()) })
+            {
+                nError += nDifference;
+                nLargeErrors += nDifference > 16;
+            }
+        }
+    // Translation can change a few anti-aliasing samples. Reject meaningful
+    // displacement/scale errors without requiring byte-identical glyph edges.
+    CPPUNIT_ASSERT(nError * 4 < 512 * 512 * 3);
+    CPPUNIT_ASSERT(nLargeErrors * 1000 < 512 * 512 * 3);
+    pFull.reset();
+    pTile.reset();
+    CPPUNIT_ASSERT(!vcl::RenderPDFTile(rData.getData(), rData.getSize(), 1,
+                                     aPage, Point(0, 0), Size(512, 512), aTile));
+    CPPUNIT_ASSERT(!vcl::RenderPDFTile(rData.getData(), rData.getSize(), 0,
+                                     aPage, Point(-1, 0), Size(512, 512), aTile));
+    CPPUNIT_ASSERT(!vcl::RenderPDFTile(rData.getData(), rData.getSize(), 0,
+                                     aPage, Point(1000, 1500), Size(512, 512), aTile));
+    CPPUNIT_ASSERT(!vcl::RenderPDFTile(rData.getData(), rData.getSize(), 0,
+                                     Size(10000, 10000), Point(0, 0), Size(4096, 4096), aTile));
 }
 
 CPPUNIT_PLUGIN_IMPLEMENT();
