@@ -15,7 +15,7 @@ import time
 import uuid
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'uno' / 'python'))
-from reader_session import ReaderSession
+from reader_session import ReaderSession, SessionClosed
 from reader_infobar import ReaderInfoBar
 from edit_mode import EditMode
 
@@ -97,8 +97,14 @@ def main(args):
                                     engine.request_edit()
                                     ui.set_edit_mode()
                                     transition_error = None
+                                    event = {'event': 'edit-mode', 'view': session.view_state()}
+                                    events.append(event)
+                                    print(json.dumps(event, ensure_ascii=False), flush=True)
                                 except Exception as error:
                                     transition_error = str(error)
+                                    event = {'event': 'edit-mode-failed', 'error': transition_error}
+                                    events.append(event)
+                                    print(json.dumps(event, ensure_ascii=False), flush=True)
                                 finally:
                                     ui.edit_queued = False
                         result = engine.tick(time.monotonic())
@@ -116,7 +122,7 @@ def main(args):
                         else:
                             state = '可直接编辑' if page in session.edited else '页面停留后自动准备编辑'
                             ui.show('PDF 编辑模式', f'第 {page}/{session.count} 页：{state}。开发版暂不支持保存回 PDF。')
-                    except uno.getClass('com.sun.star.lang.DisposedException'):
+                    except (SessionClosed, uno.getClass('com.sun.star.lang.DisposedException')):
                         break
                     except RuntimeError as error:
                         ui.show('页面状态异常', str(error), error=True)

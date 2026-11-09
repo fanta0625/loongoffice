@@ -257,6 +257,25 @@ def run(args):
                         raise RuntimeError('Automatic page navigation reimported an edited page')
                     if tuple(doc.getUndoManager().getAllUndoActionTitles()) != history:
                         raise RuntimeError('Automatic conversion lost previous undo history')
+                    # A shape count is insufficient: simulate view-layer drift
+                    # after page navigation and verify native selection works
+                    # after the staged import document has been disposed.
+                    controller.setPropertyValue('ActiveLayer', session.preview_layer)
+                    session.edit_layer.IsVisible = False
+                    session.edit_layer.IsLocked = True
+                    session.preview_layer.IsVisible = False
+                    session._active_view = None
+                    session.current_page()
+                    state = session.view_state()
+                    if (not state['edit_visible'] or state['edit_locked']
+                            or not state['preview_visible'] or not state['preview_locked']
+                            or state['active_layer'] != session.edit_layer.Name):
+                        raise RuntimeError('Owned page-view layer states were not restored')
+                    controller.select(text_shape)
+                    selection = controller.getSelection()
+                    if selection is None or selection.getCount() != 1 or selection.getByIndex(0) != text_shape:
+                        raise RuntimeError('Imported text cannot be selected in the native Draw view')
+                    controller.select(None)
                     # Native window close must be vetoed until the launcher asks
                     # whether to discard edits; it must not silently save PDF.
                     from com.sun.star.util import CloseVetoException
@@ -293,6 +312,7 @@ def run(args):
                                   'automatic_settled_page_edit_verified': bool(engine),
                                   'partial_pdf_save_blocked': bool(engine),
                                   'infobar_container_bootstrap_verified': bool(engine),
+                                  'native_selection_and_layer_recovery_verified': bool(engine),
                                   'clone_failure_rollback': True, 'previous_undo_history_retained': True,
                                   'owned_previews_verified': True, 'replacement_graphic_rejected': True,
                                   'distinct_preview_rendering_verified': True,
@@ -343,3 +363,7 @@ if __name__ == '__main__':
     if args.pages < 3:
         parser.error('--pages must be at least 3')
     run(args)
+    # Release cyclic UNO listener/selection proxies while Python can still
+    # service bridge threads, rather than during interpreter finalization.
+    import gc
+    gc.collect()
