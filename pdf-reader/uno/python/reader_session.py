@@ -3,13 +3,19 @@
 
 No external renderer, system clipboard, worker UNO calls or PDF save path.
 This first implementation uses normal Draw page navigation, not the fixed
-three-page continuous-view fixture. Tile scheduling belongs in the C++ core.
+three-page continuous-view fixture. No tile rendering is implemented here.
 """
 from edit_bridge import open_for_edit, property_value as prop
+from edit_cache import StagedPageCache
+import time
 
 
 class SessionClosed(RuntimeError):
     """The document has detached its controller during native window close."""
+
+
+class ConversionCancelled(RuntimeError):
+    """Navigation invalidated an uncommitted shape-copy transaction."""
 
 
 def set_graphic(shape, graphic):
@@ -26,6 +32,7 @@ class ReaderSession:
         self.context, self.pdf_url, self.importer = context, pdf_url, importer
         self.edited = set()
         self.import_calls = []
+        self.staged_cache = StagedPageCache()
         self._active_view = None
         self.desktop = context.ServiceManager.createInstanceWithContext(
             'com.sun.star.frame.Desktop', context)
@@ -181,6 +188,33 @@ class ReaderSession:
                                f'({phase}); refusing to replace objects: ' + details)
         return preview
 
+    def prefetch_page(self, page_number, anchor):
+        """Synchronous idle preparation; never inserts into the user's document."""
+        if self.document.isReadonly() or self.current_page() != anchor:
+            return None
+        neighbours = {p for p in (anchor + 1, anchor - 1) if 1 <= p <= self.count}
+        self.staged_cache.retain(neighbours)
+        if page_number not in neighbours or page_number in self.edited or page_number in self.staged_cache:
+            return None
+        started = time.monotonic()
+        self.import_calls.append(page_number)
+        staged = self.importer(self.context, self.pdf_url, hidden=True, page=page_number)
+        try:
+            if self.current_page() != anchor:
+                return {'event': 'prefetch-cancelled', 'page': page_number}
+            pages = staged.getDrawPages()
+            if pages.getCount() != 1:
+                raise RuntimeError('Prefetch did not return exactly one page')
+            shapes = pages.getByIndex(0).getCount()
+            owned, staged = staged, None
+            accepted = self.staged_cache.put(page_number, owned, shapes)
+            return {'event': 'prefetch-ready' if accepted else 'prefetch-budget-skipped',
+                    'page': page_number, 'shapes': shapes,
+                    'import_seconds': time.monotonic() - started}
+        finally:
+            if staged is not None:
+                staged.dispose()
+
     def edit_current_page(self):
         if self.document.isReadonly():
             raise RuntimeError('Enter document edit mode before converting pages')
@@ -191,8 +225,14 @@ class ReaderSession:
         preview = self._reading_preview(page_number)
         # Conversion is staged before touching the reading document. Only the
         # requested source page may reach the edit converter's displayPage().
-        self.import_calls.append(page_number)
-        staged = self.importer(self.context, self.pdf_url, hidden=True, page=page_number)
+        started = time.monotonic()
+        staged = self.staged_cache.take(page_number)
+        cache_hit = staged is not None
+        self.staged_cache.retain({page_number - 1, page_number + 1})
+        if staged is None:
+            self.import_calls.append(page_number)
+            staged = self.importer(self.context, self.pdf_url, hidden=True, page=page_number)
+        imported_at = time.monotonic()
         added = []
         try:
             if self.current_page() != page_number:
@@ -216,6 +256,8 @@ class ReaderSession:
             try:
                 try:
                     for shape in shapes:
+                        if self.current_page() != page_number:
+                            raise ConversionCancelled('active-page-changed')
                         # SvxDrawPage::add rebinds the source UNO wrapper to a
                         # cloned SdrObject and SvxShape::Create reapplies cached
                         # maPosition/maSize. A freshly acquired wrapper has
@@ -240,6 +282,8 @@ class ReaderSession:
                         self._attach_edit_layer(added[-1])
                     if page.getCount() != len(shapes) + 1:
                         raise RuntimeError('Object cloning did not preserve shape count')
+                    if self.current_page() != page_number:
+                        raise ConversionCancelled('active-page-changed')
                     page.remove(preview)  # Commit only after every clone succeeded.
                 except BaseException:
                     for shape in reversed(added):
@@ -252,12 +296,23 @@ class ReaderSession:
             self.document.setModified(True)
             return {'page': page_number, 'reused': False, 'shapes': len(shapes),
                     'geometry_verified': True,
+                    'cache_hit': cache_hit,
+                    'import_seconds': imported_at - started,
+                    'copy_seconds': time.monotonic() - imported_at,
                     'view': self.view_state()}
+        except ConversionCancelled:
+            return {'page': page_number, 'cancelled': True,
+                    'reason': 'active-page-changed', 'preview_retained': True,
+                    'cache_hit': cache_hit, 'import_seconds': imported_at - started,
+                    'copy_seconds': time.monotonic() - imported_at}
         finally:
             staged.dispose()
 
     def close(self):
-        self.document.dispose()
+        try:
+            self.staged_cache.close()
+        finally:
+            self.document.dispose()
 
     def enable_editing(self, native_dispatch):
         """Use the native edit command, bypassing our frame interceptor once.

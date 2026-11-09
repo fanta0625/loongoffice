@@ -13,6 +13,12 @@ class Session:
         self.edited = set()
         self.calls = []
         self.reject = False
+        self.count = 10
+        self.prefetch = []
+
+    def prefetch_page(self, page, anchor):
+        self.prefetch.append((page, anchor))
+        return {'event': 'prefetch-ready', 'page': page}
 
     def current_page(self):
         return self.page
@@ -81,6 +87,53 @@ class EditModeTests(unittest.TestCase):
         self.mode.tick(100)
         self.assertEqual(self.mode.mode, 'reading')
         self.assertEqual(self.session.calls, [])
+
+    def test_prefetch_can_be_disabled_without_disabling_foreground(self):
+        self.mode.prefetch_seconds = None
+        self.mode.request_edit()
+        self.mode.tick(0)
+        self.mode.tick(1)
+        self.mode.tick(100)
+        self.assertEqual(self.session.calls, [1])
+        self.assertEqual(self.session.prefetch, [])
+
+    def test_idle_prefetch_forward_then_backward_without_editing_neighbours(self):
+        self.session.page = 5
+        self.mode.request_edit()
+        self.mode.tick(0)
+        self.mode.tick(1)
+        self.assertIsNone(self.mode.tick(2))
+        self.mode.tick(4)
+        self.mode.tick(5)
+        self.mode.tick(6)
+        self.assertEqual(self.session.prefetch, [(6, 5), (4, 5)])
+        self.assertEqual(self.session.edited, {5})
+
+    def test_navigation_prioritizes_foreground_and_replaces_old_neighbours(self):
+        self.mode.request_edit()
+        self.mode.tick(0)
+        self.mode.tick(1)
+        self.session.page = 10
+        self.mode.tick(4)
+        self.mode.tick(5)
+        self.assertEqual(self.session.calls, [1, 10])
+        self.assertEqual(self.session.prefetch, [])
+        self.mode.tick(8)
+        self.assertEqual(self.session.prefetch, [(9, 10)])
+
+    def test_prefetch_failure_does_not_poison_foreground_retry(self):
+        self.mode.request_edit()
+        self.mode.tick(0)
+        self.mode.tick(1)
+        def reject(*args):
+            raise RuntimeError('speculative failure')
+        self.session.prefetch_page = reject
+        self.assertEqual(self.mode.tick(4)['event'], 'prefetch-failed')
+        self.session.page = 2
+        self.mode.tick(5)
+        self.mode.tick(6)
+        self.assertIn(2, self.session.edited)
+        self.assertEqual(self.mode.failures, {})
 
 
 if __name__ == '__main__':

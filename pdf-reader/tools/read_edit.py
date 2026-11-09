@@ -67,7 +67,8 @@ def main(args):
                 print(f'Reading {session.count} pages; editable imports so far: 0', flush=True)
                 commands = SimpleQueue()
                 ui = ReaderInfoBar(session.document, commands)
-                engine = EditMode(session, lambda: session.enable_editing(ui.native_edit))
+                engine = EditMode(session, lambda: session.enable_editing(ui.native_edit),
+                                  prefetch_seconds=None if args.no_prefetch else 2)
                 toolkit = context.ServiceManager.createInstanceWithContext('com.sun.star.awt.Toolkit', context)
                 transition_error = None
                 while process.poll() is None:
@@ -142,6 +143,9 @@ def main(args):
                           'mode': engine.mode if engine else 'reading', 'ui': 'Draw InfoBar',
                           'page_failures': engine.failures if engine else {},
                           'tiles': False, 'continuous_layout': False, 'pdf_save_supported': False}
+                report['prefetch'] = {'enabled': not args.no_prefetch, 'neighbours_each_side': 1,
+                                      'max_staged_pages': 2, 'max_staged_shapes': 20000,
+                                      'synchronous_import_cancellable': False}
                 for resource in (ui, session):
                     if resource:
                         try:
@@ -172,4 +176,6 @@ if __name__ == '__main__':
     parser.add_argument('--office', default='libreoffice')
     parser.add_argument('--pdf', required=True, help='Local non-encrypted PDF')
     parser.add_argument('--report', help='New JSON file written when the session closes')
+    parser.add_argument('--no-prefetch', action='store_true',
+                        help='Disable synchronous idle neighbour preparation (useful for very slow pages)')
     main(parser.parse_args())

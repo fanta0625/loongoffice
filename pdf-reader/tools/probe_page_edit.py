@@ -293,6 +293,24 @@ def run(args):
                     raise RuntimeError('Navigation during import lost preview or changed the active page')
                 calls.clear()
                 session.import_calls.clear()
+                # Navigate after a real foreign-model clone was inserted.
+                # Cancellation must remove that clone and keep its preview.
+                controller.setCurrentPage(session.pages.getByIndex(0))
+                original_attach = session._attach_edit_layer
+                def navigate_after_clone(shape):
+                    original_attach(shape)
+                    controller.setCurrentPage(session.pages.getByIndex(1))
+                session._attach_edit_layer = navigate_after_clone
+                try:
+                    cancelled = session.edit_current_page()
+                finally:
+                    session._attach_edit_layer = original_attach
+                if (not cancelled.get('cancelled') or session.edited
+                        or session.pages.getByIndex(0).getCount() != 1):
+                    raise RuntimeError('Cancellation during shape copy lost the preview')
+                session._reading_preview(1, phase='after cancelled shape copy')
+                calls.clear()
+                session.import_calls.clear()
                 controller.setCurrentPage(session.pages.getByIndex(1))
                 first = session.edit_current_page()
                 if first['reused'] or calls != [2]:
@@ -422,7 +440,23 @@ def run(args):
                     ui.show('PDF 编辑模式', 'InfoBar integration verified')
                     if not controller.hasInfobar(BAR_ID):
                         raise RuntimeError('Recreated InfoBar is missing')
+                # Prefetch creates only a staged document. Visiting consumes
+                # it without another PDF converter call or losing page 2 edits.
+                controller.setCurrentPage(session.pages.getByIndex(1))
+                before = list(calls)
+                prefetched = session.prefetch_page(1, 2)
+                if prefetched['event'] != 'prefetch-ready' or 1 in session.edited:
+                    raise RuntimeError('Prefetch changed the user page or failed to cache')
+                controller.setCurrentPage(session.pages.getByIndex(0))
+                cached = session.edit_current_page()
+                if not cached['cache_hit'] or calls != before + [1]:
+                    raise RuntimeError('Visiting a prefetched page ran the converter again')
+                controller.setCurrentPage(page)
+                if render_page(context, page, directory / 'after-prefetch-return.png') != edited_render:
+                    raise RuntimeError('Prefetch lost an existing edit')
                 print(json.dumps({'status': 'passed', 'native_page_selection_verified': not args.adapter_only,
+                                  'copy_cancellation_rollback_verified': True,
+                                  'prefetch_cache_hit_verified': True,
                                   'source_pages': session.count,
                                   'same_document': True, 'failure_retains_preview': True,
                                   'panel_smoke': args.panel_smoke, 'readonly_infobar_mode_verified': bool(engine),
