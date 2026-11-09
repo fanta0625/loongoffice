@@ -36,14 +36,18 @@ def inspect_filter(context):
     return factory, config
 
 
-def open_for_edit(context, pdf_url, *, hidden=False):
+def open_for_edit(context, pdf_url, *, hidden=False, page=None):
     """Import through FilterFactory explicitly, bypassing SFX PDF routing.
 
     Returns a new, untitled Draw document. The caller owns it and presents it on
     success. Keep the reader window alive on failure. Saving defaults to a new
     document; this routine never overwrites the original PDF.
     Call on the Office UI thread when used inside an extension.
+    page is an optional 1-based source page. It requires the selected-page
+    xpdfimport update; omission retains the existing whole-document behaviour.
     """
+    if page is not None and (type(page) is not int or not 1 <= page <= 2147483647):
+        raise ValueError("page must be a positive 1-based integer")
     factory, _ = inspect_filter(context)
     importer = factory.createInstance(FILTER_NAME)
     if importer is None:
@@ -63,14 +67,19 @@ def open_for_edit(context, pdf_url, *, hidden=False):
         files = services.createInstanceWithContext("com.sun.star.ucb.SimpleFileAccess", context)
         stream = files.openFileRead(pdf_url)
         importer.setTargetDocument(document)
-        if not importer.filter((
+        descriptor = (
             property_value("URL", pdf_url),
             property_value("InputStream", stream),
             property_value("FilterName", FILTER_NAME),
-        )):
+        )
+        if page is not None:
+            descriptor += (property_value("FilterOptions", f"Page={page}"),)
+        if not importer.filter(descriptor):
             raise RuntimeError("PDF editable import returned false")
         if not document.supportsService(DRAW_SERVICE):
             raise RuntimeError("PDF import did not produce a Draw document")
+        if page is not None and document.getDrawPages().getCount() != 1:
+            raise RuntimeError("Expected exactly one imported page; rebuild xpdfimport with Page= support")
         return document
     except BaseException:
         document.dispose()

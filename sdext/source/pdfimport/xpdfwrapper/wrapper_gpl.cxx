@@ -18,6 +18,7 @@
  */
 
 #include "pdfioutdev_gpl.hxx"
+#include "page_selection.hxx"
 #ifdef _WIN32
 # include <io.h>
 # include <fcntl.h>  /*_O_BINARY*/
@@ -261,7 +262,7 @@ int main(int argc, char **argv)
         }
     } while (!bFinishedInput);
 
-    PDFDoc* pDoc = pDocUnique.release();
+    PDFDoc* pDoc = pDocUnique.get();
     pdfi::PDFOutDev aOutDev(pDoc);
     if (options == TO_STRING_VIEW("SkipImages")) {
             aOutDev.setSkipImages(true);
@@ -269,13 +270,21 @@ int main(int argc, char **argv)
 
     // tell the receiver early - needed for proper progress calculation
     const int nPages = pDoc->getNumPages();
-    pdfi::PDFOutDev::setPageNum(nPages);
+    const auto selected = pdfi::selectedPage(std::basic_string_view(options), nPages);
+    if (!selected)
+    {
+        fprintf(stderr, "Invalid PDF import Page= option\n");
+        return EXIT_FAILURE;
+    }
+    pdfi::PDFOutDev::setPageNum(*selected ? 1 : nPages);
 
     // virtual resolution of the PDF OutputDev in dpi
     static const int PDFI_OUTDEV_RESOLUTION = 7200;
 
     // do the conversion
-    for (int i = 1; i <= nPages; ++i)
+    const int first = *selected ? *selected : 1;
+    const int last = *selected ? *selected : nPages;
+    for (int i = first; i <= last; ++i)
     {
         pDoc->displayPage(&aOutDev,
                 i,

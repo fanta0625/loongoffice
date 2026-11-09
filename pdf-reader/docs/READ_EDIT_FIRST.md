@@ -1,0 +1,81 @@
+# 真实 PDF：阅读后编辑当前页
+
+## 本次交付
+
+入口为 `tools/read_edit.py`，使用私有 Office 进程、profile 和源文件快照。原 PDF 不被写入。打开真实 PDF 后，通过 Office 内置 PDFium 图形导入建立阅读页面；页面图像放在锁定图层。初始没有执行 PDF 到可编辑对象的转换。用户在左侧选择页面，再点击非模态控制面板的“编辑当前页”，在同一个 Draw 文档、同一页面中替换预览；其他页保持阅读图形，已编辑页保留原生对象。
+
+控制面板是开发入口，尚未打包成 OXT 菜单。当前使用 Draw 原生单页导航，不启用 `P0A1` 固定三页的连续画布实验；不能把这一版称为任意页连续编辑或瓦片阅读已经实现。锁定图层防止普通选择预览，不是阻止所有编辑命令的权限机制。
+
+## 指定页转换
+
+原有 `draw_pdf_import` / `XmlFilterAdaptor` 将 `FilterOptions` 传给内置 `xpdfimport`。新增选项 `Page=2`（严格的 1-based 单页编号），在辅助转换器调用 `displayPage()` / `processLinks()` 的循环前选择页；不是先整篇转换再删除其他页。旧的空选项和 `SkipImages` 行为保留。零、负数、越界、溢出和页范围表达式拒绝导入。该选项不与 `SkipImages` 组合。
+
+`open_for_edit(..., page=n, hidden=True)` 创建暂存 Draw 文档；过滤器失败或返回不止一页会销毁暂存文档并报错。客户端页数检查能拒绝旧转换器的多页回退；必须运行下述三页原生检查，确认当前构建支持此选项。
+
+编辑导入继续复用 Office 原有、基于内置 Poppler 辅助程序的**可编辑转换**管线；阅读渲染继续使用内置 PDFium，没有引入外部 Poppler 命令、MuPDF 或其他阅读引擎。
+
+同一文件的解析、字体索引、字体资源处理仍可能发生；“指定页转换”不等于文件打开与字体成本已经按页隔离。阅读启动目前也会枚举全文页面并建立 PDF 图形，未做异步首屏、瓦片、缓存或取消。
+
+## 替换事务与编辑状态
+
+- 原预览一直保留到暂存单页导入与所有对象克隆成功。尺寸不一致、转换失败、克隆失败时，不删除阅读预览；中途插入的对象回滚。
+- `SvxDrawPage::add()` 的跨模型分支克隆原生 `SdrObject`，不经过系统剪贴板，不重新定位到窗口中心。克隆对象及组内成员放入可编辑图层。
+- 转换本身是不可撤销的基线切换。该段操作暂时锁定 UndoManager，不清空其他页的撤销记录；成功后的文字与对象修改使用 Draw 原生撤销重做。
+- 已转换页再次请求编辑直接复用，切页不淘汰编辑模型，不用阅读 LRU 管理编辑对象。
+- 关闭控制面板的会话按钮时，如文档有修改，先确认放弃。尚无 PDF 保存入口；请用测试文件，不把开发版用于唯一副本的正式编辑。
+
+仅支持本地非加密 PDF 的初步功能验证。要求每个阅读页只有一个 PDFium 页面图形；有额外导入对象时拒绝继续。未适配的 CropBox / 旋转导致阅读与编辑尺寸不一致时拒绝替换。页面插入、删除、改名、重排不受支持；仅导航与内容编辑。删除、重排若撤销恢复，脚本仍不能据此保证源页身份映射。母版内容、表单、批注、签名、结构保存不在本次承诺范围。
+
+## 目标机器运行
+
+更新 PDF 分支，在已有配置的源码根目录增量编译；本次涉及 `xpdfimport`，不需要为 Python 工具单独安装扩展：
+
+```bash
+set -o pipefail
+make PARALLELISM=4 build 2>&1 | tee ../pdf-page-edit-build.log
+```
+
+先执行自动检查，必须使用新构建的辅助程序和 UNO 库：
+
+```bash
+(
+    export PYTHONPATH="$PWD/instdir/program"
+    export LD_LIBRARY_PATH="$PWD/instdir/program"
+    export URE_BOOTSTRAP="vnd.sun.star.pathname:$PWD/instdir/program/fundamentalrc"
+    timeout 180s python3 pdf-reader/tools/probe_page_edit.py \
+        --office "$PWD/instdir/program/soffice"
+)
+```
+
+检查包括三页 PDF 的第 1／2／3 页实际文字对应关系、越界拒绝，以及同文档替换、暂存转换失败、克隆中途失败、重试、重复进入、修改保留和既有撤销历史不变。
+
+通过后，在图形桌面运行真实文件：
+
+```bash
+(
+    export PYTHONPATH="$PWD/instdir/program"
+    export LD_LIBRARY_PATH="$PWD/instdir/program"
+    export URE_BOOTSTRAP="vnd.sun.star.pathname:$PWD/instdir/program/fundamentalrc"
+    python3 pdf-reader/tools/read_edit.py \
+        --office "$PWD/instdir/program/soffice" \
+        --pdf /absolute/path/example.pdf \
+        --report "/tmp/pdf-read-edit-$(date +%Y%m%d-%H%M%S).json"
+)
+```
+
+1. 启动显示 `editable imports so far: 0`；阅读页面不可普通选中。
+2. 选择第 2 页，点击“编辑当前页”，转换成功后在相同窗口中修改文字／对象；观察位置、字体、颜色、图片是否正确。
+3. 切到尚未编辑的页，应保持预览；点击编辑后再切回第 2 页，原修改应保留，原生撤销重做仍正常。
+4. 已编辑页按钮禁用，不会再次转换；会话报告记录实际请求页号和已编辑页。
+5. 用会话关闭按钮退出，有修改时确认提示；确认原文件未被写入。控制面板右上角关闭也进入会话关闭请求；若有修改需确认。
+
+## 开发机验证边界
+
+- GCC 14.2 独立 C++ 测试覆盖选页参数、Windows 宽字符参数及溢出／范围拒绝；既有布局测试继续通过。
+- WSL LibreOffice 25.2.3.2 上 `--adapter-only` 使用单页替代导入器实际验证同文档对象克隆、转换失败与克隆失败回滚、编辑保留、避免重复转换及撤销历史保留。它不证明原生 `Page=` 入口运行成功。
+- 在 WSLg 图形环境运行 `--adapter-only --panel-smoke`，实际创建非模态编辑面板与关闭确认框，并执行上述会话检查通过；未做像素截图验收。
+- 阅读页先在隐藏窗口完成标记／锁定图层初始化，再显示窗口；最终图形会话回归连续两次通过。
+- 同一旧产品 `--expect-unsupported` 按预期拒绝多页回退，确认不能把旧产品误判为支持指定页转换。
+- 原生选页转换器尚未在开发机完整编译，目标 LoongOffice 原生检查与真实 PDF GUI 体验仍待上述步骤验证。
+
+后续：将真实会话的页面状态接入任意页连续宿主；阅读核心实现可见区／缩放驱动的瓦片请求、预算缓存与取消；再进行受限页级 PDF 另存为。
