@@ -3,7 +3,7 @@ from pathlib import Path
 from types import SimpleNamespace
 import sys
 import unittest
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'uno' / 'python'))
 from reader_session import ReaderSession, SessionClosed
@@ -24,6 +24,29 @@ class ReaderViewTests(unittest.TestCase):
         self.session.document.getCurrentController.return_value = None
         with self.assertRaises(SessionClosed):
             self.session.current_page()
+
+    def test_visible_reading_uses_normal_loader_with_readonly(self):
+        self._check_loader(hidden=False)
+
+    def test_background_session_keeps_hidden_loader(self):
+        self._check_loader(hidden=True)
+
+    def _check_loader(self, *, hidden):
+        context, desktop, document = Mock(), Mock(), Mock()
+        context.ServiceManager.createInstanceWithContext.return_value = desktop
+        desktop.loadComponentFromURL.return_value = document
+        with patch('reader_session.prop', side_effect=lambda name, value: SimpleNamespace(Name=name, Value=value)), \
+             patch.object(ReaderSession, '_setup_previews'):
+            ReaderSession(context, 'file:///source.pdf', hidden=hidden, read_only=True)
+        args = {item.Name: item.Value for item in desktop.loadComponentFromURL.call_args.args[3]}
+        self.assertEqual(args['Hidden'], hidden)
+        self.assertTrue(args['ReadOnly'])
+        frame = document.getCurrentController().getFrame()
+        if hidden:
+            frame.activate.assert_not_called()
+        else:
+            frame.activate.assert_called_once()
+        frame.getContainerWindow().setVisible.assert_not_called()
 
     def test_owned_layers_restored_and_edit_layer_activated(self):
         self.session._prepare_view(self.controller, self.page)

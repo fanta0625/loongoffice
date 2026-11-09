@@ -104,6 +104,9 @@ def run(args):
                                         read_only=args.panel_smoke)
                 doc = session.document
                 if args.panel_smoke:
+                    descriptor = {item.Name: item.Value for item in doc.getArgs()}
+                    if descriptor.get('Hidden', False):
+                        raise RuntimeError('Visible reader still uses the hidden-load UI path')
                     from reader_infobar import ReaderInfoBar, BAR_ID, command_url, EDIT, SAVE
                     from edit_mode import EditMode
                     commands = SimpleQueue()
@@ -313,6 +316,7 @@ def run(args):
                                   'partial_pdf_save_blocked': bool(engine),
                                   'infobar_container_bootstrap_verified': bool(engine),
                                   'native_selection_and_layer_recovery_verified': bool(engine),
+                                  'normal_visible_loader_verified': bool(engine),
                                   'clone_failure_rollback': True, 'previous_undo_history_retained': True,
                                   'owned_previews_verified': True, 'replacement_graphic_rejected': True,
                                   'distinct_preview_rendering_verified': True,

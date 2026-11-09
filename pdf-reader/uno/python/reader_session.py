@@ -30,7 +30,11 @@ class ReaderSession:
         self.desktop = context.ServiceManager.createInstanceWithContext(
             'com.sun.star.frame.Desktop', context)
         self.document = self.desktop.loadComponentFromURL(pdf_url, '_blank', 0, (
-            prop('Hidden', True), prop('FilterName', 'draw_pdf_import'),
+            # Visible sessions must take SfxBaseController's normal UI setup
+            # path. Showing an initially hidden top-level window later skips
+            # HideUI(false), child-window setup and native view activation.
+            # Background conversion and headless probes remain hidden.
+            prop('Hidden', hidden), prop('FilterName', 'draw_pdf_import'),
             prop('ReadOnly', read_only), prop('UpdateDocMode', 0),
             prop('MacroExecutionMode', 0),
         ))
@@ -39,7 +43,7 @@ class ReaderSession:
         try:
             self._setup_previews()
             if not hidden:
-                self.document.getCurrentController().getFrame().getContainerWindow().setVisible(True)
+                self.document.getCurrentController().getFrame().activate()
         except BaseException:
             self.document.dispose()
             raise
