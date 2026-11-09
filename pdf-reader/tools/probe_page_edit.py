@@ -19,7 +19,7 @@ import uuid
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'uno' / 'python'))
 from edit_bridge import open_for_edit, property_value as prop
-from reader_session import ReaderSession
+from reader_session import ReaderSession, set_graphic
 from p0a_preview_probe import write_fixture
 from probe_edit import collect_shapes, write_fixture as write_single
 
@@ -149,7 +149,7 @@ def run(args):
                 original = untouched.getByIndex(0)
                 impostor = doc.createInstance('com.sun.star.drawing.GraphicObjectShape')
                 untouched.add(impostor)
-                impostor.Graphic = original.Graphic
+                set_graphic(impostor, original.Graphic)
                 impostor.Name = original.Name
                 impostor.LayerName = original.LayerName
                 untouched.remove(original)

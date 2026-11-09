@@ -8,6 +8,15 @@ three-page continuous-view fixture. Tile scheduling belongs in the C++ core.
 from edit_bridge import open_for_edit, property_value as prop
 
 
+def set_graphic(shape, graphic):
+    """Keep XGraphic's declared type across a remote Python UNO Any call."""
+    import uno
+    if graphic is None:
+        raise RuntimeError('Internal PDF preview returned an empty XGraphic')
+    uno.invoke(shape, 'setPropertyValue',
+               ('Graphic', uno.Any('com.sun.star.graphic.XGraphic', graphic)))
+
+
 class ReaderSession:
     def __init__(self, context, pdf_url, *, hidden=False, importer=open_for_edit):
         self.context, self.pdf_url, self.importer = context, pdf_url, importer
@@ -41,11 +50,20 @@ class ReaderSession:
                 # an editable converter. Hold the new UNO reference throughout
                 # the session, and verify the page's actual object below.
                 original = page.getByIndex(0)
+                # Read everything before adding a second object to this page.
+                # In particular, never pass a null Graphic into the setter:
+                # SvxGraphicObject rejects it with an uninformative argument error.
+                graphic = original.getPropertyValue('Graphic')
+                position, size = original.getPosition(), original.getSize()
+                if graphic is None:
+                    raise RuntimeError(f'Internal PDF preview page {i + 1} has no XGraphic '
+                                       f'before initialization (objects={page.getCount()}, '
+                                       f'name={original.getName()!r}, layer={original.LayerName!r})')
                 preview = self.document.createInstance('com.sun.star.drawing.GraphicObjectShape')
                 page.add(preview)
-                preview.setPropertyValue('Graphic', original.getPropertyValue('Graphic'))
-                preview.setPosition(original.getPosition())
-                preview.setSize(original.getSize())
+                set_graphic(preview, graphic)
+                preview.setPosition(position)
+                preview.setSize(size)
                 preview.setName(f'PDF reader preview {i + 1}')
                 preview.setPropertyValue('MoveProtect', True)
                 preview.setPropertyValue('SizeProtect', True)
