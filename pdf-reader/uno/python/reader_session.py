@@ -35,8 +35,22 @@ class ReaderSession:
                         != 'com.sun.star.drawing.GraphicObjectShape'):
                     raise RuntimeError('Expected one PDFium page graphic per page; '
                                        'annotations or a different import route are unsupported')
-                self.previews.append(page.getByIndex(0))
-                self.previews[-1].Name = f'PDF reader preview {i + 1}'
+                # Own the preview's lifecycle instead of using an importer-owned
+                # shape as a mutable session token. Keep the internal PDF Graphic
+                # (including its source page), without rasterizing it or invoking
+                # an editable converter. Hold the new UNO reference throughout
+                # the session, and verify the page's actual object below.
+                original = page.getByIndex(0)
+                preview = self.document.createInstance('com.sun.star.drawing.GraphicObjectShape')
+                page.add(preview)
+                preview.setPropertyValue('Graphic', original.getPropertyValue('Graphic'))
+                preview.setPosition(original.getPosition())
+                preview.setSize(original.getSize())
+                preview.setName(f'PDF reader preview {i + 1}')
+                preview.setPropertyValue('MoveProtect', True)
+                preview.setPropertyValue('SizeProtect', True)
+                page.remove(original)
+                self.previews.append(preview)
                 self.page_refs.append(page)
                 page.Name = f'PDF source page {i + 1}'
             layers = self.document.getLayerManager()
@@ -50,6 +64,8 @@ class ReaderSession:
             self.edit_layer.Name = 'PDF imported edit objects'
             self.edit_layer.IsVisible = self.edit_layer.IsPrintable = True
             self.edit_layer.IsLocked = False
+            for number in range(1, self.count + 1):
+                self._reading_preview(number, phase='initialization')
             self.document.getUndoManager().clear()  # Initial session setup only.
             self.document.setModified(False)
             self.document.getCurrentController().setCurrentPage(self.pages.getByIndex(0))
@@ -79,24 +95,34 @@ class ReaderSession:
             for i in range(shape.getCount()):
                 self._attach_edit_layer(shape.getByIndex(i))
 
+    def _reading_preview(self, page_number, *, phase='before conversion'):
+        page = self.pages.getByIndex(page_number - 1)
+        preview = page.getByIndex(0) if page.getCount() == 1 else None
+        if (preview is None or preview.getShapeType() != 'com.sun.star.drawing.GraphicObjectShape'
+                or preview.getName() != f'PDF reader preview {page_number}'
+                or preview.getPropertyValue('LayerName') != 'PDF reader locked previews'
+                or preview != self.previews[page_number - 1]):
+            details = ('multiple/no objects' if preview is None else
+                       f'{preview.getShapeType()}, name={preview.getName()!r}, '
+                       f'layer={preview.getPropertyValue("LayerName")!r}, '
+                       f'same_object={preview == self.previews[page_number - 1]}')
+            raise RuntimeError(f'Reading preview integrity check failed on page {page_number} '
+                               f'({phase}); refusing to replace objects: ' + details)
+        return preview
+
     def edit_current_page(self):
         page_number = self.current_page()
         if page_number in self.edited:
             return {'page': page_number, 'reused': True}
         page = self.pages.getByIndex(page_number - 1)
-        preview = page.getByIndex(0) if page.getCount() == 1 else None
-        if (preview is None or preview.getShapeType() != 'com.sun.star.drawing.GraphicObjectShape'
-                or preview.Name != f'PDF reader preview {page_number}'
-                or preview.LayerName != 'PDF reader locked previews'):
-            details = ('multiple/no objects' if preview is None else
-                       f'{preview.getShapeType()}, name={preview.Name!r}, layer={preview.LayerName!r}')
-            raise RuntimeError('Reading page was modified; refusing to replace user objects: ' + details)
+        preview = self._reading_preview(page_number)
         # Conversion is staged before touching the reading document. Only the
         # requested source page may reach the edit converter's displayPage().
         self.import_calls.append(page_number)
         staged = self.importer(self.context, self.pdf_url, hidden=True, page=page_number)
         added = []
         try:
+            self._reading_preview(page_number, phase='after staged import')
             imported = staged.getDrawPages()
             if imported.getCount() != 1:
                 raise RuntimeError('Selected-page import returned more than one page')

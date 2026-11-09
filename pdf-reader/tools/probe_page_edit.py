@@ -6,6 +6,7 @@
 against an unpatched Office. It never claims native Page= conversion passed.
 """
 import argparse
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -124,11 +125,54 @@ def run(args):
                         dialog.dispose()
                 if calls or session.count != 3:
                     raise RuntimeError('Editable conversion occurred during reading startup')
+                for number in (1, 2, 3):
+                    preview = session._reading_preview(number, phase='probe startup')
+                    if preview.Graphic is None or not preview.MoveProtect or not preview.SizeProtect:
+                        raise RuntimeError('Owned preview lost its graphic or geometry protection')
+                provider = context.ServiceManager.createInstanceWithContext(
+                    'com.sun.star.graphic.GraphicProvider', context)
+                preview_hashes = []
+                for number in (1, 2, 3):
+                    image = directory / f'owned-preview-{number}.png'
+                    provider.storeGraphic(session.previews[number - 1].Graphic, (
+                        prop('URL', image.as_uri()), prop('MimeType', 'image/png')))
+                    data = image.read_bytes()
+                    if not data.startswith(b'\x89PNG\r\n\x1a\n') or len(data) < 24:
+                        raise RuntimeError('Owned preview cannot render through internal graphics')
+                    preview_hashes.append(hashlib.sha256(data).hexdigest())
+                if len(set(preview_hashes)) != 3:
+                    raise RuntimeError('Owned previews lost distinct source-page graphics')
+                # A user's replacement graphic must never be mistaken for a
+                # reading preview, even if it copies the name and layer.
                 controller = doc.getCurrentController()
+                untouched = session.pages.getByIndex(0)
+                original = untouched.getByIndex(0)
+                impostor = doc.createInstance('com.sun.star.drawing.GraphicObjectShape')
+                untouched.add(impostor)
+                impostor.Graphic = original.Graphic
+                impostor.Name = original.Name
+                impostor.LayerName = original.LayerName
+                untouched.remove(original)
+                controller.setCurrentPage(untouched)
+                try:
+                    session.edit_current_page()
+                except RuntimeError as error:
+                    if 'Reading preview integrity check failed on page 1' not in str(error):
+                        raise
+                else:
+                    raise RuntimeError('Replacement graphic was accepted as a reading preview')
+                finally:
+                    untouched.remove(impostor)
+                    untouched.add(original)
+                if calls:
+                    raise RuntimeError('Modified reading page reached the converter')
+                doc.getUndoManager().clear()  # Discard test-only tampering setup.
                 controller.setCurrentPage(session.pages.getByIndex(1))
                 first = session.edit_current_page()
                 if first['reused'] or calls != [2]:
                     raise RuntimeError('Wrong initial edit request')
+                for number in (1, 3):
+                    session._reading_preview(number, phase='after page 2 edit')
                 page = session.pages.getByIndex(1)
                 text_shape = next(page.getByIndex(i) for i in range(page.getCount())
                                   if hasattr(page.getByIndex(i), 'String') and page.getByIndex(i).String)
@@ -176,6 +220,8 @@ def run(args):
                                   'same_document': True, 'failure_retains_preview': True,
                                   'panel_smoke': args.panel_smoke,
                                   'clone_failure_rollback': True, 'previous_undo_history_retained': True,
+                                  'owned_previews_verified': True, 'replacement_graphic_rejected': True,
+                                  'distinct_preview_rendering_verified': True,
                                   'repeat_edit_reuses_objects': True, 'edited_text_retained': True,
                                   'calls': calls}, indent=2))
             except BaseException:
