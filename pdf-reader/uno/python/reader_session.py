@@ -195,6 +195,9 @@ class ReaderSession:
         staged = self.importer(self.context, self.pdf_url, hidden=True, page=page_number)
         added = []
         try:
+            if self.current_page() != page_number:
+                return {'page': page_number, 'cancelled': True,
+                        'reason': 'active-page-changed', 'preview_retained': True}
             self._reading_preview(page_number, phase='after staged import')
             imported = staged.getDrawPages()
             if imported.getCount() != 1:
@@ -213,11 +216,27 @@ class ReaderSession:
             try:
                 try:
                     for shape in shapes:
+                        # SvxDrawPage::add rebinds the source UNO wrapper to a
+                        # cloned SdrObject and SvxShape::Create reapplies cached
+                        # maPosition/maSize. A freshly acquired wrapper has
+                        # defaults (0,0)/(100,100), even though getPosition /
+                        # getSize report the correct live SdrObject geometry.
+                        # Seed those caches while the source object is alive.
+                        position, size = shape.getPosition(), shape.getSize()
+                        shape.setPosition(position)
+                        shape.setSize(size)
                         old_count = page.getCount()
                         try:
                             page.add(shape)
                         finally:
                             added.extend(page.getByIndex(i) for i in range(old_count, page.getCount()))
+                        if page.getCount() != old_count + 1:
+                            raise RuntimeError('Object cloning did not insert exactly one shape')
+                        actual_position, actual_size = added[-1].getPosition(), added[-1].getSize()
+                        expected = (position.X, position.Y, size.Width, size.Height)
+                        actual = (actual_position.X, actual_position.Y, actual_size.Width, actual_size.Height)
+                        if any(abs(a - b) > 1 for a, b in zip(actual, expected)):
+                            raise RuntimeError(f'Cloned object geometry changed: expected={expected}, actual={actual}')
                         self._attach_edit_layer(added[-1])
                     if page.getCount() != len(shapes) + 1:
                         raise RuntimeError('Object cloning did not preserve shape count')
@@ -231,8 +250,8 @@ class ReaderSession:
                 undo.unlock()
             self.edited.add(page_number)
             self.document.setModified(True)
-            self.document.getCurrentController().setCurrentPage(page)
             return {'page': page_number, 'reused': False, 'shapes': len(shapes),
+                    'geometry_verified': True,
                     'view': self.view_state()}
         finally:
             staged.dispose()

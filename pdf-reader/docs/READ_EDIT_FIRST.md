@@ -47,7 +47,7 @@ make PARALLELISM=4 build 2>&1 | tee ../pdf-page-edit-build.log
     export LD_LIBRARY_PATH="$PWD/instdir/program"
     export URE_BOOTSTRAP="vnd.sun.star.pathname:$PWD/instdir/program/fundamentalrc"
     timeout 180s python3 pdf-reader/tools/probe_page_edit.py \
-        --office "$PWD/instdir/program/soffice" --panel-smoke
+        --office "$PWD/instdir/program/soffice" --panel-smoke --cold-import
 )
 ```
 
@@ -86,6 +86,20 @@ make PARALLELISM=4 build 2>&1 | tee ../pdf-page-edit-build.log
 5. 保存命令被禁用／拦截；关闭有修改的文档时先选择取消，确认窗口和修改保留，再关闭并确认放弃。确认原文件未被写入。
 
 ## 开发机验证边界
+
+### 跨文档克隆导致对象缩小／移到原点
+
+目标机反馈“第 2 页转换后快速切到第 9 页，再返回时空白且缩放不能恢复”。本地通过将暂存单页另存并重新加载为 ODG，获得新建的 UNO 形状包装对象，独立复现了几何破坏：原始 `(x=1411, y=4586, width=5292, height=1059)` 克隆后变成 `(0, 0, 100, 100)`；文本位置也归零。对象数检查与图层检查均不能发现这一问题。
+
+调用链为 `SvxDrawPage::add()` 克隆原生对象并重新绑定源 UNO 包装对象，然后 `SvxShape::Create()` 重放其缓存 `maPosition/maSize`。新包装对象的缓存是原点和 100×100，`getPosition()/getSize()` 读取的真实几何不会自动更新该缓存。这是已独立复现的缺陷，不能仅凭它断言目标文件的所有空白原因均已排除。
+
+适配层现在在跨模型添加前，将真实位置／尺寸以相同值写回源形状，以初始化包装对象缓存；添加后逐个验证目标几何，允许最多 1 个 1/100mm 单位的差异，异常走事务回滚并保留预览。成功日志增加 `geometry_verified`。修复不改变原文件，也不需要重编译 Office。
+
+新增 `--cold-import` 检查，在暂存导入后经 ODG 重新加载再克隆；开发机替代导入器还包含旋转图形组和零高度线。检查对象类型、组成员及几何，关闭暂存文档后继续编辑，快速切至第 9 页再返回，并比较修改页离开前／返回后的 PNG 栅格签名。PNG DPI 元数据不参与签名。跨源文档与宿主的渲染相等性独立报告为 `cross_document_raster_equal`；开发机有文字栅格差异，不能声称跨文档输出像素完全一致，也不以该差异掩盖几何错误。
+
+如果同步单页导入期间用户已经离开原页面，则取消该次替换并保留原预览，返回 `cancelled: true`；不标为已编辑，不把视口强行跳回。已经开始的同步导入本身仍不可中断。
+
+本次修复后，17 项 Python 单测通过；WSLg 十页适配器验证（`--adapter-only --panel-smoke --cold-import --pages 10`）通过，包括组成员几何、第 2→9→2 页返回后的渲染、原生选择、修改和撤销保留。开发机不具备本分支的原生指定页转换器，目标 PDF 的原生导入及鼠标交互仍须在安装包／目标构建上复测。
 
 ### 编辑对象显示／选择与窗口关闭
 

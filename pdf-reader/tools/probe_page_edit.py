@@ -17,12 +17,80 @@ import sys
 import tempfile
 import time
 import uuid
+import zlib
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'uno' / 'python'))
 from edit_bridge import open_for_edit, property_value as prop
 from reader_session import ReaderSession, set_graphic
 from p0a_preview_probe import write_fixture
 from probe_edit import collect_shapes, write_fixture as write_single
+
+
+def geometry(shape):
+    position, size = shape.getPosition(), shape.getSize()
+    return (position.X, position.Y, size.Width, size.Height)
+
+
+def geometry_tree(shape):
+    children = []
+    if shape.supportsService('com.sun.star.drawing.GroupShape'):
+        children = [geometry_tree(shape.getByIndex(i)) for i in range(shape.getCount())]
+    return (shape.getShapeType(), geometry(shape), children)
+
+
+def add_clone_fixture_shapes(document):
+    """Adapter-only coverage for a rotated group member and zero-height line."""
+    import uno
+    page = document.getDrawPages().getByIndex(0)
+    group = document.createInstance('com.sun.star.drawing.GroupShape')
+    page.add(group)
+    rectangle = document.createInstance('com.sun.star.drawing.RectangleShape')
+    group.add(rectangle)
+    position = uno.createUnoStruct('com.sun.star.awt.Point')
+    position.X, position.Y = 12500, 3000
+    size = uno.createUnoStruct('com.sun.star.awt.Size')
+    size.Width, size.Height = 3500, 1800
+    rectangle.setPosition(position)
+    rectangle.setSize(size)
+    rectangle.FillColor, rectangle.RotateAngle = 0x5599CC, 1700
+    inner = document.createInstance('com.sun.star.drawing.EllipseShape')
+    group.add(inner)
+    position.X, position.Y = 15500, 6000
+    size.Width, size.Height = 1500, 1200
+    inner.setPosition(position)
+    inner.setSize(size)
+    line = document.createInstance('com.sun.star.drawing.LineShape')
+    page.add(line)
+    position.X, position.Y = 3000, 8000
+    size.Width, size.Height = 5500, 0
+    line.setPosition(position)
+    line.setSize(size)
+    line.LineColor = 0xCC3333
+
+
+def render_page(context, page, path):
+    exporter = context.ServiceManager.createInstanceWithContext(
+        'com.sun.star.drawing.GraphicExportFilter', context)
+    exporter.setSourceDocument(page)
+    if not exporter.filter((prop('URL', path.as_uri()), prop('MediaType', 'image/png'),
+                            prop('FilterData', (prop('PixelWidth', 800), prop('PixelHeight', 400))))):
+        raise RuntimeError('Cannot render imported page')
+    # PNG pHYs/DPI metadata can differ between an imported page and the host
+    # despite identical pixels. Compare the raster representation, not the
+    # container's metadata or compression stream.
+    data = path.read_bytes()
+    if not data.startswith(b'\x89PNG\r\n\x1a\n'):
+        raise RuntimeError('Page export did not produce PNG')
+    offset, critical, compressed = 8, [], []
+    while offset + 12 <= len(data):
+        length = int.from_bytes(data[offset:offset + 4], 'big')
+        kind, content = data[offset + 4:offset + 8], data[offset + 8:offset + 8 + length]
+        if kind in (b'IHDR', b'PLTE', b'tRNS'):
+            critical.append(kind + content)
+        elif kind == b'IDAT':
+            compressed.append(content)
+        offset += length + 12
+    return hashlib.sha256(b''.join(critical) + zlib.decompress(b''.join(compressed))).hexdigest()
 
 
 def run(args):
@@ -92,13 +160,32 @@ def run(args):
 
                 failures = {3}
                 calls = []
+                expected_geometry, expected_render = {}, {}
 
                 def importer(ctx, url, *, hidden, page):
                     calls.append(page)
                     if page in failures:
                         raise RuntimeError('Injected conversion failure')
-                    return open_for_edit(ctx, single.as_uri() if args.adapter_only else url,
-                                         hidden=hidden, page=None if args.adapter_only else page)
+                    staged = open_for_edit(ctx, single.as_uri() if args.adapter_only else url,
+                                           hidden=hidden, page=None if args.adapter_only else page)
+                    try:
+                        if args.cold_import:
+                            if args.adapter_only:
+                                add_clone_fixture_shapes(staged)
+                            # Reload so shape wrappers are freshly acquired,
+                            # without the XML importer's cached position/size.
+                            cold = directory / f'cold-{uuid.uuid4().hex}.odg'
+                            staged.storeToURL(cold.as_uri(), (prop('FilterName', 'draw8'),))
+                            staged.dispose()
+                            staged = desktop.loadComponentFromURL(cold.as_uri(), '_blank', 0,
+                                                                  (prop('Hidden', True),))
+                        source = staged.getDrawPages().getByIndex(0)
+                        expected_geometry[page] = [geometry_tree(source.getByIndex(i)) for i in range(source.getCount())]
+                        expected_render[page] = render_page(ctx, source, directory / f'source-{uuid.uuid4().hex}.png')
+                        return staged
+                    except BaseException:
+                        staged.dispose()
+                        raise
 
                 session = ReaderSession(context, pdf.as_uri(), hidden=not args.panel_smoke, importer=importer,
                                         read_only=args.panel_smoke)
@@ -188,6 +275,24 @@ def run(args):
                 if calls:
                     raise RuntimeError('Modified reading page reached the converter')
                 doc.getUndoManager().clear()  # Discard test-only tampering setup.
+                # User navigation during the blocking importer must not commit
+                # an old-page replacement or pull the viewport back afterwards.
+                original_importer = session.importer
+                def navigate_during_import(*a, **kw):
+                    staged = original_importer(*a, **kw)
+                    controller.setCurrentPage(session.pages.getByIndex(1))
+                    return staged
+                session.importer = navigate_during_import
+                controller.setCurrentPage(session.pages.getByIndex(0))
+                try:
+                    cancelled = session.edit_current_page()
+                finally:
+                    session.importer = original_importer
+                if (not cancelled.get('cancelled') or session.edited
+                        or session.pages.getByIndex(0).getCount() != 1 or session.current_page() != 2):
+                    raise RuntimeError('Navigation during import lost preview or changed the active page')
+                calls.clear()
+                session.import_calls.clear()
                 controller.setCurrentPage(session.pages.getByIndex(1))
                 first = session.edit_current_page()
                 if first['reused'] or calls != [2]:
@@ -195,9 +300,14 @@ def run(args):
                 for number in set(range(1, args.pages + 1)) - {2}:
                     session._reading_preview(number, phase='after page 2 edit')
                 page = session.pages.getByIndex(1)
+                if [geometry_tree(page.getByIndex(i)) for i in range(page.getCount())] != expected_geometry[2]:
+                    raise RuntimeError('Imported page geometry changed during cross-model cloning')
+                cloned_render = render_page(context, page, directory / 'cloned-page-2.png')
+                cross_document_raster_equal = cloned_render == expected_render[2]
                 text_shape = next(page.getByIndex(i) for i in range(page.getCount())
                                   if hasattr(page.getByIndex(i), 'String') and page.getByIndex(i).String)
                 text_shape.String += ' USER_EDIT_KEPT'
+                edited_render = render_page(context, page, directory / 'edited-page-2.png')
                 history = tuple(doc.getUndoManager().getAllUndoActionTitles())
                 controller.setCurrentPage(session.pages.getByIndex(2))
                 try:
@@ -233,6 +343,8 @@ def run(args):
                     raise RuntimeError('Edited page was imported twice')
                 if 'USER_EDIT_KEPT' not in text_shape.String:
                     raise RuntimeError('Switching pages lost edited text')
+                if render_page(context, page, directory / 'returned-page-2.png') != edited_render:
+                    raise RuntimeError('Returning to the edited page changed its rendering')
                 if tuple(doc.getUndoManager().getAllUndoActionTitles()) != history:
                     raise RuntimeError('Page conversion changed existing edit undo history')
                 if session.pages.getByIndex(0).getCount() != 1 or session.count != args.pages:
@@ -241,7 +353,7 @@ def run(args):
                     # After the one document-level click, settled pages convert
                     # without another edit action; fast intermediate navigation
                     # must not trigger a conversion, nor may revisiting an edit.
-                    target = args.pages if args.pages >= 4 else 1
+                    target = min(9, args.pages) if args.pages >= 4 else 1
                     controller.setCurrentPage(session.pages.getByIndex(target - 1))
                     engine.tick(10)
                     controller.setCurrentPage(session.pages.getByIndex(0))
@@ -258,6 +370,8 @@ def run(args):
                     engine.tick(12)
                     if 'USER_EDIT_KEPT' not in text_shape.String or calls[-1] != target:
                         raise RuntimeError('Automatic page navigation reimported an edited page')
+                    if render_page(context, page, directory / 'returned-after-fast-navigation.png') != edited_render:
+                        raise RuntimeError('Fast navigation changed the previously edited page rendering')
                     if tuple(doc.getUndoManager().getAllUndoActionTitles()) != history:
                         raise RuntimeError('Automatic conversion lost previous undo history')
                     # A shape count is insufficient: simulate view-layer drift
@@ -317,6 +431,11 @@ def run(args):
                                   'infobar_container_bootstrap_verified': bool(engine),
                                   'native_selection_and_layer_recovery_verified': bool(engine),
                                   'normal_visible_loader_verified': bool(engine),
+                                  'cold_import_verified': args.cold_import,
+                                  'clone_geometry_verified': True,
+                                  'cross_document_raster_equal': cross_document_raster_equal,
+                                  'return_to_edited_page_rendering_verified': True,
+                                  'navigation_during_import_retains_preview': True,
                                   'clone_failure_rollback': True, 'previous_undo_history_retained': True,
                                   'owned_previews_verified': True, 'replacement_graphic_rejected': True,
                                   'distinct_preview_rendering_verified': True,
@@ -360,6 +479,7 @@ if __name__ == '__main__':
     parser.add_argument('--office', default='libreoffice')
     parser.add_argument('--pages', type=int, default=10, help='Generated PDF page count (at least 3)')
     parser.add_argument('--panel-smoke', action='store_true', help='Verify native read-only mode, InfoBar, edit dispatch, automatic page conversion and close veto on a GUI desktop')
+    parser.add_argument('--cold-import', action='store_true', help='Reload staged imports as ODG to exercise fresh UNO shape wrappers before cloning')
     group = parser.add_mutually_exclusive_group()
     group.add_argument('--adapter-only', action='store_true')
     group.add_argument('--expect-unsupported', action='store_true')
