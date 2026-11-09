@@ -11,6 +11,7 @@ import json
 import os
 from pathlib import Path
 from queue import SimpleQueue
+import re
 import subprocess
 import sys
 import tempfile
@@ -29,7 +30,7 @@ def run(args):
     with tempfile.TemporaryDirectory(prefix='pdf-page-edit-check-') as tmp:
         directory = Path(tmp)
         pdf, single = directory / 'three.pdf', directory / 'one.pdf'
-        write_fixture(pdf)
+        write_fixture(pdf, page_count=args.pages)
         write_single(single)
         pipe = 'page_check_' + uuid.uuid4().hex
         command = [args.office, '-env:UserInstallation=' + (directory / 'profile').as_uri(),
@@ -71,19 +72,17 @@ def run(args):
                     doc.dispose()
                     raise RuntimeError('This Office supports Page=; negative test is inapplicable')
                 if not args.adapter_only:
-                    for number in (1, 2, 3):
+                    for number in range(1, args.pages + 1):
                         doc = open_for_edit(context, pdf.as_uri(), hidden=True, page=number)
                         try:
                             text = ' '.join(item['text'] for item in collect_shapes(doc.getDrawPages().getByIndex(0)))
                             normalized = ' '.join(text.split())
-                            if f'PDF SOURCE PAGE {number}' not in normalized:
+                            markers = re.findall(r'PDF SOURCE PAGE (\d+)\b', normalized)
+                            if markers != [str(number)]:
                                 raise RuntimeError(f'Wrong page text: {normalized!r}')
-                            for other in {1, 2, 3} - {number}:
-                                if f'PDF SOURCE PAGE {other}' in normalized:
-                                    raise RuntimeError('Unrequested page leaked into conversion')
                         finally:
                             doc.dispose()
-                    for number in (0, 4):
+                    for number in (0, args.pages + 1):
                         try:
                             doc = open_for_edit(context, pdf.as_uri(), hidden=True, page=number)
                         except (RuntimeError, ValueError):
@@ -123,16 +122,16 @@ def run(args):
                         box.dispose()  # Construct only; no unattended modal prompt.
                     finally:
                         dialog.dispose()
-                if calls or session.count != 3:
+                if calls or session.count != args.pages:
                     raise RuntimeError('Editable conversion occurred during reading startup')
-                for number in (1, 2, 3):
+                for number in range(1, args.pages + 1):
                     preview = session._reading_preview(number, phase='probe startup')
                     if preview.Graphic is None or not preview.MoveProtect or not preview.SizeProtect:
                         raise RuntimeError('Owned preview lost its graphic or geometry protection')
                 provider = context.ServiceManager.createInstanceWithContext(
                     'com.sun.star.graphic.GraphicProvider', context)
                 preview_hashes = []
-                for number in (1, 2, 3):
+                for number in range(1, args.pages + 1):
                     image = directory / f'owned-preview-{number}.png'
                     provider.storeGraphic(session.previews[number - 1].Graphic, (
                         prop('URL', image.as_uri()), prop('MimeType', 'image/png')))
@@ -140,7 +139,7 @@ def run(args):
                     if not data.startswith(b'\x89PNG\r\n\x1a\n') or len(data) < 24:
                         raise RuntimeError('Owned preview cannot render through internal graphics')
                     preview_hashes.append(hashlib.sha256(data).hexdigest())
-                if len(set(preview_hashes)) != 3:
+                if len(set(preview_hashes)) != args.pages:
                     raise RuntimeError('Owned previews lost distinct source-page graphics')
                 # A user's replacement graphic must never be mistaken for a
                 # reading preview, even if it copies the name and layer.
@@ -171,7 +170,7 @@ def run(args):
                 first = session.edit_current_page()
                 if first['reused'] or calls != [2]:
                     raise RuntimeError('Wrong initial edit request')
-                for number in (1, 3):
+                for number in set(range(1, args.pages + 1)) - {2}:
                     session._reading_preview(number, phase='after page 2 edit')
                 page = session.pages.getByIndex(1)
                 text_shape = next(page.getByIndex(i) for i in range(page.getCount())
@@ -214,9 +213,10 @@ def run(args):
                     raise RuntimeError('Switching pages lost edited text')
                 if tuple(doc.getUndoManager().getAllUndoActionTitles()) != history:
                     raise RuntimeError('Page conversion changed existing edit undo history')
-                if session.pages.getByIndex(0).getCount() != 1 or session.count != 3:
+                if session.pages.getByIndex(0).getCount() != 1 or session.count != args.pages:
                     raise RuntimeError('Untouched reading page changed')
                 print(json.dumps({'status': 'passed', 'native_page_selection_verified': not args.adapter_only,
+                                  'source_pages': session.count,
                                   'same_document': True, 'failure_retains_preview': True,
                                   'panel_smoke': args.panel_smoke,
                                   'clone_failure_rollback': True, 'previous_undo_history_retained': True,
@@ -255,8 +255,12 @@ def run(args):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--office', default='libreoffice')
+    parser.add_argument('--pages', type=int, default=10, help='Generated PDF page count (at least 3)')
     parser.add_argument('--panel-smoke', action='store_true', help='Also create the modeless controls on a GUI desktop')
     group = parser.add_mutually_exclusive_group()
     group.add_argument('--adapter-only', action='store_true')
     group.add_argument('--expect-unsupported', action='store_true')
-    run(parser.parse_args())
+    args = parser.parse_args()
+    if args.pages < 3:
+        parser.error('--pages must be at least 3')
+    run(args)

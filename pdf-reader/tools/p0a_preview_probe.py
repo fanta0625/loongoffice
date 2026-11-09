@@ -18,11 +18,14 @@ import uuid
 from p0a_draw_host_probe import add_shape, point, prop, size
 
 
-def write_fixture(path, page_sizes=None):
+def write_fixture(path, page_sizes=None, *, page_count=3):
+    if page_count < 1 or (page_sizes is not None and len(page_sizes) != page_count):
+        raise ValueError('Expected a positive page count and matching page sizes')
+    kids = ' '.join(f'{4 + index * 2} 0 R' for index in range(page_count))
     objects = [b'<< /Type /Catalog /Pages 2 0 R >>',
-               b'<< /Type /Pages /Kids [4 0 R 6 0 R 8 0 R] /Count 3 >>',
+               f'<< /Type /Pages /Kids [{kids}] /Count {page_count} >>'.encode(),
                b'<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>']
-    for index in range(3):
+    for index in range(page_count):
         width, height = page_sizes[index] if page_sizes else (400, 200)
         text_y = height - 60 if page_sizes else 140
         stream_id = 5 + index * 2

@@ -40,7 +40,12 @@ class ReaderSession:
             self.page_refs = []
             for i in range(self.count):
                 page = self.pages.getByIndex(i)
-                if (page.getCount() != 1 or page.getByIndex(0).getShapeType()
+                # Acquire once and retain BEFORE querying any interface. A
+                # temporary getByIndex(...).getShapeType() proxy can be released
+                # while the next wrapper is being acquired. SdrObject caches its
+                # UNO shape weakly; do not churn wrappers around the same object.
+                original = page.getByIndex(0) if page.getCount() == 1 else None
+                if (original is None or original.getShapeType()
                         != 'com.sun.star.drawing.GraphicObjectShape'):
                     raise RuntimeError('Expected one PDFium page graphic per page; '
                                        'annotations or a different import route are unsupported')
@@ -49,7 +54,6 @@ class ReaderSession:
                 # (including its source page), without rasterizing it or invoking
                 # an editable converter. Hold the new UNO reference throughout
                 # the session, and verify the page's actual object below.
-                original = page.getByIndex(0)
                 # Read everything before adding a second object to this page.
                 # In particular, never pass a null Graphic into the setter:
                 # SvxGraphicObject rejects it with an uninformative argument error.

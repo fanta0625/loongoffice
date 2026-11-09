@@ -104,6 +104,7 @@ def main(args):
         env['LO_IMPORT_USE_PDFIUM'] = '1'
         env.pop('LO_PDF_HYBRID_VIEW_PROBE', None)  # Do not activate fixed three-page test hooks.
         session = desktop = dialog = None
+        failure = None
         events = []
         with (directory / 'office.log').open('w+') as log:
             process = subprocess.Popen(command, env=env, stdout=log, stderr=subprocess.STDOUT)
@@ -170,13 +171,15 @@ def main(args):
                         box.execute()
                         box.dispose()
                         last_status = None
-            except BaseException:
+            except BaseException as error:
+                failure = {'type': type(error).__name__, 'message': str(error)}
                 log.flush()
                 log.seek(0)
                 print(log.read(), file=sys.stderr)
                 raise
             finally:
                 report = {'source': str(source), 'source_sha256': digest, 'events': events,
+                          'status': 'failed' if failure else 'closed', 'error': failure,
                           'edited_pages': sorted(session.edited) if session else [],
                           'import_calls': session.import_calls if session else [],
                           'renderer': 'Office internal PDFium graphics',
