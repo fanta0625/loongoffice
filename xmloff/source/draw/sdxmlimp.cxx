@@ -68,6 +68,12 @@ public:
     {
         if (nElement == XML_ELEMENT(STYLE, XML_STYLE))
             return nullptr; // PDF's named standard style; preserve the host's styles.
+        return CreateResource(nElement, xAttrs);
+    }
+
+    SvXMLStyleContext* CreateResource(
+        sal_Int32 nElement, const uno::Reference<xml::sax::XFastAttributeList>& xAttrs)
+    {
         const bool bDash = nElement == XML_ELEMENT(DRAW, XML_STROKE_DASH);
         if (!bDash && nElement != XML_ELEMENT(DRAW, XML_FILL_IMAGE))
             throw uno::RuntimeException(u"Unsupported PDF page resource"_ustr);
@@ -109,9 +115,11 @@ public:
 // both style sections so later imports cannot alter earlier pages.
 class PDFPageAutoStylesContext final : public SdXMLStylesContext
 {
+    using SdXMLStylesContext::CreateStyleChildContext;
+
 public:
     explicit PDFPageAutoStylesContext(SdXMLImport& rImport) : SdXMLStylesContext(rImport, true) {}
-    uno::Reference<xml::sax::XFastContextHandler> SAL_CALL createFastChildContext(
+    SvXMLStyleContext* CreateStyleChildContext(
         sal_Int32 nElement, const uno::Reference<xml::sax::XFastAttributeList>& xAttrs) override
     {
         if (nElement == XML_ELEMENT(DRAW, XML_STROKE_DASH)
@@ -119,9 +127,9 @@ public:
         {
             rtl::Reference<PDFPageResourcesContext> xResources(
                 new PDFPageResourcesContext(static_cast<SdXMLImport&>(GetImport())));
-            return xResources->createFastChildContext(nElement, xAttrs);
+            return xResources->CreateResource(nElement, xAttrs);
         }
-        return SdXMLStylesContext::createFastChildContext(nElement, xAttrs);
+        return SdXMLStylesContext::CreateStyleChildContext(nElement, xAttrs);
     }
 };
 
@@ -469,9 +477,9 @@ void SAL_CALL SdXMLImport::setTargetDocument( const uno::Reference< lang::XCompo
             bFound |= xPage == mxDirectPage;
         }
         uno::Reference<drawing::XLayerSupplier> xLayers(GetModel(), uno::UNO_QUERY_THROW);
-        uno::Reference<container::XNameAccess> xNames(xLayers->getLayerManager(), uno::UNO_QUERY_THROW);
+        auto xNames = xLayers->getLayerManager();
         if (!mbIsDraw || !mxDirectPage.is() || !bFound || mxDirectPage->getCount() != 1
-            || maDirectLayer.isEmpty() || !xNames->hasByName(maDirectLayer))
+            || maDirectLayer.isEmpty() || !xNames.is() || !xNames->hasByName(maDirectLayer))
             throw lang::IllegalArgumentException(u"Invalid PDF target page or edit layer"_ustr, {}, 0);
     }
 
