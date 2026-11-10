@@ -654,8 +654,8 @@ CPPUNIT_TEST_FIXTURE(PDFiumLibraryTest, testPdfTileMatchesFullRaster)
     for (int y = 0; y < 512; ++y)
         for (int x = 0; x < 512; ++x)
         {
-            const auto a = pFull->GetPixelColor(y, x);
-            const auto b = pTile->GetPixelColor(y, x);
+            const auto a = pFull->GetColor(y, x);
+            const auto b = pTile->GetColor(y, x);
             for (int nDifference : { std::abs(int(a.GetRed()) - b.GetRed()),
                                      std::abs(int(a.GetGreen()) - b.GetGreen()),
                                      std::abs(int(a.GetBlue()) - b.GetBlue()) })
