@@ -66,59 +66,28 @@ class ReaderSession:
         self.timing.mark('previews.enumerated', pages=self.count)
         if not self.count:
             raise RuntimeError('PDF has no pages')
-        self.previews = []
+        self.previews = [None] * self.count
         self.page_refs = []
-        phase_started = time.monotonic()
-        self.timing.mark('previews.clone.begin', pages=self.count)
-        for i in range(self.count):
-            page = self.pages.getByIndex(i)
-            # Acquire once and retain BEFORE querying any interface. A
-            # temporary getByIndex(...).getShapeType() proxy can be released
-            # while the next wrapper is being acquired. SdrObject caches its
-            # UNO shape weakly; do not churn wrappers around the same object.
-            original = page.getByIndex(0) if page.getCount() == 1 else None
-            if (original is None or original.getShapeType()
-                    != 'com.sun.star.drawing.GraphicObjectShape'):
-                raise RuntimeError('Expected one PDFium page graphic per page; '
-                                   'annotations or a different import route are unsupported')
-            # Own the preview's lifecycle instead of using an importer-owned
-            # shape as a mutable session token. Keep the internal PDF Graphic
-            # (including its source page), without rasterizing it or invoking
-            # an editable converter. Hold the new UNO reference throughout
-            # the session, and verify the page's actual object below.
-            # Read everything before adding a second object to this page.
-            # In particular, never pass a null Graphic into the setter:
-            # SvxGraphicObject rejects it with an uninformative argument error.
-            graphic = original.getPropertyValue('Graphic')
-            position, size = original.getPosition(), original.getSize()
-            if graphic is None:
-                raise RuntimeError(f'Internal PDF preview page {i + 1} has no XGraphic '
-                                   f'before initialization (objects={page.getCount()}, '
-                                   f'name={original.getName()!r}, layer={original.LayerName!r})')
-            preview = self.document.createInstance('com.sun.star.drawing.GraphicObjectShape')
-            page.add(preview)
-            set_graphic(preview, graphic)
-            preview.setPosition(position)
-            preview.setSize(size)
-            preview.setName(f'PDF reader preview {i + 1}')
-            preview.setPropertyValue('MoveProtect', True)
-            preview.setPropertyValue('SizeProtect', True)
-            page.remove(original)
-            self.previews.append(preview)
-            self.page_refs.append(page)
-            page.Name = f'PDF source page {i + 1}'
-            if (i + 1) % 25 == 0 or i + 1 == self.count:
-                self.timing.mark('previews.clone.progress', completed=i + 1, pages=self.count,
-                                 duration_ms=round((time.monotonic() - phase_started) * 1000, 2))
-        self.timing.mark('previews.clone.end', duration_ms=round((time.monotonic() - phase_started) * 1000, 2))
+        self._originals = []
+        # Keep stable page/shape wrappers and source-page identities, but do
+        # not fetch XGraphic or clone a preview for every page at startup.
+        with self.timing.span('previews.register', pages=self.count):
+            for i in range(self.count):
+                page = self.pages.getByIndex(i)
+                original = page.getByIndex(0) if page.getCount() == 1 else None
+                if (original is None or original.getShapeType()
+                        != 'com.sun.star.drawing.GraphicObjectShape'):
+                    raise RuntimeError('Expected one PDFium page graphic per page; '
+                                       'annotations or a different import route are unsupported')
+                self.page_refs.append(page)
+                self._originals.append(original)
+                page.Name = f'PDF source page {i + 1}'
         phase_started = time.monotonic()
         self.timing.mark('previews.layers.begin')
         layers = self.document.getLayerManager()
         preview_layer = layers.insertNewByIndex(layers.getCount())
         preview_layer.Name = 'PDF reader locked previews'
         preview_layer.IsVisible = preview_layer.IsPrintable = True
-        for shape in self.previews:
-            layers.attachShapeToLayer(shape, preview_layer)
         preview_layer.IsLocked = True
         self.preview_layer = preview_layer
         self.edit_layer = layers.insertNewByIndex(layers.getCount())
@@ -126,19 +95,64 @@ class ReaderSession:
         self.edit_layer.IsVisible = self.edit_layer.IsPrintable = True
         self.edit_layer.IsLocked = False
         self.timing.mark('previews.layers.end', duration_ms=round((time.monotonic() - phase_started) * 1000, 2))
-        phase_started = time.monotonic()
-        self.timing.mark('previews.verify.begin')
-        for number in range(1, self.count + 1):
-            self._reading_preview(number, phase='initialization')
-            if number % 25 == 0 or number == self.count:
-                self.timing.mark('previews.verify.progress', completed=number, pages=self.count,
-                                 duration_ms=round((time.monotonic() - phase_started) * 1000, 2))
-        self.timing.mark('previews.verify.end', duration_ms=round((time.monotonic() - phase_started) * 1000, 2))
+        # Only the first page is prepared before the viewport loop starts.
+        self.ensure_preview(1)
         self.timing.mark('previews.finalize.begin')
         self.document.getUndoManager().clear()  # Initial session setup only.
         self.document.setModified(False)
         self.document.getCurrentController().setCurrentPage(self.pages.getByIndex(0))
         self.timing.mark('previews.finalize.end')
+
+    def ensure_preview(self, number):
+        """Prepare exactly this source page, without walking intermediate pages.
+
+        Retain the original until commit; failures leave it on the page. Lazy
+        setup must not create undo entries or clear edits on other pages.
+        """
+        if not 1 <= number <= self.count:
+            raise ValueError('PDF page out of range')
+        if number in self.edited or self.previews[number - 1] is not None:
+            return
+        page, original = self.page_refs[number - 1], self._originals[number - 1]
+        if (self.pages.getCount() != self.count
+                or self.pages.getByIndex(number - 1) != page
+                or page.Name != f'PDF source page {number}'
+                or page.getCount() != 1 or page.getByIndex(0) != original):
+            raise RuntimeError(f'Unprepared PDF page {number} was changed; refusing to replace objects')
+        with self.timing.span('previews.prepare_page', page=number):
+            # Keep the established owned-preview route and typed XGraphic
+            # assignment. Reusing importer-owned shapes previously caused
+            # wrapper/lifecycle failures; lazy preparation does not change it.
+            graphic = original.getPropertyValue('Graphic')
+            if graphic is None:
+                raise RuntimeError(f'Internal PDF preview page {number} has no XGraphic')
+            position, size = original.getPosition(), original.getSize()
+            undo = self.document.getUndoManager()
+            was_modified = self.document.isModified()
+            preview = self.document.createInstance('com.sun.star.drawing.GraphicObjectShape')
+            undo.lock()
+            try:
+                try:
+                    page.add(preview)
+                    set_graphic(preview, graphic)
+                    preview.setPosition(position)
+                    preview.setSize(size)
+                    preview.setName(f'PDF reader preview {number}')
+                    preview.setPropertyValue('MoveProtect', True)
+                    preview.setPropertyValue('SizeProtect', True)
+                    self.document.getLayerManager().attachShapeToLayer(preview, self.preview_layer)
+                    page.remove(original)  # Commit only once replacement is ready.
+                except BaseException:
+                    # add() can throw after insertion. Remove only our object.
+                    for i in range(page.getCount() - 1, -1, -1):
+                        if page.getByIndex(i) == preview:
+                            page.remove(preview)
+                    raise
+                self.previews[number - 1] = preview
+                self._originals[number - 1] = None
+            finally:
+                self.document.setModified(was_modified)
+                undo.unlock()
 
     def current_page(self):
         controller = self.document.getCurrentController()
@@ -156,6 +170,7 @@ class ReaderSession:
             if (1 <= number <= self.count and name == f'{prefix}{number}'
                     and self.pages.getByIndex(number - 1) == current
                     and self.page_refs[number - 1] == current):
+                self.ensure_preview(number)
                 self._prepare_view(controller, current)
                 return number
         raise RuntimeError('Page rename/reorder is unsupported; select an unchanged source page')
@@ -197,6 +212,7 @@ class ReaderSession:
                 self._attach_edit_layer(shape.getByIndex(i))
 
     def _reading_preview(self, page_number, *, phase='before conversion'):
+        self.ensure_preview(page_number)
         page = self.pages.getByIndex(page_number - 1)
         preview = page.getByIndex(0) if page.getCount() == 1 else None
         if (preview is None or preview.getShapeType() != 'com.sun.star.drawing.GraphicObjectShape'

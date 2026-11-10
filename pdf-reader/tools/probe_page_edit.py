@@ -190,6 +190,17 @@ def run(args):
                 session = ReaderSession(context, pdf.as_uri(), hidden=not args.panel_smoke, importer=importer,
                                         read_only=args.panel_smoke)
                 doc = session.document
+                if sum(p is not None for p in session.previews) != 1:
+                    raise RuntimeError('Startup eagerly prepared unvisited previews')
+                # Seek directly to the last fixture page, without preparing
+                # intermediate pages, then restore the initial active page.
+                controller = doc.getCurrentController()
+                controller.setCurrentPage(session.page_refs[-1])
+                if session.current_page() != args.pages:
+                    raise RuntimeError('Direct preview seek selected the wrong page')
+                if sum(p is not None for p in session.previews) != min(2, args.pages):
+                    raise RuntimeError('Direct preview seek prepared intermediate pages')
+                controller.setCurrentPage(session.page_refs[0])
                 if args.panel_smoke:
                     descriptor = {item.Name: item.Value for item in doc.getArgs()}
                     if descriptor.get('Hidden', False):
@@ -234,7 +245,7 @@ def run(args):
                 if calls or session.count != args.pages:
                     raise RuntimeError('Editable conversion occurred during reading startup')
                 for number in range(1, args.pages + 1):
-                    preview = session._reading_preview(number, phase='probe startup')
+                    preview = session._reading_preview(number, phase='explicit fixture verification')
                     if preview.Graphic is None or not preview.MoveProtect or not preview.SizeProtect:
                         raise RuntimeError('Owned preview lost its graphic or geometry protection')
                 provider = context.ServiceManager.createInstanceWithContext(
@@ -471,6 +482,7 @@ def run(args):
                                   'return_to_edited_page_rendering_verified': True,
                                   'navigation_during_import_retains_preview': True,
                                   'clone_failure_rollback': True, 'previous_undo_history_retained': True,
+                                  'lazy_preview_startup_verified': True, 'direct_preview_seek_verified': True,
                                   'owned_previews_verified': True, 'replacement_graphic_rejected': True,
                                   'distinct_preview_rendering_verified': True,
                                   'repeat_edit_reuses_objects': True, 'edited_text_retained': True,

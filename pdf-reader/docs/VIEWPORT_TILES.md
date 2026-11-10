@@ -44,10 +44,15 @@
 - `source.hash`、`source.snapshot`、`source.verify`：源文件校验和临时副本准备。
 - `office.launch`、`uno.connect`：启动私有 Office 和等待 UNO 连接。
 - `pdf.load_component`：同步 PDF 导入调用，内部解析、页面创建和 UI 相关耗时目前合并在此。
-- `previews.clone`：逐页接管预览；`previews.layers`：图层设置；`previews.verify`：逐页归属校验。接管及校验每 25 页输出进度，不表示已转换成可编辑对象。
+- `previews.register`：轻量登记全部页面和原始对象引用，不读取全部页面的 Graphic，不克隆全部预览；`previews.layers`：图层设置。
+- `previews.prepare_page`：首次访问指定页时，读取该页 Graphic 并接管为受保护的预览对象。启动只处理第一页；直接跳到第 450 页不会处理中间页，返回已准备页也不会重复克隆。
 - `window.activate`、`infobar.setup`、`tiles.setup`、`reader.loop.ready`：窗口激活、InfoBar、瓦片入口初始化及调度循环就绪。
 - `tiles.first_viewport`、`tiles.first_render`、`tiles.first_published`：首次视口查询、首个原生瓦片请求及首次成功贴图。每条 `reading-tile` 另带 `render_ms`（含读取 Graphic、能力检查、内部导出及输出检查）和 `install_ms`（加载 PNG 并创建 Draw 叠图）；缓存命中时 `render_ms=0`。
 
-调查时把原运行命令的末尾接 `2>&1 | tee /tmp/pdf-500p-startup.log`，完整保留从 `startup.begin` 到 `tiles.first_published` 的日志。如果停在某个 `.begin`，它也能定位仍在阻塞的调用。新增记录只用于测量，没有改变全量预览初始化或渲染方式；目标机只需更新 Python，无需重编。
+调查时把原运行命令的末尾接 `2>&1 | tee /tmp/pdf-500p-startup.log`，完整保留从 `startup.begin` 到 `tiles.first_published` 的日志。如果停在某个 `.begin`，它也能定位仍在阻塞的调用。目标机只需更新 Python，无需重编。
+
+之前的 500 页目标机日志中，全页 `previews.clone` 耗时 90.204 秒。本次改为按访问页接管，保留原来的强引用、预览归属校验和类型明确的 Graphic 赋值；失败时保留原预览，首次访问其他页不清除撤销历史或用户修改状态。仍有一次全部页面的轻量登记，且原生 `pdf.load_component` 的 11.36 秒尚未优化，因此不承诺启动达到固定秒数。
+
+目标机重点对比 `previews.setup`、`reader.loop.ready` 和 `tiles.first_published`。直接跳到第 450 页，确认新增的 `previews.prepare_page` 仅对应目标页；返回第一页不应再次接管。随后编辑一页、切换到未访问页再返回，确认编辑内容和撤销仍保留。`probe_page_edit.py` 也检查启动只准备一页和直接跳页；后续会主动遍历小样本全部页面验证图像归属，不能把这段主动遍历当成阅读器启动行为。
 
 Python 回归覆盖视口裁剪、缩放增加分辨率、边缘瓦片、数量／尺寸限制、LRU、快速翻页去抖、同步调用后的过时结果丢弃、旧桥接降级与贴图失败处理。开发机旧版 Office 不含新原生桥接，不能以这些测试宣称新构建的 GUI 高清效果已通过；需按上述步骤在目标机确认。
