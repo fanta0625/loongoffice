@@ -7,6 +7,7 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
+#include <string>
 #include <string_view>
 #include <cstdlib>
 
@@ -666,8 +667,11 @@ CPPUNIT_TEST_FIXTURE(PDFiumLibraryTest, testPdfTileMatchesFullRaster)
         }
     // Translation can change a few anti-aliasing samples. Reject meaningful
     // displacement/scale errors without requiring byte-identical glyph edges.
-    CPPUNIT_ASSERT(nError * 4 < 512 * 512 * 3);
-    CPPUNIT_ASSERT(nLargeErrors * 1000 < 512 * 512 * 3);
+    const std::string aMetrics = "total channel error=" + std::to_string(nError)
+                                + ", channels differing by >16=" + std::to_string(nLargeErrors)
+                                + ", total channels=" + std::to_string(512 * 512 * 3);
+    CPPUNIT_ASSERT_MESSAGE(aMetrics, nError * 4 < 512 * 512 * 3);
+    CPPUNIT_ASSERT_MESSAGE(aMetrics, nLargeErrors * 1000 < 512 * 512 * 3);
     pFull.reset();
     pTile.reset();
     CPPUNIT_ASSERT(!vcl::RenderPDFTile(rData.getData(), rData.getSize(), 1,

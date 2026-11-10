@@ -46,22 +46,32 @@ bool RenderPDFTile(const void* pBuffer, int nSize, sal_Int32 nPage,
     auto pPage = pDocument->openPage(nPage);
     if (!pPage)
         return false;
-    int nWidth = static_cast<int>(rTilePixels.Width());
-    int nHeight = static_cast<int>(rTilePixels.Height());
+    // Give glyph/path rasterization some context outside the requested clip.
+    // Rendering directly at a tile edge can clip glyph anti-aliasing differently
+    // from the full page, leaving visible seams. Crop the guard band afterwards.
+    constexpr int nGuard = 16;
+    const int nRequestedWidth = static_cast<int>(rTilePixels.Width()) + 2 * nGuard;
+    const int nRequestedHeight = static_cast<int>(rTilePixels.Height()) + 2 * nGuard;
+    int nWidth = nRequestedWidth;
+    int nHeight = nRequestedHeight;
     auto pBitmap = pPdfium->createBitmap(nWidth, nHeight, 1);
     // The allocation API may adjust dimensions on a fallback. A tile must
     // match the requested pixel grid exactly; reject a resized allocation.
-    if (!pBitmap || nWidth != rTilePixels.Width() || nHeight != rTilePixels.Height())
+    if (!pBitmap || nWidth != nRequestedWidth || nHeight != nRequestedHeight)
         return false;
     pBitmap->fillRect(0, 0, nWidth, nHeight, 0xFFFFFFFF);
     // PDFium clips into the small destination. A negative origin selects the
     // requested region at full zoom resolution, rather than cropping a preview.
-    pBitmap->renderPageBitmap(pDocument.get(), pPage.get(), -static_cast<int>(rTileOrigin.X()),
-                              -static_cast<int>(rTileOrigin.Y()),
+    pBitmap->renderPageBitmap(pDocument.get(), pPage.get(), nGuard - static_cast<int>(rTileOrigin.X()),
+                              nGuard - static_cast<int>(rTileOrigin.Y()),
                               static_cast<int>(rPagePixels.Width()),
                               static_cast<int>(rPagePixels.Height()));
-    rResult = pBitmap->createBitmapFromBuffer().CreateColorBitmap();
-    return !rResult.IsEmpty();
+    Bitmap aResult = pBitmap->createBitmapFromBuffer().CreateColorBitmap();
+    if (aResult.IsEmpty()
+        || !aResult.Crop(tools::Rectangle(Point(nGuard, nGuard), rTilePixels)))
+        return false;
+    rResult = std::move(aResult);
+    return true;
 }
 
 size_t RenderPDFBitmaps(const void* pBuffer, int nSize, std::vector<Bitmap>& rBitmaps,
