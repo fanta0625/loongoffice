@@ -36,6 +36,7 @@
 #include "eventimp.hxx"
 #include "ximpshap.hxx"
 #include "sdpropls.hxx"
+#include "sdxmlimp_impl.hxx"
 #include <xmloff/xmlprmap.hxx>
 #include "ximp3dscene.hxx"
 #include "ximp3dobject.hxx"
@@ -485,6 +486,13 @@ void XMLShapeImportHelper::finishShape(
     uno::Reference< beans::XPropertySet > xPropSet(rShape, uno::UNO_QUERY);
     if ( xPropSet.is() )
     {
+        if (auto pDrawImport = dynamic_cast<SdXMLImport*>(&mrImporter);
+            pDrawImport && pDrawImport->IsDirectPageImport())
+        {
+            // Native in-process call for groups and their children too.
+            xPropSet->setPropertyValue(u"LayerName"_ustr,
+                                      uno::Any(pDrawImport->GetDirectLayer()));
+        }
         if ( mrImporter.IsShapePositionInHoriL2R() &&
              xPropSet->getPropertySetInfo()->hasPropertyByName(
                 u"PositionLayoutDir"_ustr) )

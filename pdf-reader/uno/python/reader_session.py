@@ -10,7 +10,9 @@ from edit_cache import StagedPageCache
 from edit_copy import (CopyProfile, controller_batch, COPY_BATCH_SIZE,
                        COPY_BATCH_MIN_SIZE, COPY_BATCH_SECONDS)
 from timing_log import TimingLog
+from direct_edit import import_into_page, discard_resources
 import time
+import uuid
 
 
 class SessionClosed(RuntimeError):
@@ -31,9 +33,11 @@ def set_graphic(shape, graphic):
 
 
 class ReaderSession:
-    def __init__(self, context, pdf_url, *, hidden=False, importer=open_for_edit, read_only=False, timing=None):
+    def __init__(self, context, pdf_url, *, hidden=False, importer=open_for_edit, read_only=False,
+                 timing=None, direct_edit=False):
         self.timing = timing or TimingLog()
         self.context, self.pdf_url, self.importer = context, pdf_url, importer
+        self.direct_edit = direct_edit
         self.edited = set()
         self.import_calls = []
         self.staged_cache = StagedPageCache()
@@ -232,6 +236,8 @@ class ReaderSession:
 
     def prefetch_page(self, page_number, anchor):
         """Synchronous idle preparation; never inserts into the user's document."""
+        if self.direct_edit:
+            return None  # Do not recreate temporary Draw documents for speculation.
         if self.document.isReadonly() or self.current_page() != anchor:
             return None
         neighbours = {p for p in (anchor + 1, anchor - 1) if 1 <= p <= self.count}
@@ -358,6 +364,8 @@ class ReaderSession:
         page_number = self.current_page()
         if page_number in self.edited:
             return {'page': page_number, 'reused': True}
+        if self.direct_edit:
+            return self._edit_direct_page(page_number)
         page = self.pages.getByIndex(page_number - 1)
         preview = self._reading_preview(page_number)
         # Conversion is staged before touching the reading document. Only the
@@ -412,6 +420,73 @@ class ReaderSession:
                                  shapes=len(shapes),
                                  duration_ms=round((time.monotonic() - imported_at) * 1000, 2),
                                  **profile.snapshot())
+
+    def _edit_direct_page(self, number):
+        page = self.pages.getByIndex(number - 1)
+        preview = self._reading_preview(number)
+        controller = self.document.getCurrentController()
+        undo = self.document.getUndoManager()
+        modified = self.document.isModified()
+        prefix = 'PDF-reader-' + uuid.uuid4().hex + '-'
+        profile = CopyProfile(self.timing, number)
+        status = 'failed'
+        started = time.monotonic()
+        count = 0
+        self.import_calls.append(number)
+        undo.lock()
+        try:
+            with controller_batch(self.document, profile):
+                try:
+                    with profile.phase('direct_import'), self.timing.span('edit.direct.import', page=number):
+                        import_into_page(self.context, self.document, page, self.pdf_url,
+                                         number, self.edit_layer.Name, prefix)
+                    with profile.phase('commit'):
+                        count = page.getCount() - 1
+                        if (self.pages.getCount() != self.count
+                                or self.pages.getByIndex(number - 1) != page
+                                or page.Name != f'PDF source page {number}'
+                                or self.previews[number - 1] != preview
+                                or count < 0):
+                            raise RuntimeError('Direct PDF import changed target page identity')
+                        # Native SAX is synchronous: navigation cancellation is
+                        # checked before commit, not between imported shapes.
+                        if controller is None or controller.getCurrentPage() != page:
+                            raise ConversionCancelled('active-page-changed')
+                        self.document.setModified(True)
+                        page.remove(preview)
+                        self.edited.add(number)
+                        status = 'completed'
+                except BaseException:
+                    with profile.phase('rollback'):
+                        # Only failure walks objects across UNO. The target was
+                        # verified to contain exactly our owned preview before
+                        # entering the native content-only importer.
+                        preview_present = False
+                        for index in range(page.getCount() - 1, -1, -1):
+                            shape = page.getByIndex(index)
+                            if shape != preview:
+                                page.remove(shape)
+                            else:
+                                preview_present = True
+                        if not preview_present:
+                            page.add(preview)
+                        discard_resources(self.context, self.document, prefix)
+                        self.document.setModified(modified)
+                    raise
+            return {'page': number, 'reused': False, 'shapes': count,
+                    'edit_route': 'native-direct-page', 'temporary_draw_documents': 0,
+                    'copied_shapes': 0, 'page_geometry_verified': True,
+                    'import_seconds': time.monotonic() - started,
+                    'copy_seconds': 0.0, 'view': self.view_state()}
+        except ConversionCancelled:
+            status = 'cancelled'
+            return {'page': number, 'cancelled': True, 'preview_retained': True,
+                    'edit_route': 'native-direct-page', 'copy_seconds': 0.0}
+        finally:
+            undo.unlock()
+            self.timing.mark('edit.direct.summary', page=number, status=status, shapes=count,
+                             duration_ms=round((time.monotonic() - started) * 1000, 2),
+                             **profile.snapshot())
 
     def close(self):
         try:

@@ -129,6 +129,11 @@
     <service name="com.sun.star.comp.Draw.XMLOasisContentImporter"/>
     <optional/>
   </implementation>
+  <implementation name="PDFPageContentImport"
+    constructor="org_loongoffice_comp_Draw_PDFPageContentImporter_get_implementation">
+    <service name="org.loongoffice.comp.Draw.PDFPageContentImporter"/>
+    <optional/>
+  </implementation>
   <implementation name="XMLImpressContentImportOasis"
     constructor="com_sun_star_comp_Impress_XMLOasisContentImporter_get_implementation">
     <service name="com.sun.star.comp.Impress.XMLOasisContentImporter"/>

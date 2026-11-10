@@ -75,14 +75,15 @@ def main(args):
                 timing.mark('uno.connect.end')
                 desktop = context.ServiceManager.createInstanceWithContext('com.sun.star.frame.Desktop', context)
                 with timing.span('reader.session'):
-                    session = ReaderSession(context, snapshot.as_uri(), read_only=True, timing=timing)
+                    session = ReaderSession(context, snapshot.as_uri(), read_only=True, timing=timing,
+                                            direct_edit=not args.legacy_edit_copy)
                 session.document.setTitle(source.name + ' — PDF 阅读／按页编辑（开发版）')
                 print(f'Reading {session.count} pages; editable imports so far: 0', flush=True)
                 commands = SimpleQueue()
                 with timing.span('infobar.setup'):
                     ui = ReaderInfoBar(session.document, commands)
                 engine = EditMode(session, lambda: session.enable_editing(ui.native_edit),
-                                  prefetch_seconds=None if args.no_prefetch else 2)
+                                  prefetch_seconds=None if args.no_prefetch or not args.legacy_edit_copy else 2)
                 if not args.no_tiles:
                     with timing.span('tiles.setup'):
                         tiles = ViewportTiles(session, directory / 'tiles', timing=timing)
@@ -173,7 +174,8 @@ def main(args):
                           'tiles': bool(tiles and tiles.metrics['published']),
                           'tile_reading': dict(tiles.metrics, error=tiles.error) if tiles else None,
                           'continuous_layout': False, 'pdf_save_supported': False}
-                report['prefetch'] = {'enabled': not args.no_prefetch, 'neighbours_each_side': 1,
+                report['edit_route'] = 'legacy-copy' if args.legacy_edit_copy else 'native-direct-page'
+                report['prefetch'] = {'enabled': not args.no_prefetch and args.legacy_edit_copy, 'neighbours_each_side': 1,
                                       'max_staged_pages': 2, 'max_staged_shapes': 20000,
                                       'synchronous_import_cancellable': False}
                 for resource in (tiles, ui, session):
@@ -209,4 +211,6 @@ if __name__ == '__main__':
     parser.add_argument('--no-prefetch', action='store_true',
                         help='Disable synchronous idle neighbour preparation (useful for very slow pages)')
     parser.add_argument('--no-tiles', action='store_true', help='Use only the original whole-page preview')
+    parser.add_argument('--legacy-edit-copy', action='store_true',
+                        help='Use the old temporary-document copier for comparison only')
     main(parser.parse_args())

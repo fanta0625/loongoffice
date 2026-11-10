@@ -45,6 +45,13 @@ SdXMLDrawPageContext::SdXMLDrawPageContext( SdXMLImport& rImport,
 :   SdXMLGenericPageContext( rImport, xAttrList, rShapes )
 ,   mbHadSMILNodes( false )
 {
+    if (rImport.IsDirectPageImport())
+    {
+        // Import content only: the preview, name, dimensions, master page and
+        // page identity belong to the live reader, not the incoming PDF XML.
+        GetImport().GetShapeImport()->startPage(rShapes);
+        return;
+    }
     bool bHaveXmlId( false );
     OUString sXmlId, sStyleName, sContextName, sMasterPageName, sHREF;
 
@@ -318,6 +325,16 @@ css::uno::Reference< css::xml::sax::XFastContextHandler > SdXMLBodyContext::crea
         }
         case XML_ELEMENT(DRAW, XML_PAGE):
         {
+            if (GetSdImport().IsDirectPageImport())
+            {
+                if (!GetSdImport().IsDirectGeometryVerified())
+                    throw uno::RuntimeException(u"Missing PDF source page geometry"_ustr);
+                if (GetSdImport().GetNewPageCount() != 0)
+                    throw uno::RuntimeException(u"Multiple pages in PDF direct import"_ustr);
+                GetSdImport().IncrementNewPageCount();
+                return new SdXMLDrawPageContext(GetSdImport(), xAttrList,
+                                                GetSdImport().GetDirectPage());
+            }
             // only read the first page in preview mode
             if( (GetSdImport().GetNewPageCount() == 0) || !GetSdImport().IsPreview() )
             {

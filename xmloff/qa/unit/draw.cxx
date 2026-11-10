@@ -21,6 +21,17 @@
 #include <com/sun/star/text/XTextRange.hpp>
 #include <com/sun/star/text/XTextTable.hpp>
 #include <com/sun/star/text/GraphicCrop.hpp>
+#include <com/sun/star/drawing/XLayerSupplier.hpp>
+#include <com/sun/star/drawing/XLayerManager.hpp>
+#include <com/sun/star/drawing/LineDash.hpp>
+#include <com/sun/star/document/XImporter.hpp>
+#include <com/sun/star/lang/XMultiServiceFactory.hpp>
+#include <com/sun/star/container/XNamed.hpp>
+#include <com/sun/star/container/XNameContainer.hpp>
+#include <com/sun/star/xml/sax/XParser.hpp>
+#include <com/sun/star/xml/sax/XDocumentHandler.hpp>
+#include <com/sun/star/xml/sax/InputSource.hpp>
+#include <com/sun/star/ucb/XSimpleFileAccess.hpp>
 
 #include <comphelper/propertyvalue.hxx>
 #include <comphelper/scopeguard.hxx>
@@ -87,6 +98,95 @@ uno::Reference<drawing::XShape> XmloffDrawTest::getShape(sal_uInt8 nShapeIndex)
     uno::Reference<drawing::XShape> xShape(xDrawPage->getByIndex(nShapeIndex),
                                            uno::UNO_QUERY_THROW);
     return xShape;
+}
+
+CPPUNIT_TEST_FIXTURE(XmloffDrawTest, testPDFDirectPageContent)
+{
+    loadFromURL(u"private:factory/sdraw"_ustr);
+    uno::Reference<drawing::XDrawPagesSupplier> xSupplier(mxComponent, uno::UNO_QUERY_THROW);
+    auto xPages = xSupplier->getDrawPages();
+    auto xTarget = xPages->insertNewByIndex(1);
+    xPages->insertNewByIndex(2);
+    uno::Reference<beans::XPropertySet> xPageProps(xTarget, uno::UNO_QUERY_THROW);
+    xPageProps->setPropertyValue(u"Width"_ustr, uno::Any(sal_Int32(20000)));
+    xPageProps->setPropertyValue(u"Height"_ustr, uno::Any(sal_Int32(10000)));
+    uno::Reference<container::XNamed> xPageName(xTarget, uno::UNO_QUERY_THROW);
+    xPageName->setName(u"reader-page-two"_ustr);
+    uno::Reference<drawing::XMasterPageTarget> xMasterTarget(xTarget, uno::UNO_QUERY_THROW);
+    auto xMaster = xMasterTarget->getMasterPage();
+    uno::Reference<lang::XMultiServiceFactory> xFactory(mxComponent, uno::UNO_QUERY_THROW);
+    uno::Reference<drawing::XShape> xPreview(
+        xFactory->createInstance(u"com.sun.star.drawing.RectangleShape"_ustr), uno::UNO_QUERY_THROW);
+    xTarget->add(xPreview);
+    uno::Reference<beans::XPropertySet> xPreviewProps(xPreview, uno::UNO_QUERY_THROW);
+    uno::Reference<beans::XPropertySet> xExistingStyle(
+        xPreviewProps->getPropertyValue(u"Style"_ustr), uno::UNO_QUERY_THROW);
+    xExistingStyle->setPropertyValue(u"FillColor"_ustr, uno::Any(sal_Int32(0x123456)));
+
+    uno::Reference<drawing::XLayerSupplier> xLayerSupplier(mxComponent, uno::UNO_QUERY_THROW);
+    uno::Reference<drawing::XLayerManager> xLayers(xLayerSupplier->getLayerManager(), uno::UNO_QUERY_THROW);
+    auto xLayer = xLayers->insertNewByIndex(xLayers->getCount());
+    uno::Reference<beans::XPropertySet> xLayerProps(xLayer, uno::UNO_QUERY_THROW);
+    xLayerProps->setPropertyValue(u"Name"_ustr, uno::Any(u"direct-edit"_ustr));
+    uno::Reference<container::XNameContainer> xDashes(
+        xFactory->createInstance(u"com.sun.star.drawing.DashTable"_ustr), uno::UNO_QUERY_THROW);
+    drawing::LineDash aDash;
+    aDash.Distance = 777;
+    xDashes->insertByName(u"dash1"_ustr, uno::Any(aDash));
+
+    const auto importContent = [&](const OUString& rPrefix) {
+        auto xServices = getComponentContext()->getServiceManager();
+        uno::Reference<xml::sax::XDocumentHandler> xHandler(
+            xServices->createInstanceWithArgumentsAndContext(
+                u"org.loongoffice.comp.Draw.PDFPageContentImporter"_ustr,
+                { uno::Any(comphelper::makePropertyValue(u"TargetPage"_ustr, xTarget)),
+                  uno::Any(comphelper::makePropertyValue(u"EditLayerName"_ustr, u"direct-edit"_ustr)),
+                  uno::Any(comphelper::makePropertyValue(u"ResourcePrefix"_ustr, rPrefix)) },
+                getComponentContext()), uno::UNO_QUERY_THROW);
+        uno::Reference<document::XImporter>(xHandler, uno::UNO_QUERY_THROW)->setTargetDocument(mxComponent);
+        uno::Reference<xml::sax::XParser> xParser(xServices->createInstanceWithContext(
+            u"com.sun.star.xml.sax.Parser"_ustr, getComponentContext()), uno::UNO_QUERY_THROW);
+        xParser->setDocumentHandler(xHandler);
+        uno::Reference<ucb::XSimpleFileAccess> xFiles(xServices->createInstanceWithContext(
+            u"com.sun.star.ucb.SimpleFileAccess"_ustr, getComponentContext()), uno::UNO_QUERY_THROW);
+        xml::sax::InputSource aInput;
+        aInput.aInputStream = xFiles->openFileRead(createFileURL(u"pdf-direct-page.fodg"));
+        xParser->parseStream(aInput);
+        aInput.aInputStream->closeInput();
+    };
+    importContent(u"direct-test-"_ustr);
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(3), xPages->getCount());
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(2), xTarget->getCount());
+    CPPUNIT_ASSERT_EQUAL(u"reader-page-two"_ustr, xPageName->getName());
+    CPPUNIT_ASSERT(xMaster == xMasterTarget->getMasterPage());
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(20000), xPageProps->getPropertyValue(u"Width"_ustr).get<sal_Int32>());
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(10000), xPageProps->getPropertyValue(u"Height"_ustr).get<sal_Int32>());
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(0x123456), xExistingStyle->getPropertyValue(u"FillColor"_ustr).get<sal_Int32>());
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(777), xDashes->getByName(u"dash1"_ustr).get<drawing::LineDash>().Distance);
+    CPPUNIT_ASSERT(xDashes->hasByName(u"direct-test-dash-1"_ustr));
+    uno::Reference<drawing::XShape> xGroup;
+    for (sal_Int32 i = 0; i < xTarget->getCount(); ++i)
+    {
+        uno::Reference<drawing::XShape> xShape(xTarget->getByIndex(i), uno::UNO_QUERY_THROW);
+        if (xShape != xPreview)
+            xGroup = xShape;
+    }
+    CPPUNIT_ASSERT(xGroup.is());
+    uno::Reference<beans::XPropertySet> xGroupProps(xGroup, uno::UNO_QUERY_THROW);
+    CPPUNIT_ASSERT_EQUAL(u"direct-edit"_ustr, xGroupProps->getPropertyValue(u"LayerName"_ustr).get<OUString>());
+    uno::Reference<drawing::XShapes> xChildren(xGroup, uno::UNO_QUERY_THROW);
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(2), xChildren->getCount());
+    for (sal_Int32 i = 0; i < xChildren->getCount(); ++i)
+    {
+        uno::Reference<beans::XPropertySet> xChild(xChildren->getByIndex(i), uno::UNO_QUERY_THROW);
+        CPPUNIT_ASSERT_EQUAL(u"direct-edit"_ustr, xChild->getPropertyValue(u"LayerName"_ustr).get<OUString>());
+    }
+    // A size mismatch must be rejected before any editable shape is inserted.
+    xTarget->remove(xGroup);
+    xPageProps->setPropertyValue(u"Width"_ustr, uno::Any(sal_Int32(21000)));
+    CPPUNIT_ASSERT_THROW(importContent(u"direct-mismatch-"_ustr), uno::Exception);
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(1), xTarget->getCount());
+    CPPUNIT_ASSERT_EQUAL(uno::Reference<drawing::XShape>(xTarget->getByIndex(0), uno::UNO_QUERY_THROW), xPreview);
 }
 
 CPPUNIT_TEST_FIXTURE(XmloffDrawTest, testTextBoxLoss)

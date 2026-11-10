@@ -62,6 +62,11 @@ class SdXMLImport: public SvXMLImport
     bool                        mbIsDraw;
     bool                        mbLoadDoc;
     bool                        mbPreview;
+    bool                        mbDirectPageImport;
+    css::uno::Reference<css::drawing::XDrawPage> mxDirectPage;
+    OUString                    maDirectLayer;
+    OUString                    maDirectResourcePrefix;
+    bool                        mbDirectGeometryVerified = false;
 
     static constexpr OUString gsPageLayouts = u"PageLayouts"_ustr;
     static constexpr OUString gsPreview = u"Preview"_ustr;
@@ -81,13 +86,21 @@ public:
     SdXMLImport(
         const css::uno::Reference< css::uno::XComponentContext >& xContext,
         OUString const & implementationName,
-        bool bIsDraw, SvXMLImportFlags nImportFlags );
+        bool bIsDraw, SvXMLImportFlags nImportFlags, bool bDirectPageImport = false );
 
     // XImporter
     virtual void SAL_CALL setTargetDocument( const css::uno::Reference< css::lang::XComponent >& xDoc ) override;
 
     // XInitialization
     virtual void SAL_CALL initialize( const css::uno::Sequence< css::uno::Any >& aArguments ) override;
+    virtual void SAL_CALL endDocument() override;
+
+    bool IsDirectPageImport() const { return mbDirectPageImport; }
+    const css::uno::Reference<css::drawing::XDrawPage>& GetDirectPage() const { return mxDirectPage; }
+    const OUString& GetDirectLayer() const { return maDirectLayer; }
+    const OUString& GetDirectResourcePrefix() const { return maDirectResourcePrefix; }
+    void VerifyDirectPageLayout(const OUString& rLayoutName);
+    bool IsDirectGeometryVerified() const { return mbDirectGeometryVerified; }
 
     virtual void SetViewSettings(const css::uno::Sequence<css::beans::PropertyValue>& aViewProps) override;
     virtual void SetConfigurationSettings(const css::uno::Sequence<css::beans::PropertyValue>& aConfigProps) override;

@@ -20,6 +20,8 @@
 #include <osl/thread.h>
 #include <sal/log.hxx>
 #include <comphelper/sequence.hxx>
+#include <cstdlib>
+#include <sax/fastattribs.hxx>
 
 #include <xmloff/xmlscripti.hxx>
 #include "sdxmlimp_impl.hxx"
@@ -41,6 +43,10 @@
 #include <xmloff/ProgressBarHelper.hxx>
 
 #include <xmloff/XMLFontStylesContext.hxx>
+#include "../style/FillStyleContext.hxx"
+#include <xmloff/families.hxx>
+#include <com/sun/star/drawing/XLayerSupplier.hpp>
+#include <com/sun/star/container/XNameContainer.hpp>
 
 #include <com/sun/star/document/XDocumentProperties.hpp>
 #include <com/sun/star/document/XDocumentPropertiesSupplier.hpp>
@@ -49,6 +55,93 @@ using namespace ::com::sun::star;
 using namespace ::xmloff::token;
 
 namespace {
+
+// PDF emits a named "standard" style and stroke-dash resources. Never import
+// its named styles over a live document's styles. Dashes need private names:
+// the ordinary dash context replaces existing resources on a name collision.
+class PDFPageResourcesContext final : public SvXMLImportContext
+{
+public:
+    explicit PDFPageResourcesContext(SdXMLImport& rImport) : SvXMLImportContext(rImport) {}
+    uno::Reference<xml::sax::XFastContextHandler> SAL_CALL createFastChildContext(
+        sal_Int32 nElement, const uno::Reference<xml::sax::XFastAttributeList>& xAttrs) override
+    {
+        if (nElement == XML_ELEMENT(STYLE, XML_STYLE))
+            return nullptr; // PDF's named standard style; preserve the host's styles.
+        const bool bDash = nElement == XML_ELEMENT(DRAW, XML_STROKE_DASH);
+        if (!bDash && nElement != XML_ELEMENT(DRAW, XML_FILL_IMAGE))
+            throw uno::RuntimeException(u"Unsupported PDF page resource"_ustr);
+        OUString aName;
+        auto xTable = bDash ? GetImport().GetDashHelper() : GetImport().GetBitmapHelper();
+        if (!xTable.is())
+            throw uno::RuntimeException(u"Missing Draw resource table"_ustr);
+        sal_Int32 nSuffix = 1;
+        OUString aPrivateName;
+        do
+            aPrivateName = static_cast<SdXMLImport&>(GetImport()).GetDirectResourcePrefix()
+                           + (bDash ? u"dash-"_ustr : u"bitmap-"_ustr) + OUString::number(nSuffix++);
+        while (xTable->hasByName(aPrivateName));
+        rtl::Reference<sax_fastparser::FastAttributeList> xPrivateAttrs(
+            new sax_fastparser::FastAttributeList(nullptr));
+        for (const auto& rAttr : sax_fastparser::castToFastAttributeList(xAttrs))
+        {
+            if (rAttr.getToken() == XML_ELEMENT(DRAW, XML_NAME))
+            {
+                aName = rAttr.toString();
+                xPrivateAttrs->add(rAttr.getToken(), aPrivateName);
+            }
+            else if (rAttr.getToken() != XML_ELEMENT(DRAW, XML_DISPLAY_NAME))
+                xPrivateAttrs->add(rAttr.getToken(), rAttr.toString());
+        }
+        if (aName.isEmpty())
+            throw uno::RuntimeException(u"Missing PDF resource name"_ustr);
+        GetImport().AddStyleDisplayName(bDash ? XmlStyleFamily::SD_STROKE_DASH_ID
+                                             : XmlStyleFamily::SD_FILL_IMAGE_ID,
+                                       aName, aPrivateName);
+        if (bDash)
+            return new XMLDashStyleContext(GetImport(), nElement, xPrivateAttrs);
+        return new XMLBitmapStyleContext(GetImport(), nElement, xPrivateAttrs);
+    }
+};
+
+// The PDF converter emits its dash/bitmap resources in automatic-styles.
+// Keep ordinary automatic graphic/text/page styles, but isolate resources in
+// both style sections so later imports cannot alter earlier pages.
+class PDFPageAutoStylesContext final : public SdXMLStylesContext
+{
+public:
+    explicit PDFPageAutoStylesContext(SdXMLImport& rImport) : SdXMLStylesContext(rImport, true) {}
+    uno::Reference<xml::sax::XFastContextHandler> SAL_CALL createFastChildContext(
+        sal_Int32 nElement, const uno::Reference<xml::sax::XFastAttributeList>& xAttrs) override
+    {
+        if (nElement == XML_ELEMENT(DRAW, XML_STROKE_DASH)
+            || nElement == XML_ELEMENT(DRAW, XML_FILL_IMAGE))
+        {
+            rtl::Reference<PDFPageResourcesContext> xResources(
+                new PDFPageResourcesContext(static_cast<SdXMLImport&>(GetImport())));
+            return xResources->createFastChildContext(nElement, xAttrs);
+        }
+        return SdXMLStylesContext::createFastChildContext(nElement, xAttrs);
+    }
+};
+
+class PDFPageLayoutsContext final : public SvXMLImportContext
+{
+public:
+    explicit PDFPageLayoutsContext(SdXMLImport& rImport) : SvXMLImportContext(rImport) {}
+    uno::Reference<xml::sax::XFastContextHandler> SAL_CALL createFastChildContext(
+        sal_Int32 nElement, const uno::Reference<xml::sax::XFastAttributeList>& xAttrs) override
+    {
+        if (nElement != XML_ELEMENT(STYLE, XML_MASTER_PAGE))
+            throw uno::RuntimeException(u"Unsupported PDF master style"_ustr);
+        OUString aLayout;
+        for (const auto& rAttr : sax_fastparser::castToFastAttributeList(xAttrs))
+            if (rAttr.getToken() == XML_ELEMENT(STYLE, XML_PAGE_LAYOUT_NAME))
+                aLayout = rAttr.toString();
+        static_cast<SdXMLImport&>(GetImport()).VerifyDirectPageLayout(aLayout);
+        return new SvXMLImportContext(GetImport());
+    }
+};
 
 class SdXMLBodyContext_Impl : public SvXMLImportContext
 {
@@ -116,6 +209,8 @@ uno::Reference< xml::sax::XFastContextHandler > SAL_CALL SdXMLDocContext_Impl::c
         }
         case XML_ELEMENT(OFFICE, XML_MASTER_STYLES):
         {
+            if (GetSdImport().IsDirectPageImport())
+                return new PDFPageLayoutsContext(GetSdImport());
             if( GetImport().getImportFlags() & SvXMLImportFlags::MASTERSTYLES )
             {
                 // office:master-styles inside office:document
@@ -142,6 +237,8 @@ uno::Reference< xml::sax::XFastContextHandler > SAL_CALL SdXMLDocContext_Impl::c
         }
         case XML_ELEMENT(OFFICE, XML_STYLES):
         {
+            if (GetSdImport().IsDirectPageImport())
+                return new PDFPageResourcesContext(GetSdImport());
             if( GetImport().getImportFlags() & SvXMLImportFlags::STYLES )
             {
                 // office:styles inside office:document
@@ -224,6 +321,19 @@ com_sun_star_comp_Draw_XMLOasisImporter_get_implementation(uno::XComponentContex
 }
 
 extern "C" SAL_DLLPUBLIC_EXPORT uno::XInterface*
+org_loongoffice_comp_Draw_PDFPageContentImporter_get_implementation(
+    uno::XComponentContext* pCtx, uno::Sequence<uno::Any> const& rArguments)
+{
+    rtl::Reference<SdXMLImport> xImport(new SdXMLImport(pCtx, u"PDFPageContentImport"_ustr, true,
+        SvXMLImportFlags::AUTOSTYLES | SvXMLImportFlags::CONTENT | SvXMLImportFlags::FONTDECLS,
+        true));
+    xImport->initialize(rArguments);
+    // PDFIRawAdaptor emits legacy SAX. Keep the legacy-to-fast translation
+    // entirely in Office, rather than forwarding every XML token via PyUNO.
+    return cppu::acquire(new SvXMLLegacyToFastDocHandler(xImport));
+}
+
+extern "C" SAL_DLLPUBLIC_EXPORT uno::XInterface*
 com_sun_star_comp_Draw_XMLOasisStylesImporter_get_implementation(uno::XComponentContext* pCtx,
                                                            uno::Sequence<uno::Any> const& /*rSeq*/)
 {
@@ -296,13 +406,14 @@ com_sun_star_comp_Impress_XMLOasisSettingsImporter_get_implementation(
 SdXMLImport::SdXMLImport(
     const css::uno::Reference< css::uno::XComponentContext >& xContext,
     OUString const & implementationName,
-    bool bIsDraw, SvXMLImportFlags nImportFlags )
+    bool bIsDraw, SvXMLImportFlags nImportFlags, bool bDirectPageImport )
 :   SvXMLImport( xContext, implementationName, nImportFlags ),
     mnNewPageCount(0),
     mnNewMasterPageCount(0),
     mbIsDraw(bIsDraw),
     mbLoadDoc(true),
-    mbPreview(false)
+    mbPreview(false),
+    mbDirectPageImport(bDirectPageImport)
 {
     // add namespaces
     GetNamespaceMap().Add(
@@ -349,6 +460,21 @@ void SAL_CALL SdXMLImport::setTargetDocument( const uno::Reference< lang::XCompo
     if(!mxDocDrawPages.is())
         throw lang::IllegalArgumentException();
 
+    if (mbDirectPageImport)
+    {
+        bool bFound = false;
+        for (sal_Int32 i = 0; i < mxDocDrawPages->getCount(); ++i)
+        {
+            uno::Reference<drawing::XDrawPage> xPage(mxDocDrawPages->getByIndex(i), uno::UNO_QUERY);
+            bFound |= xPage == mxDirectPage;
+        }
+        uno::Reference<drawing::XLayerSupplier> xLayers(GetModel(), uno::UNO_QUERY_THROW);
+        uno::Reference<container::XNameAccess> xNames(xLayers->getLayerManager(), uno::UNO_QUERY_THROW);
+        if (!mbIsDraw || !mxDirectPage.is() || !bFound || mxDirectPage->getCount() != 1
+            || maDirectLayer.isEmpty() || !xNames->hasByName(maDirectLayer))
+            throw lang::IllegalArgumentException(u"Invalid PDF target page or edit layer"_ustr, {}, 0);
+    }
+
     if( mxDocDrawPages.is() && mxDocDrawPages->getCount() > 0 )
     {
         uno::Reference< form::XFormsSupplier > xFormsSupp;
@@ -373,6 +499,24 @@ void SAL_CALL SdXMLImport::setTargetDocument( const uno::Reference< lang::XCompo
 void SAL_CALL SdXMLImport::initialize( const uno::Sequence< uno::Any >& aArguments )
 {
     SvXMLImport::initialize( aArguments );
+
+    if (mbDirectPageImport)
+    {
+        for (const auto& rArgument : aArguments)
+        {
+            beans::PropertyValue aProperty;
+            if (!(rArgument >>= aProperty))
+                continue;
+            if (aProperty.Name == "TargetPage")
+                aProperty.Value >>= mxDirectPage;
+            else if (aProperty.Name == "EditLayerName")
+                aProperty.Value >>= maDirectLayer;
+            else if (aProperty.Name == "ResourcePrefix")
+                aProperty.Value >>= maDirectResourcePrefix;
+        }
+        if (!mxDirectPage.is() || maDirectLayer.isEmpty() || maDirectResourcePrefix.isEmpty())
+            throw lang::IllegalArgumentException(u"PDF direct import requires a page and layer"_ustr, {}, 0);
+    }
 
     static constexpr OUString sOrganizerMode(u"OrganizerMode"_ustr);
     bool bStyleOnly(false);
@@ -422,6 +566,8 @@ SvXMLImportContext *SdXMLImport::CreateFastContext( sal_Int32 nElement,
         break;
         case XML_ELEMENT( OFFICE, XML_DOCUMENT ):
         {
+            if (mbDirectPageImport)
+                return new SdXMLDocContext_Impl(*this);
             uno::Reference<document::XDocumentPropertiesSupplier> xDPS(
                 GetModel(), uno::UNO_QUERY_THROW);
             // flat OpenDocument file format
@@ -470,8 +616,10 @@ SvXMLStylesContext *SdXMLImport::CreateAutoStylesContext()
     if(GetShapeImport()->GetAutoStylesContext())
         return GetShapeImport()->GetAutoStylesContext();
 
-    GetShapeImport()->SetAutoStylesContext(new SdXMLStylesContext(
-        *this, true));
+    if (mbDirectPageImport)
+        GetShapeImport()->SetAutoStylesContext(new PDFPageAutoStylesContext(*this));
+    else
+        GetShapeImport()->SetAutoStylesContext(new SdXMLStylesContext(*this, true));
 
     return GetShapeImport()->GetAutoStylesContext();
 }
@@ -481,6 +629,29 @@ SvXMLImportContext* SdXMLImport::CreateMasterStylesContext()
     if (!mxMasterStylesContext.is())
         mxMasterStylesContext.set(new SdXMLMasterStylesContext(*this));
     return mxMasterStylesContext.get();
+}
+
+void SAL_CALL SdXMLImport::endDocument()
+{
+    SvXMLImport::endDocument();
+    if (mbDirectPageImport && mnNewPageCount != 1)
+        throw uno::RuntimeException(u"PDF direct import requires exactly one source page"_ustr);
+}
+
+void SdXMLImport::VerifyDirectPageLayout(const OUString& rLayoutName)
+{
+    const auto* pStyles = GetShapeImport()->GetAutoStylesContext();
+    const auto* pLayout = pStyles ? dynamic_cast<const SdXMLPageMasterContext*>(
+        pStyles->FindStyleChildContext(XmlStyleFamily::SD_PAGEMASTERCONTEXT_ID, rLayoutName)) : nullptr;
+    const auto* pProperties = pLayout ? pLayout->GetPageMasterStyle() : nullptr;
+    uno::Reference<beans::XPropertySet> xPage(mxDirectPage, uno::UNO_QUERY_THROW);
+    sal_Int32 nWidth = 0, nHeight = 0;
+    xPage->getPropertyValue(u"Width"_ustr) >>= nWidth;
+    xPage->getPropertyValue(u"Height"_ustr) >>= nHeight;
+    if (!pProperties || std::abs(pProperties->GetWidth() - nWidth) > 30
+        || std::abs(pProperties->GetHeight() - nHeight) > 30)
+        throw uno::RuntimeException(u"PDF direct import page geometry differs from preview"_ustr);
+    mbDirectGeometryVerified = true;
 }
 
 SvXMLImportContext *SdXMLImport::CreateFontDeclsContext()
