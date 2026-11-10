@@ -7,6 +7,7 @@ three-page continuous-view fixture. No tile rendering is implemented here.
 """
 from edit_bridge import open_for_edit, property_value as prop
 from edit_cache import StagedPageCache
+from edit_copy import CopyProfile, controller_batch, COPY_BATCH_SIZE, COPY_BATCH_SECONDS
 from timing_log import TimingLog
 import time
 
@@ -85,6 +86,7 @@ class ReaderSession:
         phase_started = time.monotonic()
         self.timing.mark('previews.layers.begin')
         layers = self.document.getLayerManager()
+        self.layer_manager = layers
         preview_layer = layers.insertNewByIndex(layers.getCount())
         preview_layer.Name = 'PDF reader locked previews'
         preview_layer.IsVisible = preview_layer.IsPrintable = True
@@ -206,7 +208,7 @@ class ReaderSession:
                 'edit_locked': self.edit_layer.IsLocked}
 
     def _attach_edit_layer(self, shape):
-        self.document.getLayerManager().attachShapeToLayer(shape, self.edit_layer)
+        self.layer_manager.attachShapeToLayer(shape, self.edit_layer)
         if shape.supportsService('com.sun.star.drawing.GroupShape'):
             for i in range(shape.getCount()):
                 self._attach_edit_layer(shape.getByIndex(i))
@@ -254,6 +256,85 @@ class ReaderSession:
             if staged is not None:
                 staged.dispose()
 
+    def _copy_edit_shapes(self, shapes, page, preview, page_number, profile):
+        """Copy in short view-update batches, retaining the preview until commit."""
+        undo = self.document.getUndoManager()
+        was_modified = self.document.isModified()
+        added = []
+        undo.lock()
+        try:
+            try:
+                completed = 0
+                while completed < len(shapes):
+                    with profile.phase('navigation'):
+                        if self.current_page() != page_number:
+                            raise ConversionCancelled('active-page-changed')
+                        controller = self.document.getCurrentController()
+                        if controller is None:
+                            raise SessionClosed('PDF window no longer has a controller')
+                    batch_started = time.monotonic()
+                    batch_end = min(completed + COPY_BATCH_SIZE, len(shapes))
+                    with controller_batch(self.document, profile):
+                        while completed < batch_end:
+                            # Keep cancellation responsive without repeating all
+                            # page identities and six layer checks per object.
+                            with profile.phase('navigation'):
+                                if controller.getCurrentPage() != page:
+                                    raise ConversionCancelled('active-page-changed')
+                            shape = shapes[completed]
+                            with profile.phase('geometry_seed'):
+                                # add() rebinds the source UNO wrapper. Seed its
+                                # cached geometry before SvxShape::Create uses it.
+                                position, size = shape.getPosition(), shape.getSize()
+                                shape.setPosition(position)
+                                shape.setSize(size)
+                            with profile.phase('target_validation'):
+                                old_count = page.getCount()
+                                if old_count != len(added) + 1:
+                                    raise RuntimeError('Target page changed during object copy')
+                            try:
+                                with profile.phase('native_add'):
+                                    page.add(shape)
+                            finally:
+                                # add() can throw after insertion: record the
+                                # inserted clone even on that failure path.
+                                with profile.phase('target_validation'):
+                                    new_count = page.getCount()
+                                    added.extend(page.getByIndex(i)
+                                                 for i in range(old_count, new_count))
+                            with profile.phase('target_validation'):
+                                if new_count != old_count + 1:
+                                    raise RuntimeError('Object cloning did not insert exactly one shape')
+                                actual_position, actual_size = added[-1].getPosition(), added[-1].getSize()
+                                expected = (position.X, position.Y, size.Width, size.Height)
+                                actual = (actual_position.X, actual_position.Y,
+                                          actual_size.Width, actual_size.Height)
+                                if any(abs(a - b) > 1 for a, b in zip(actual, expected)):
+                                    raise RuntimeError(f'Cloned object geometry changed: expected={expected}, actual={actual}')
+                            with profile.phase('layers'):
+                                self._attach_edit_layer(added[-1])
+                            completed += 1
+                            if time.monotonic() - batch_started >= COPY_BATCH_SECONDS:
+                                break
+                    # Release the model lock between batches for progressive
+                    # display and navigation. A single native add cannot yield.
+                    profile.progress(completed, len(shapes))
+                with profile.phase('commit'):
+                    if page.getCount() != len(shapes) + 1 or page.getByIndex(0) != preview:
+                        raise RuntimeError('Object cloning did not preserve page contents')
+                    if self.current_page() != page_number:
+                        raise ConversionCancelled('active-page-changed')
+                    page.remove(preview)
+            except BaseException:
+                with profile.phase('rollback'):
+                    with controller_batch(self.document, profile):
+                        for shape in reversed(added):
+                            page.remove(shape)
+                        self.document.setModified(was_modified)
+                raise
+        finally:
+            undo.unlock()
+
     def edit_current_page(self):
         if self.document.isReadonly():
             raise RuntimeError('Enter document edit mode before converting pages')
@@ -272,80 +353,48 @@ class ReaderSession:
             self.import_calls.append(page_number)
             staged = self.importer(self.context, self.pdf_url, hidden=True, page=page_number)
         imported_at = time.monotonic()
-        added = []
+        profile = CopyProfile(self.timing, page_number)
+        status = 'failed'
+        shapes = []
         try:
-            if self.current_page() != page_number:
-                return {'page': page_number, 'cancelled': True,
-                        'reason': 'active-page-changed', 'preview_retained': True}
-            self._reading_preview(page_number, phase='after staged import')
-            imported = staged.getDrawPages()
-            if imported.getCount() != 1:
-                raise RuntimeError('Selected-page import returned more than one page')
-            source = imported.getByIndex(0)
-            if abs(source.Width - page.Width) > 30 or abs(source.Height - page.Height) > 30:
-                raise RuntimeError('Imported geometry differs from reading page; crop/rotation needs adaptation')
-            shapes = [source.getByIndex(i) for i in range(source.getCount())]
-            # SvxDrawPage::add clones foreign-model SdrObjects into the target
-            # model, preserving geometry/styles; no global clipboard is used.
-            # Conversion is a baseline transition, not an undo step. Never clear
-            # history belonging to edits on other pages.
-            undo = self.document.getUndoManager()
-            was_modified = self.document.isModified()
-            undo.lock()
-            try:
-                try:
-                    for shape in shapes:
-                        if self.current_page() != page_number:
-                            raise ConversionCancelled('active-page-changed')
-                        # SvxDrawPage::add rebinds the source UNO wrapper to a
-                        # cloned SdrObject and SvxShape::Create reapplies cached
-                        # maPosition/maSize. A freshly acquired wrapper has
-                        # defaults (0,0)/(100,100), even though getPosition /
-                        # getSize report the correct live SdrObject geometry.
-                        # Seed those caches while the source object is alive.
-                        position, size = shape.getPosition(), shape.getSize()
-                        shape.setPosition(position)
-                        shape.setSize(size)
-                        old_count = page.getCount()
-                        try:
-                            page.add(shape)
-                        finally:
-                            added.extend(page.getByIndex(i) for i in range(old_count, page.getCount()))
-                        if page.getCount() != old_count + 1:
-                            raise RuntimeError('Object cloning did not insert exactly one shape')
-                        actual_position, actual_size = added[-1].getPosition(), added[-1].getSize()
-                        expected = (position.X, position.Y, size.Width, size.Height)
-                        actual = (actual_position.X, actual_position.Y, actual_size.Width, actual_size.Height)
-                        if any(abs(a - b) > 1 for a, b in zip(actual, expected)):
-                            raise RuntimeError(f'Cloned object geometry changed: expected={expected}, actual={actual}')
-                        self._attach_edit_layer(added[-1])
-                    if page.getCount() != len(shapes) + 1:
-                        raise RuntimeError('Object cloning did not preserve shape count')
-                    if self.current_page() != page_number:
-                        raise ConversionCancelled('active-page-changed')
-                    page.remove(preview)  # Commit only after every clone succeeded.
-                except BaseException:
-                    for shape in reversed(added):
-                        page.remove(shape)
-                    self.document.setModified(was_modified)
-                    raise
-            finally:
-                undo.unlock()
+            with profile.phase('navigation'):
+                if self.current_page() != page_number:
+                    raise ConversionCancelled('active-page-changed')
+                self._reading_preview(page_number, phase='after staged import')
+            with profile.phase('source_enumeration'):
+                imported = staged.getDrawPages()
+                if imported.getCount() != 1:
+                    raise RuntimeError('Selected-page import returned more than one page')
+                source = imported.getByIndex(0)
+                if abs(source.Width - page.Width) > 30 or abs(source.Height - page.Height) > 30:
+                    raise RuntimeError('Imported geometry differs from reading page; crop/rotation needs adaptation')
+                shapes = [source.getByIndex(i) for i in range(source.getCount())]
+            self._copy_edit_shapes(shapes, page, preview, page_number, profile)
             self.edited.add(page_number)
             self.document.setModified(True)
+            status = 'completed'
             return {'page': page_number, 'reused': False, 'shapes': len(shapes),
                     'geometry_verified': True,
                     'cache_hit': cache_hit,
                     'import_seconds': imported_at - started,
                     'copy_seconds': time.monotonic() - imported_at,
+                    'copy_profile': profile.snapshot(),
                     'view': self.view_state()}
         except ConversionCancelled:
+            status = 'cancelled'
             return {'page': page_number, 'cancelled': True,
                     'reason': 'active-page-changed', 'preview_retained': True,
                     'cache_hit': cache_hit, 'import_seconds': imported_at - started,
                     'copy_seconds': time.monotonic() - imported_at}
         finally:
-            staged.dispose()
+            try:
+                with profile.phase('staged_dispose'):
+                    staged.dispose()
+            finally:
+                self.timing.mark('edit.copy.summary', page=page_number, status=status,
+                                 shapes=len(shapes),
+                                 duration_ms=round((time.monotonic() - imported_at) * 1000, 2),
+                                 **profile.snapshot())
 
     def close(self):
         try:
