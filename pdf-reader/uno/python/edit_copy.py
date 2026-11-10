@@ -4,8 +4,9 @@ from contextlib import contextmanager
 import time
 
 
-COPY_BATCH_SIZE = 16
-COPY_BATCH_SECONDS = .10
+COPY_BATCH_SIZE = 64
+COPY_BATCH_MIN_SIZE = 16
+COPY_BATCH_SECONDS = .50
 
 
 class CopyProfile:

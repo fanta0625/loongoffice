@@ -7,7 +7,8 @@ three-page continuous-view fixture. No tile rendering is implemented here.
 """
 from edit_bridge import open_for_edit, property_value as prop
 from edit_cache import StagedPageCache
-from edit_copy import CopyProfile, controller_batch, COPY_BATCH_SIZE, COPY_BATCH_SECONDS
+from edit_copy import (CopyProfile, controller_batch, COPY_BATCH_SIZE,
+                       COPY_BATCH_MIN_SIZE, COPY_BATCH_SECONDS)
 from timing_log import TimingLog
 import time
 
@@ -265,14 +266,20 @@ class ReaderSession:
         try:
             try:
                 completed = 0
+                with profile.phase('navigation'):
+                    if self.current_page() != page_number:
+                        raise ConversionCancelled('active-page-changed')
+                    controller = self.document.getCurrentController()
+                    if controller is None:
+                        raise SessionClosed('PDF window no longer has a controller')
                 while completed < len(shapes):
                     with profile.phase('navigation'):
-                        if self.current_page() != page_number:
+                        if (controller.getCurrentPage() != page
+                                or self.pages.getCount() != self.count
+                                or page.Name != f'PDF source page {page_number}'):
                             raise ConversionCancelled('active-page-changed')
-                        controller = self.document.getCurrentController()
-                        if controller is None:
-                            raise SessionClosed('PDF window no longer has a controller')
                     batch_started = time.monotonic()
+                    batch_begin = completed
                     batch_end = min(completed + COPY_BATCH_SIZE, len(shapes))
                     with controller_batch(self.document, profile):
                         while completed < batch_end:
@@ -295,14 +302,23 @@ class ReaderSession:
                             try:
                                 with profile.phase('native_add'):
                                     page.add(shape)
-                            finally:
+                            except BaseException:
                                 # add() can throw after insertion: record the
                                 # inserted clone even on that failure path.
                                 with profile.phase('target_validation'):
                                     new_count = page.getCount()
                                     added.extend(page.getByIndex(i)
                                                  for i in range(old_count, new_count))
+                                raise
                             with profile.phase('target_validation'):
+                                new_count = page.getCount()
+                                # SvxDrawPage::add rebinds this very UNO wrapper
+                                # to the inserted clone. Avoid fetching it again.
+                                if new_count == old_count + 1:
+                                    added.append(shape)
+                                else:
+                                    added.extend(page.getByIndex(i)
+                                                 for i in range(old_count, new_count))
                                 if new_count != old_count + 1:
                                     raise RuntimeError('Object cloning did not insert exactly one shape')
                                 actual_position, actual_size = added[-1].getPosition(), added[-1].getSize()
@@ -314,7 +330,8 @@ class ReaderSession:
                             with profile.phase('layers'):
                                 self._attach_edit_layer(added[-1])
                             completed += 1
-                            if time.monotonic() - batch_started >= COPY_BATCH_SECONDS:
+                            if (completed - batch_begin >= COPY_BATCH_MIN_SIZE
+                                    and time.monotonic() - batch_started >= COPY_BATCH_SECONDS):
                                 break
                     # Release the model lock between batches for progressive
                     # display and navigation. A single native add cannot yield.

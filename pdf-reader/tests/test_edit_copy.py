@@ -49,6 +49,10 @@ class EditCopyTests(unittest.TestCase):
         self.session.current_page = Mock(return_value=1)
         self.preview = object()
         self.page = Page(self.preview)
+        self.page.Name = 'PDF source page 1'
+        self.session.count = 1
+        self.session.pages = Mock()
+        self.session.pages.getCount.return_value = 1
         self.controller = self.document.getCurrentController.return_value
         self.controller.getCurrentPage.return_value = self.page
         self.profile = CopyProfile(TimingLog(), 1)
@@ -65,23 +69,23 @@ class EditCopyTests(unittest.TestCase):
         self.document.setModified.assert_called_with(True)
 
     def test_batches_preserve_geometry_and_existing_undo_history(self):
-        shapes = [shape() for _ in range(33)]
+        shapes = [shape() for _ in range(129)]
         with patch('reader_session.COPY_BATCH_SECONDS', 100):
             self.copy(shapes)
         self.assertEqual(self.page.shapes, shapes)
         self.assertEqual(self.profile.batches, 3)
         self.assertEqual(self.document.unlockControllers.call_count, 3)
-        self.assertEqual(self.session.current_page.call_count, 4)
-        self.assertEqual(self.profile.calls['native_add'], 33)
+        self.assertEqual(self.session.current_page.call_count, 2)
+        self.assertEqual(self.profile.calls['native_add'], 129)
         self.document.getLayerManager.assert_not_called()
         self.document.getUndoManager().clear.assert_not_called()
         for value in shapes:
             value.setPosition.assert_called_with(value.getPosition.return_value)
             value.setSize.assert_called_with(value.getSize.return_value)
 
-    def test_time_budget_unlocks_after_each_slow_object(self):
+    def test_time_budget_has_minimum_batch_to_avoid_refresh_storm(self):
         with patch('reader_session.COPY_BATCH_SECONDS', 0):
-            self.copy([shape() for _ in range(3)])
+            self.copy([shape() for _ in range(33)])
         self.assertEqual(self.profile.batches, 3)
         self.assertEqual(self.document.unlockControllers.call_count, 3)
 
