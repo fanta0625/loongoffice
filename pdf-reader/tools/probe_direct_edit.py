@@ -34,6 +34,26 @@ def matching_geometry(expected, actual):
     return True
 
 
+def geometry_differences(expected, actual, path='page', limit=10):
+    """Keep strict comparison, but report where structure or geometry differs."""
+    differences = []
+    if len(expected) != len(actual):
+        differences.append({'path': path, 'reason': 'object-count',
+                            'expected': len(expected), 'actual': len(actual)})
+    for index, (left, right) in enumerate(zip(expected, actual)):
+        location = f'{path}/{index}'
+        if left[0] != right[0] or left[1] != right[1]:
+            delta = [b - a for a, b in zip(left[1], right[1])]
+            if left[0] != right[0] or any(abs(value) > 1 for value in delta):
+                differences.append({'path': location, 'expected_type': left[0],
+                                    'actual_type': right[0], 'expected_geometry': left[1],
+                                    'actual_geometry': right[1], 'delta': delta})
+        differences.extend(geometry_differences(left[2], right[2], location, limit))
+        if len(differences) >= limit:
+            break
+    return differences[:limit]
+
+
 def layer_tree(page, name):
     for i in range(page.getCount()):
         shape = page.getByIndex(i)
@@ -83,13 +103,26 @@ def run(args):
                 # direct import never creates this temporary Draw model.
                 oracle = open_for_edit(context, pdf.as_uri(), hidden=True, page=2)
                 try:
-                    expected = trees(oracle.getDrawPages().getByIndex(0))
+                    oracle_page = oracle.getDrawPages().getByIndex(0)
+                    expected = trees(oracle_page)
+                    expected_size = [oracle_page.Width, oracle_page.Height]
                 finally:
                     oracle.dispose()
                 result = session.edit_current_page()
                 if result['copied_shapes'] != 0 or result['temporary_draw_documents'] != 0:
                     raise RuntimeError('Direct path used the old copier')
-                if not matching_geometry(expected, trees(original_pages[1])):
+                actual = trees(original_pages[1])
+                if not matching_geometry(expected, actual):
+                    diagnostics = {'status': 'failed', 'stage': 'geometry-comparison',
+                                   'expected_page_size': expected_size,
+                                   'actual_page_size': list(dimensions[1]),
+                                   'geometry_units': '1/100 mm; x,y,width,height',
+                                   'differences': geometry_differences(expected, actual),
+                                   'expected': expected, 'actual': actual,
+                                   'first_result': result}
+                    print(json.dumps(diagnostics, indent=2), flush=True)
+                    if args.report:
+                        Path(args.report).write_text(json.dumps(diagnostics, indent=2), encoding='utf-8')
                     raise RuntimeError('Direct object geometry differs from existing importer')
                 layer_tree(original_pages[1], session.edit_layer.Name)
                 text = None
@@ -158,4 +191,5 @@ def run(args):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--office', default='libreoffice')
+    parser.add_argument('--report', help='Write geometry failure diagnostics as JSON')
     run(parser.parse_args())
