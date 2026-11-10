@@ -16,11 +16,11 @@
 #include <com/sun/star/xml/XImportFilter.hpp>
 #include <com/sun/star/xml/sax/XDocumentHandler.hpp>
 #include <comphelper/propertyvalue.hxx>
+#include <comphelper/diagnose_ex.hxx>
 #include <comphelper/scopeguard.hxx>
 #include <cppuhelper/implbase.hxx>
 #include <cppuhelper/supportsservice.hxx>
 #include <sal/log.hxx>
-#include <tools/diagnose_ex.h>
 #include <vcl/svapp.hxx>
 #include <atomic>
 #include <utility>
