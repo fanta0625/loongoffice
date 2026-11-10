@@ -122,6 +122,7 @@ CPPUNIT_TEST_FIXTURE(XmloffDrawTest, testPDFDirectPageContent)
     uno::Reference<beans::XPropertySet> xExistingStyle(
         xPreviewProps->getPropertyValue(u"Style"_ustr), uno::UNO_QUERY_THROW);
     xExistingStyle->setPropertyValue(u"FillColor"_ustr, uno::Any(sal_Int32(0x123456)));
+    xExistingStyle->setPropertyValue(u"CharAutoKerning"_ustr, uno::Any(true));
 
     uno::Reference<drawing::XLayerSupplier> xLayerSupplier(mxComponent, uno::UNO_QUERY_THROW);
     uno::Reference<drawing::XLayerManager> xLayers(xLayerSupplier->getLayerManager(), uno::UNO_QUERY_THROW);
@@ -162,6 +163,7 @@ CPPUNIT_TEST_FIXTURE(XmloffDrawTest, testPDFDirectPageContent)
     CPPUNIT_ASSERT_EQUAL(sal_Int32(20000), xPageProps->getPropertyValue(u"Width"_ustr).get<sal_Int32>());
     CPPUNIT_ASSERT_EQUAL(sal_Int32(10000), xPageProps->getPropertyValue(u"Height"_ustr).get<sal_Int32>());
     CPPUNIT_ASSERT_EQUAL(sal_Int32(0x123456), xExistingStyle->getPropertyValue(u"FillColor"_ustr).get<sal_Int32>());
+    CPPUNIT_ASSERT(xExistingStyle->getPropertyValue(u"CharAutoKerning"_ustr).get<bool>());
     CPPUNIT_ASSERT_EQUAL(sal_Int32(777), xDashes->getByName(u"dash1"_ustr).get<drawing::LineDash>().Distance);
     CPPUNIT_ASSERT(xDashes->hasByName(u"direct-test-dash-1"_ustr));
     uno::Reference<drawing::XShape> xGroup;
@@ -180,6 +182,15 @@ CPPUNIT_TEST_FIXTURE(XmloffDrawTest, testPDFDirectPageContent)
     {
         uno::Reference<beans::XPropertySet> xChild(xChildren->getByIndex(i), uno::UNO_QUERY_THROW);
         CPPUNIT_ASSERT_EQUAL(u"direct-edit"_ustr, xChild->getPropertyValue(u"LayerName"_ustr).get<OUString>());
+        // PDF content inherits the native imported private style, not the
+        // reader's standard style with explicit auto-kerning enabled.
+        uno::Reference<beans::XPropertySet> xImportedStyle(
+            xChild->getPropertyValue(u"Style"_ustr), uno::UNO_QUERY_THROW);
+        CPPUNIT_ASSERT(xImportedStyle != xExistingStyle);
+        uno::Reference<container::XNamed> xStyleName(xImportedStyle, uno::UNO_QUERY_THROW);
+        CPPUNIT_ASSERT_EQUAL(u"direct-test-standard"_ustr, xStyleName->getName());
+        CPPUNIT_ASSERT(!xChild->getPropertyValue(u"CharAutoKerning"_ustr).get<bool>());
+        CPPUNIT_ASSERT_EQUAL(sal_Int32(0xff0000), xImportedStyle->getPropertyValue(u"FillColor"_ustr).get<sal_Int32>());
     }
     // A size mismatch must be rejected before any editable shape is inserted.
     xTarget->remove(xGroup);

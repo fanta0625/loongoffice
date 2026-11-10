@@ -16,7 +16,7 @@
   <style:page-layout style:name="layout1">
    <style:page-layout-properties fo:page-width="20cm" fo:page-height="10cm"/>
   </style:page-layout>
-  <style:style style:name="graphic1" style:family="graphic">
+  <style:style style:name="graphic1" style:family="graphic" style:parent-style-name="standard">
    <style:graphic-properties draw:fill="none" draw:stroke="dash" draw:stroke-dash="dash1"/>
   </style:style>
  </office:automatic-styles>
@@ -27,7 +27,7 @@
   <draw:page draw:name="must-not-rename-target" draw:master-page-name="incoming-master">
    <draw:g>
     <draw:rect draw:style-name="graphic1" svg:x="1cm" svg:y="2cm" svg:width="3cm" svg:height="1cm"/>
-    <draw:frame svg:x="5cm" svg:y="2cm" svg:width="4cm" svg:height="1cm">
+    <draw:frame draw:style-name="graphic1" svg:x="5cm" svg:y="2cm" svg:width="4cm" svg:height="1cm">
      <draw:text-box><text:p>DIRECT_PAGE_TEXT</text:p></draw:text-box>
     </draw:frame>
    </draw:g>

@@ -48,3 +48,9 @@ def discard_resources(context, document, prefix):
         for name in table.getElementNames():
             if name.startswith(prefix):
                 table.removeByName(name)
+    # Native named-style import uses the same request prefix. Remove styles
+    # after their objects on rollback; never remove or reset the host standard.
+    graphics = document.getStyleFamilies().getByName('graphics')
+    for name in graphics.getElementNames():
+        if name.startswith(prefix):
+            graphics.removeByName(name)

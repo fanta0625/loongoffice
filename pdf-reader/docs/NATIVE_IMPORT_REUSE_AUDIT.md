@@ -82,3 +82,14 @@ PDFPageResourcesContext 的忽略 named-style 行为应移除或由上述适配�
 本次不改变生产路径，不要求用户再次编译或重复运行未修复的探针。
 下一次功能变更应同时给出严格几何对照、文本属性/渲染对照、主文档样式不变、
 历史编辑及撤销保留、失败清理和大页耗时的证据。
+
+## 后续实现记录
+
+样式适配已移到 `xmloff/source/draw/pdfpageimportstyles.cxx`。继承已有的
+SdXMLStylesContext 和 XMLShapeStyleContext，仅在已有虚函数扩展点改写命名图形样式名
+和父样式名；标准创建、属性填充及父样式绑定仍执行原实现。没有覆盖 final 的 SAX 工厂，
+也没有手工设置 CharAutoKerning。SdStyleFamily::createInstance 调用
+SdStyleSheet::CreateEmptyUserStyle，GetItemSet 创建没有父 ItemSet 的空属性集合，
+这是私有样式使用属性池默认值的现有实现依据。
+
+这次修改需要目标机重新编译并通过严格几何探针。源码依据不替代运行验证。

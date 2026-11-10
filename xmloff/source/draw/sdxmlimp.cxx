@@ -43,7 +43,7 @@
 #include <xmloff/ProgressBarHelper.hxx>
 
 #include <xmloff/XMLFontStylesContext.hxx>
-#include "../style/FillStyleContext.hxx"
+#include "pdfpageimportstyles.hxx"
 #include <xmloff/families.hxx>
 #include <com/sun/star/drawing/XLayerSupplier.hpp>
 #include <com/sun/star/container/XNameContainer.hpp>
@@ -55,83 +55,6 @@ using namespace ::com::sun::star;
 using namespace ::xmloff::token;
 
 namespace {
-
-// PDF emits a named "standard" style and stroke-dash resources. Never import
-// its named styles over a live document's styles. Dashes need private names:
-// the ordinary dash context replaces existing resources on a name collision.
-class PDFPageResourcesContext final : public SvXMLImportContext
-{
-public:
-    explicit PDFPageResourcesContext(SdXMLImport& rImport) : SvXMLImportContext(rImport) {}
-    uno::Reference<xml::sax::XFastContextHandler> SAL_CALL createFastChildContext(
-        sal_Int32 nElement, const uno::Reference<xml::sax::XFastAttributeList>& xAttrs) override
-    {
-        if (nElement == XML_ELEMENT(STYLE, XML_STYLE))
-            return nullptr; // PDF's named standard style; preserve the host's styles.
-        return CreateResource(nElement, xAttrs);
-    }
-
-    SvXMLStyleContext* CreateResource(
-        sal_Int32 nElement, const uno::Reference<xml::sax::XFastAttributeList>& xAttrs)
-    {
-        const bool bDash = nElement == XML_ELEMENT(DRAW, XML_STROKE_DASH);
-        if (!bDash && nElement != XML_ELEMENT(DRAW, XML_FILL_IMAGE))
-            throw uno::RuntimeException(u"Unsupported PDF page resource"_ustr);
-        OUString aName;
-        auto xTable = bDash ? GetImport().GetDashHelper() : GetImport().GetBitmapHelper();
-        if (!xTable.is())
-            throw uno::RuntimeException(u"Missing Draw resource table"_ustr);
-        sal_Int32 nSuffix = 1;
-        OUString aPrivateName;
-        do
-            aPrivateName = static_cast<SdXMLImport&>(GetImport()).GetDirectResourcePrefix()
-                           + (bDash ? u"dash-"_ustr : u"bitmap-"_ustr) + OUString::number(nSuffix++);
-        while (xTable->hasByName(aPrivateName));
-        rtl::Reference<sax_fastparser::FastAttributeList> xPrivateAttrs(
-            new sax_fastparser::FastAttributeList(nullptr));
-        for (const auto& rAttr : sax_fastparser::castToFastAttributeList(xAttrs))
-        {
-            if (rAttr.getToken() == XML_ELEMENT(DRAW, XML_NAME))
-            {
-                aName = rAttr.toString();
-                xPrivateAttrs->add(rAttr.getToken(), aPrivateName);
-            }
-            else if (rAttr.getToken() != XML_ELEMENT(DRAW, XML_DISPLAY_NAME))
-                xPrivateAttrs->add(rAttr.getToken(), rAttr.toString());
-        }
-        if (aName.isEmpty())
-            throw uno::RuntimeException(u"Missing PDF resource name"_ustr);
-        GetImport().AddStyleDisplayName(bDash ? XmlStyleFamily::SD_STROKE_DASH_ID
-                                             : XmlStyleFamily::SD_FILL_IMAGE_ID,
-                                       aName, aPrivateName);
-        if (bDash)
-            return new XMLDashStyleContext(GetImport(), nElement, xPrivateAttrs);
-        return new XMLBitmapStyleContext(GetImport(), nElement, xPrivateAttrs);
-    }
-};
-
-// The PDF converter emits its dash/bitmap resources in automatic-styles.
-// Keep ordinary automatic graphic/text/page styles, but isolate resources in
-// both style sections so later imports cannot alter earlier pages.
-class PDFPageAutoStylesContext final : public SdXMLStylesContext
-{
-    using SdXMLStylesContext::CreateStyleChildContext;
-
-public:
-    explicit PDFPageAutoStylesContext(SdXMLImport& rImport) : SdXMLStylesContext(rImport, true) {}
-    SvXMLStyleContext* CreateStyleChildContext(
-        sal_Int32 nElement, const uno::Reference<xml::sax::XFastAttributeList>& xAttrs) override
-    {
-        if (nElement == XML_ELEMENT(DRAW, XML_STROKE_DASH)
-            || nElement == XML_ELEMENT(DRAW, XML_FILL_IMAGE))
-        {
-            rtl::Reference<PDFPageResourcesContext> xResources(
-                new PDFPageResourcesContext(static_cast<SdXMLImport&>(GetImport())));
-            return xResources->CreateResource(nElement, xAttrs);
-        }
-        return SdXMLStylesContext::CreateStyleChildContext(nElement, xAttrs);
-    }
-};
 
 class PDFPageLayoutsContext final : public SvXMLImportContext
 {
@@ -246,7 +169,7 @@ uno::Reference< xml::sax::XFastContextHandler > SAL_CALL SdXMLDocContext_Impl::c
         case XML_ELEMENT(OFFICE, XML_STYLES):
         {
             if (GetSdImport().IsDirectPageImport())
-                return new PDFPageResourcesContext(GetSdImport());
+                return GetSdImport().CreateStylesContext();
             if( GetImport().getImportFlags() & SvXMLImportFlags::STYLES )
             {
                 // office:styles inside office:document
@@ -613,8 +536,10 @@ SvXMLStylesContext *SdXMLImport::CreateStylesContext()
     if(GetShapeImport()->GetStylesContext())
         return GetShapeImport()->GetStylesContext();
 
-    GetShapeImport()->SetStylesContext(new SdXMLStylesContext(
-        *this, false));
+    if (mbDirectPageImport)
+        GetShapeImport()->SetStylesContext(CreatePDFPageStylesContext(*this, false));
+    else
+        GetShapeImport()->SetStylesContext(new SdXMLStylesContext(*this, false));
 
     return GetShapeImport()->GetStylesContext();
 }
@@ -625,7 +550,7 @@ SvXMLStylesContext *SdXMLImport::CreateAutoStylesContext()
         return GetShapeImport()->GetAutoStylesContext();
 
     if (mbDirectPageImport)
-        GetShapeImport()->SetAutoStylesContext(new PDFPageAutoStylesContext(*this));
+        GetShapeImport()->SetAutoStylesContext(CreatePDFPageStylesContext(*this, true));
     else
         GetShapeImport()->SetAutoStylesContext(new SdXMLStylesContext(*this, true));
 

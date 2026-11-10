@@ -7,7 +7,7 @@ from unittest.mock import Mock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'uno' / 'python'))
 from reader_session import ReaderSession
-from direct_edit import import_into_page, DirectImportUnavailable
+from direct_edit import import_into_page, discard_resources, DirectImportUnavailable
 from timing_log import TimingLog
 from test_edit_copy import Page, shape
 
@@ -95,6 +95,17 @@ class DirectEditTests(unittest.TestCase):
                              'file:///fixture.pdf', 2, 'edit', 'private-')
         self.session.context.ServiceManager.createInstanceWithContext.assert_not_called()
         self.session.document.assert_not_called()
+
+    def test_rollback_removes_only_request_styles_and_resources(self):
+        document = Mock()
+        dash, bitmap, graphics = Mock(), Mock(), Mock()
+        document.createInstance.side_effect = [dash, bitmap]
+        document.getStyleFamilies.return_value.getByName.return_value = graphics
+        for table in (dash, bitmap, graphics):
+            table.getElementNames.return_value = ('standard', 'other-standard', 'request-standard')
+        discard_resources(None, document, 'request-')
+        for table in (dash, bitmap, graphics):
+            table.removeByName.assert_called_once_with('request-standard')
 
 
 if __name__ == '__main__':
