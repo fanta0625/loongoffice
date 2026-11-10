@@ -255,6 +255,7 @@ def run(args):
                     raise RuntimeError('Reader page names/dimensions changed')
                 print(json.dumps({'status': 'passed', 'edit_route': 'native-direct-page',
                                   'copied_shapes': 0, 'geometry_matches_existing_importer': True,
+                                  'native_entry': 'PDFPageImportFilter',
                                   'native_layer_assignment': True, 'existing_page_render_retained': True,
                                   'previous_undo_history_retained': True,
                                   'native_delete_undo_redo_verified': True,

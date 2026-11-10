@@ -25,6 +25,9 @@
 #include <com/sun/star/drawing/XLayerManager.hpp>
 #include <com/sun/star/drawing/LineDash.hpp>
 #include <com/sun/star/document/XImporter.hpp>
+#include <com/sun/star/document/XFilter.hpp>
+#include <com/sun/star/frame/XModel.hpp>
+#include <com/sun/star/util/XModifiable2.hpp>
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
 #include <com/sun/star/container/XNamed.hpp>
 #include <com/sun/star/container/XNameContainer.hpp>
@@ -98,6 +101,62 @@ uno::Reference<drawing::XShape> XmloffDrawTest::getShape(sal_uInt8 nShapeIndex)
     uno::Reference<drawing::XShape> xShape(xDrawPage->getByIndex(nShapeIndex),
                                            uno::UNO_QUERY_THROW);
     return xShape;
+}
+
+// The page-level service must unwind its native model lock on exceptions and
+// leave a caller-owned lock intact. No PDF converter executable is needed for
+// this invalid-source case; actual PDF/geometry/undo coverage is in the probe.
+CPPUNIT_TEST_FIXTURE(XmloffDrawTest, testPDFPageImportFilterFailureRestoresModel)
+{
+    loadFromURL(u"private:factory/sdraw"_ustr);
+    uno::Reference<drawing::XDrawPagesSupplier> xSupplier(mxComponent, uno::UNO_QUERY_THROW);
+    auto xPage = xSupplier->getDrawPages()->getByIndex(0);
+    uno::Reference<drawing::XDrawPage> xTarget(xPage, uno::UNO_QUERY_THROW);
+    uno::Reference<lang::XMultiServiceFactory> xFactory(mxComponent, uno::UNO_QUERY_THROW);
+    uno::Reference<drawing::XShape> xPreview(
+        xFactory->createInstance(u"com.sun.star.drawing.RectangleShape"_ustr), uno::UNO_QUERY_THROW);
+    xTarget->add(xPreview);
+    uno::Reference<drawing::XLayerSupplier> xLayerSupplier(mxComponent, uno::UNO_QUERY_THROW);
+    uno::Reference<drawing::XLayerManager> xLayers(xLayerSupplier->getLayerManager(), uno::UNO_QUERY_THROW);
+    auto xLayer = xLayers->insertNewByIndex(xLayers->getCount());
+    uno::Reference<beans::XPropertySet>(xLayer, uno::UNO_QUERY_THROW)
+        ->setPropertyValue(u"Name"_ustr, uno::Any(u"direct-edit"_ustr));
+    uno::Reference<document::XFilter> xFilter(
+        getComponentContext()->getServiceManager()->createInstanceWithArgumentsAndContext(
+            u"org.loongoffice.comp.Draw.PDFPageImportFilter"_ustr,
+            { uno::Any(comphelper::makePropertyValue(u"TargetPage"_ustr, xTarget)),
+              uno::Any(comphelper::makePropertyValue(u"EditLayerName"_ustr, u"direct-edit"_ustr)),
+              uno::Any(comphelper::makePropertyValue(u"ResourcePrefix"_ustr, u"failed-request-"_ustr)) },
+            getComponentContext()), uno::UNO_QUERY_THROW);
+    uno::Reference<document::XImporter>(xFilter, uno::UNO_QUERY_THROW)->setTargetDocument(mxComponent);
+    uno::Reference<frame::XModel> xModel(mxComponent, uno::UNO_QUERY_THROW);
+    uno::Reference<util::XModifiable2> xModified(mxComponent, uno::UNO_QUERY_THROW);
+    const bool bModificationEnabled = xModified->isSetModifiedEnabled();
+    // A nonexistent file below an owned temporary directory cannot be read.
+    utl::TempFileNamed aDirectory(nullptr, true);
+    aDirectory.EnableKillingFile();
+    const uno::Sequence<beans::PropertyValue> aDescriptor{
+        comphelper::makePropertyValue(u"URL"_ustr, OUString(aDirectory.GetURL() + "/missing.pdf")),
+        comphelper::makePropertyValue(u"SourcePage"_ustr, sal_Int32(1)) };
+    for (const bool bCallerLocked : { false, true })
+    {
+        if (bCallerLocked)
+            xModel->lockControllers();
+        comphelper::ScopeGuard aUnlock([&] {
+            if (bCallerLocked)
+                xModel->unlockControllers();
+        });
+        CPPUNIT_ASSERT_THROW(xFilter->filter(aDescriptor), uno::Exception);
+        CPPUNIT_ASSERT_EQUAL(bCallerLocked, bool(xModel->hasControllersLocked()));
+        CPPUNIT_ASSERT_EQUAL(bModificationEnabled, bool(xModified->isSetModifiedEnabled()));
+        CPPUNIT_ASSERT_EQUAL(sal_Int32(1), xTarget->getCount());
+        CPPUNIT_ASSERT(uno::Reference<drawing::XShape>(xTarget->getByIndex(0), uno::UNO_QUERY_THROW)
+                       == xPreview);
+    }
+    xFilter->cancel();
+    CPPUNIT_ASSERT(!xFilter->filter(aDescriptor));
+    CPPUNIT_ASSERT(!xModel->hasControllersLocked());
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(1), xTarget->getCount());
 }
 
 CPPUNIT_TEST_FIXTURE(XmloffDrawTest, testPDFDirectPageContent)

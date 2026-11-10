@@ -483,6 +483,7 @@ class ReaderSession:
                             self.document.setModified(True if status == 'completed' else modified)
             return {'page': number, 'reused': False, 'shapes': count,
                     'edit_route': 'native-direct-page', 'temporary_draw_documents': 0,
+                    'native_entry': 'PDFPageImportFilter',
                     'copied_shapes': 0, 'page_geometry_verified': True,
                     'import_seconds': time.monotonic() - started,
                     'copy_seconds': 0.0, 'view': self.view_state()}

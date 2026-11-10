@@ -122,11 +122,12 @@ Page=N 是本分支已有选页支持，不应因它是原生代码就认定毫�
       → model.lockControllers（SdrModel 布尔锁）
       → XModifiable2.disableSetModified
       → direct_edit.import_into_page
+          → PDFPageImportFilter.filter [独立页级入口，外层 SolarMutexGuard]
           → 新建 PDFPageContentImporter [目标页、图层、资源前缀]
           → setTargetDocument
-          → 直接调用 PDFIRawAdaptor.importer（远程 UNO 调用）
+          → 在同一原生调用内执行 PDFIRawAdaptor.importer
               → 共用解析 / SAX / 对象创建
-              → 各对象 UNO 方法短锁之间，主线程仍可绘制
+              → 外层 SolarMutexGuard 覆盖对象构建及失败清理
       → 校验页身份、移除预览 / 失败删除新增对象
       → 恢复修改通知、发布一次修改状态、解模型锁和撤销锁
 ```
@@ -139,7 +140,8 @@ Page=N 是本分支已有选页支持，不应因它是原生代码就认定毫�
 
 证据：pdf-reader/uno/python/direct_edit.py、reader_session.py、native_import_batch.py；
 新增服务工厂在 xmloff/source/draw/sdxmlimp.cxx:255，返回原生 LegacyToFast 桥。
-该工厂构造服务时的短生命周期也不能覆盖后续的 converter.importer 调用。
+此前只在该工厂构造服务时取得的短锁不能覆盖后续 converter.importer；
+本轮新增独立 pdfpageimportfilter.cxx 包装整次调用，不修改原有 SAX 工厂行为。
 
 ## 五、三类保护必须区分
 
@@ -198,4 +200,5 @@ XLoadable::load / FinishedLoading，也不应伪装成未初始化的新文档�
 完整采样 3954 个样本，无丢失，约 46.9% CPU 样本沿 VCL Paint/CompleteRedraw；
 最初短时解析热点不能代表整段转换。无需让用户重复采样来代替本次源码调查。
 
-本文件为源码审查与实验解释，不宣称候选修复已实现或通过原生构建。
+页级执行边界已按上述方向实现，详见 DIRECT_PAGE_IMPORT.md 的最新章节。
+本地仅完成 Python 测试与静态检查；未宣称已通过原生构建或验证性能收益。

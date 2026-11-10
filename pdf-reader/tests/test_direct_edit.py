@@ -9,7 +9,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'uno' / 'python'))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'tools'))
 from probe_direct_edit import seed_native_undo
 from reader_session import ReaderSession
-from direct_edit import import_into_page, discard_resources, DirectImportUnavailable
+from direct_edit import import_into_page, discard_resources, DirectImportUnavailable, DIRECT_IMPORTER
 from timing_log import TimingLog
 from test_edit_copy import Page, shape
 
@@ -145,6 +145,30 @@ class DirectEditTests(unittest.TestCase):
                              'file:///fixture.pdf', 2, 'edit', 'private-')
         self.session.context.ServiceManager.createInstanceWithContext.assert_not_called()
         self.session.document.assert_not_called()
+
+    def native_filter(self, result=True):
+        context = Mock()
+        context.ServiceManager.getAvailableServiceNames.return_value = (DIRECT_IMPORTER,)
+        importer = context.ServiceManager.createInstanceWithArgumentsAndContext.return_value
+        importer.filter.return_value = result
+        return context, importer
+
+    def test_bridge_uses_page_filter_without_raw_converter_or_python_stream(self):
+        context, importer = self.native_filter()
+        with patch('direct_edit.prop', side_effect=lambda name, value: (name, value)):
+            import_into_page(context, self.session.document, self.page,
+                             'file:///fixture.pdf', 2, 'edit', 'private-')
+        importer.setTargetDocument.assert_called_once_with(self.session.document)
+        importer.filter.assert_called_once_with((('URL', 'file:///fixture.pdf'), ('SourcePage', 2)))
+        context.ServiceManager.createInstanceWithContext.assert_not_called()
+
+    def test_bridge_false_result_is_failure_not_silent_copy_fallback(self):
+        context, _ = self.native_filter(False)
+        with patch('direct_edit.prop', side_effect=lambda name, value: (name, value)):
+            with self.assertRaisesRegex(RuntimeError, 'returned false'):
+                import_into_page(context, self.session.document, self.page,
+                                 'file:///fixture.pdf', 2, 'edit', 'private-')
+        context.ServiceManager.createInstanceWithContext.assert_not_called()
 
     def test_rollback_removes_only_request_styles_and_resources(self):
         document = Mock()

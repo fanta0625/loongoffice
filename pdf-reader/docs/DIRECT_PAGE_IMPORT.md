@@ -125,6 +125,38 @@ disableSetModified、enableSetModified；不修改旧 C++、不重写通知系�
 
 本轮本地 Python 60 项测试：59 通过、1 项 PyUNO 环境依赖跳过；新增真实 UNO
 探针检查导入中修改通知关闭，完成和失败后恢复，继续检查原生几何、图层和撤销。
-这次只修改 Python 和文档，无需重新编译已包含直接导入服务的 Office。
+该轮只修改 Python 和文档，无需重新编译；下述页级入口更新需要重新编译。
 先运行 probe_direct_edit.py，再运行原有 500 页 read_edit.py 命令，比较
 edit.direct.import 和 edit.direct.summary。真实原生探针与大文件耗时须在验证机确认。
+
+## 原生页级执行边界（2026-11-10）
+
+完整 perf 采样显示大量 CPU 样本落在 VCL Paint → Draw CompleteRedraw →
+primitive 构造和 Cairo/Pixman 绘制。此前 Python 直接调用裸 PDF 转换器，
+其逐对象 UNO 操作各自取得 SolarMutex，不能提供普通文档 load 所拥有的外层
+SfxModelGuard 执行边界。样本比例不是墙钟时间，也不能据此承诺加速倍数。
+
+新增独立文件 `xmloff/source/draw/pdfpageimportfilter.cxx`，注册
+`org.loongoffice.comp.Draw.PDFPageImportFilter`。Python 现在只调用一次
+XFilter.filter，参数为 URL 和从 1 开始的 SourcePage。入口在栈上持有
+SolarMutexGuard，复用 SimpleFileAccess、DrawPDFImport 的 Page=N 转换和
+已有 PDFPageContentImporter，不改通用绘制、解析、对象创建及样式映射逻辑。
+已有 SAX 服务继续负责目标页验证、样式隔离和图层设置。
+
+入口负责流关闭、自己取得的控制器锁恢复，以及转换失败或取消后的新增对象
+回滚；保留调用者原有控制器锁。Python 继续负责撤销历史、修改通知抑制、
+导航检查、预览提交和失败资源清理。成功路径不再跨 UNO 逐对象复制。
+
+这是同步整页操作，导入期间窗口可能暂时不响应。cancel 只请求转换返回后
+回滚，不会立即打断解析；不宣称后台可抢占导入。SolarMutex 也不代表禁止
+同线程显式重入，实际是否消除中间绘制及耗时须在目标机验证。
+
+成功报告新增 `native_entry=PDFPageImportFilter`，用于识别新入口。
+本地 Python 测试 62 项：61 通过、1 项环境依赖跳过；新增桥接调用及失败检查。
+新增 Cppunit `testPDFPageImportFilterFailureRestoresModel` 检查无效源文件时
+预览和调用者锁状态保留，以及预先取消。该 C++ 测试和实际 PDF 探针尚未在
+本地构建运行。
+
+这次必须先 `make PARALLELISM=4 build`，再运行完整
+`make PARALLELISM=4 CppunitTest_xmloff_draw` 和上面的 probe_direct_edit.py。
+探针通过后，用同一单页 PDF 测量 edit.direct.import，再测 500 页文件。
