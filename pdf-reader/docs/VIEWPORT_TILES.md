@@ -37,4 +37,17 @@
 
 ## 验证边界
 
+### 500 页文件启动耗时调查
+
+`read_edit.py` 默认立即输出 `event=timing` 的 JSON 时间锚点并刷新终端。`elapsed_ms` 是从脚本进入 main 起的累计毫秒数，`duration_ms` 是该阶段自身耗时；嵌套阶段不能相加。它们衡量调用返回，不代表首屏绘制完成。关闭时 JSON 报告的 `timings` 字段保留同样记录；若程序尚未关闭，可先提交终端日志。
+
+- `source.hash`、`source.snapshot`、`source.verify`：源文件校验和临时副本准备。
+- `office.launch`、`uno.connect`：启动私有 Office 和等待 UNO 连接。
+- `pdf.load_component`：同步 PDF 导入调用，内部解析、页面创建和 UI 相关耗时目前合并在此。
+- `previews.clone`：逐页接管预览；`previews.layers`：图层设置；`previews.verify`：逐页归属校验。接管及校验每 25 页输出进度，不表示已转换成可编辑对象。
+- `window.activate`、`infobar.setup`、`tiles.setup`、`reader.loop.ready`：窗口激活、InfoBar、瓦片入口初始化及调度循环就绪。
+- `tiles.first_viewport`、`tiles.first_render`、`tiles.first_published`：首次视口查询、首个原生瓦片请求及首次成功贴图。每条 `reading-tile` 另带 `render_ms`（含读取 Graphic、能力检查、内部导出及输出检查）和 `install_ms`（加载 PNG 并创建 Draw 叠图）；缓存命中时 `render_ms=0`。
+
+调查时把原运行命令的末尾接 `2>&1 | tee /tmp/pdf-500p-startup.log`，完整保留从 `startup.begin` 到 `tiles.first_published` 的日志。如果停在某个 `.begin`，它也能定位仍在阻塞的调用。新增记录只用于测量，没有改变全量预览初始化或渲染方式；目标机只需更新 Python，无需重编。
+
 Python 回归覆盖视口裁剪、缩放增加分辨率、边缘瓦片、数量／尺寸限制、LRU、快速翻页去抖、同步调用后的过时结果丢弃、旧桥接降级与贴图失败处理。开发机旧版 Office 不含新原生桥接，不能以这些测试宣称新构建的 GUI 高清效果已通过；需按上述步骤在目标机确认。

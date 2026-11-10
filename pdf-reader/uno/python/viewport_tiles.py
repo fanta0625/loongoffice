@@ -8,12 +8,14 @@ from collections import OrderedDict
 from contextlib import contextmanager
 from dataclasses import dataclass
 import math
+import time
 from pathlib import Path
 import uuid
 
 from edit_bridge import property_value as prop
 from reader_session import set_graphic
 from tile_bridge import InternalTileRenderer, TileBridgeUnavailable, tile_placement
+from timing_log import TimingLog
 
 
 @dataclass(frozen=True)
@@ -90,7 +92,10 @@ class TileCache:
 
 
 class ViewportTiles:
-    def __init__(self, session, directory, *, renderer=None, settle=.18):
+    def __init__(self, session, directory, *, renderer=None, settle=.18, timing=None):
+        self.timing = timing or TimingLog()
+        self.first_request = True
+        self.first_tick = True
         self.session = session
         self.renderer = renderer or InternalTileRenderer(session.context)
         self.cache = TileCache(directory)
@@ -153,7 +158,13 @@ class ViewportTiles:
     def tick(self, now):
         if self.disabled:
             return None
+        if self.first_tick:
+            self.timing.mark('tiles.first_viewport.begin')
         plan = self.snapshot()
+        if self.first_tick:
+            self.timing.mark('tiles.first_viewport.end', page=plan.page, page_pixels=plan.pixels,
+                             visible_tile_count=len(plan.rects))
+            self.first_tick = False
         keys = {(plan.page, plan.pixels, rect) for rect in plan.rects}
         if plan != self.plan:
             self.remove_except(keys)
@@ -167,11 +178,20 @@ class ViewportTiles:
                 continue
             path = self.cache.get(key)
             cached = path is not None
+            render_ms = 0
             if not cached:
                 path = self.cache.directory / (uuid.uuid4().hex + '.png')
                 try:
+                    if self.first_request:
+                        self.timing.mark('tiles.first_render.begin', page=plan.page,
+                                         page_pixels=plan.pixels, rect=rect)
+                    render_started = time.monotonic()
                     self.renderer.render(self.session.previews[plan.page - 1].getPropertyValue('Graphic'),
                                          path, plan.pixels, rect)
+                    render_ms = round((time.monotonic() - render_started) * 1000, 2)
+                    if self.first_request:
+                        self.timing.mark('tiles.first_render.end', duration_ms=render_ms)
+                        self.first_request = False
                 except TileBridgeUnavailable as error:
                     path.unlink(missing_ok=True)
                     self.disabled, self.error = True, str(error)
@@ -190,15 +210,20 @@ class ViewportTiles:
                 self.metrics['stale_discarded'] += 1
                 return None
             try:
+                install_started = time.monotonic()
                 self.install(key, plan, rect, path)
+                install_ms = round((time.monotonic() - install_started) * 1000, 2)
             except Exception as error:
                 self.disabled, self.error = True, str(error)
                 self.clear()
                 return {'event': 'tiles-failed', 'error': self.error}
             self.metrics['published'] += 1
+            if self.metrics['published'] == 1:
+                self.timing.mark('tiles.first_published', page=plan.page, install_ms=install_ms)
             self.metrics['peak_visible_tiles'] = max(self.metrics['peak_visible_tiles'], len(self.shapes))
             return {'event': 'reading-tile', 'page': plan.page, 'page_pixels': plan.pixels,
-                    'rect': rect, 'cache_hit': cached, 'visible_tiles': len(self.shapes)}
+                    'rect': rect, 'cache_hit': cached, 'visible_tiles': len(self.shapes),
+                    'render_ms': render_ms, 'install_ms': install_ms}
         return None
 
     def install(self, key, plan, rect, path):

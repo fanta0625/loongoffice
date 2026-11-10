@@ -19,6 +19,7 @@ from reader_session import ReaderSession, SessionClosed
 from reader_infobar import ReaderInfoBar
 from edit_mode import EditMode
 from viewport_tiles import ViewportTiles
+from timing_log import TimingLog
 
 
 def file_digest(path):
@@ -27,17 +28,23 @@ def file_digest(path):
 
 
 def main(args):
-    import uno
+    timing = TimingLog(enabled=True)
+    timing.mark('startup.begin')
+    with timing.span('uno.import'):
+        import uno
     source = Path(args.pdf).resolve(strict=True)
     if args.report and Path(args.report).exists():
         raise FileExistsError(args.report)
-    digest = file_digest(source)
+    with timing.span('source.hash', bytes=source.stat().st_size):
+        digest = file_digest(source)
     with tempfile.TemporaryDirectory(prefix='pdf-read-edit-') as tmp:
         directory = Path(tmp)
         snapshot = directory / 'source.pdf'
-        shutil.copyfile(source, snapshot)  # Stable source; never import from an edited/saved file.
-        if file_digest(snapshot) != digest:
-            raise RuntimeError('Source changed while taking the session snapshot')
+        with timing.span('source.snapshot'):
+            shutil.copyfile(source, snapshot)  # Stable source; never import from an edited/saved file.
+        with timing.span('source.verify'):
+            if file_digest(snapshot) != digest:
+                raise RuntimeError('Source changed while taking the session snapshot')
         pipe = 'pdf_reader_' + uuid.uuid4().hex
         command = [args.office, '-env:UserInstallation=' + (directory / 'profile').as_uri(),
                    '--nologo', '--nodefault', '--nofirststartwizard', '--norestore',
@@ -49,8 +56,11 @@ def main(args):
         failure = None
         events = []
         with (directory / 'office.log').open('w+') as log:
+            timing.mark('office.launch.begin')
             process = subprocess.Popen(command, env=env, stdout=log, stderr=subprocess.STDOUT)
+            timing.mark('office.launch.end', pid=process.pid)
             try:
+                timing.mark('uno.connect.begin')
                 local = uno.getComponentContext()
                 resolver = local.ServiceManager.createInstanceWithContext('com.sun.star.bridge.UnoUrlResolver', local)
                 deadline = time.monotonic() + 30
@@ -62,18 +72,23 @@ def main(args):
                         if process.poll() is not None or time.monotonic() > deadline:
                             raise RuntimeError('Cannot connect to private Office')
                         time.sleep(.1)
+                timing.mark('uno.connect.end')
                 desktop = context.ServiceManager.createInstanceWithContext('com.sun.star.frame.Desktop', context)
-                session = ReaderSession(context, snapshot.as_uri(), read_only=True)
+                with timing.span('reader.session'):
+                    session = ReaderSession(context, snapshot.as_uri(), read_only=True, timing=timing)
                 session.document.setTitle(source.name + ' — PDF 阅读／按页编辑（开发版）')
                 print(f'Reading {session.count} pages; editable imports so far: 0', flush=True)
                 commands = SimpleQueue()
-                ui = ReaderInfoBar(session.document, commands)
+                with timing.span('infobar.setup'):
+                    ui = ReaderInfoBar(session.document, commands)
                 engine = EditMode(session, lambda: session.enable_editing(ui.native_edit),
                                   prefetch_seconds=None if args.no_prefetch else 2)
                 if not args.no_tiles:
-                    tiles = ViewportTiles(session, directory / 'tiles')
+                    with timing.span('tiles.setup'):
+                        tiles = ViewportTiles(session, directory / 'tiles', timing=timing)
                 toolkit = context.ServiceManager.createInstanceWithContext('com.sun.star.awt.Toolkit', context)
                 transition_error = None
+                timing.mark('reader.loop.ready')  # Scheduler ready, not first GUI paint.
                 while process.poll() is None:
                     try:
                         if not commands.empty():
@@ -148,6 +163,7 @@ def main(args):
                 raise
             finally:
                 report = {'source': str(source), 'source_sha256': digest, 'events': events,
+                          'timings': timing.events,
                           'status': 'failed' if failure else 'closed', 'error': failure,
                           'edited_pages': sorted(session.edited) if session else [],
                           'import_calls': session.import_calls if session else [],

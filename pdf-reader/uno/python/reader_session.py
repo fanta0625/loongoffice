@@ -7,6 +7,7 @@ three-page continuous-view fixture. No tile rendering is implemented here.
 """
 from edit_bridge import open_for_edit, property_value as prop
 from edit_cache import StagedPageCache
+from timing_log import TimingLog
 import time
 
 
@@ -28,7 +29,8 @@ def set_graphic(shape, graphic):
 
 
 class ReaderSession:
-    def __init__(self, context, pdf_url, *, hidden=False, importer=open_for_edit, read_only=False):
+    def __init__(self, context, pdf_url, *, hidden=False, importer=open_for_edit, read_only=False, timing=None):
+        self.timing = timing or TimingLog()
         self.context, self.pdf_url, self.importer = context, pdf_url, importer
         self.edited = set()
         self.import_calls = []
@@ -36,21 +38,24 @@ class ReaderSession:
         self._active_view = None
         self.desktop = context.ServiceManager.createInstanceWithContext(
             'com.sun.star.frame.Desktop', context)
-        self.document = self.desktop.loadComponentFromURL(pdf_url, '_blank', 0, (
-            # Visible sessions must take SfxBaseController's normal UI setup
-            # path. Showing an initially hidden top-level window later skips
-            # HideUI(false), child-window setup and native view activation.
-            # Background conversion and headless probes remain hidden.
-            prop('Hidden', hidden), prop('FilterName', 'draw_pdf_import'),
-            prop('ReadOnly', read_only), prop('UpdateDocMode', 0),
-            prop('MacroExecutionMode', 0),
-        ))
+        with self.timing.span('pdf.load_component'):
+            self.document = self.desktop.loadComponentFromURL(pdf_url, '_blank', 0, (
+                # Visible sessions must take SfxBaseController's normal UI setup
+                # path. Showing an initially hidden top-level window later skips
+                # HideUI(false), child-window setup and native view activation.
+                # Background conversion and headless probes remain hidden.
+                prop('Hidden', hidden), prop('FilterName', 'draw_pdf_import'),
+                prop('ReadOnly', read_only), prop('UpdateDocMode', 0),
+                prop('MacroExecutionMode', 0),
+            ))
         if self.document is None:
             raise RuntimeError('Internal PDFium graphic loading failed')
         try:
-            self._setup_previews()
-            if not hidden:
-                self.document.getCurrentController().getFrame().activate()
+            with self.timing.span('previews.setup'):
+                self._setup_previews()
+            with self.timing.span('window.activate'):
+                if not hidden:
+                    self.document.getCurrentController().getFrame().activate()
         except BaseException:
             self.document.dispose()
             raise
@@ -58,10 +63,13 @@ class ReaderSession:
     def _setup_previews(self):
         self.pages = self.document.getDrawPages()
         self.count = self.pages.getCount()
+        self.timing.mark('previews.enumerated', pages=self.count)
         if not self.count:
             raise RuntimeError('PDF has no pages')
         self.previews = []
         self.page_refs = []
+        phase_started = time.monotonic()
+        self.timing.mark('previews.clone.begin', pages=self.count)
         for i in range(self.count):
             page = self.pages.getByIndex(i)
             # Acquire once and retain BEFORE querying any interface. A
@@ -99,6 +107,12 @@ class ReaderSession:
             self.previews.append(preview)
             self.page_refs.append(page)
             page.Name = f'PDF source page {i + 1}'
+            if (i + 1) % 25 == 0 or i + 1 == self.count:
+                self.timing.mark('previews.clone.progress', completed=i + 1, pages=self.count,
+                                 duration_ms=round((time.monotonic() - phase_started) * 1000, 2))
+        self.timing.mark('previews.clone.end', duration_ms=round((time.monotonic() - phase_started) * 1000, 2))
+        phase_started = time.monotonic()
+        self.timing.mark('previews.layers.begin')
         layers = self.document.getLayerManager()
         preview_layer = layers.insertNewByIndex(layers.getCount())
         preview_layer.Name = 'PDF reader locked previews'
@@ -111,11 +125,20 @@ class ReaderSession:
         self.edit_layer.Name = 'PDF imported edit objects'
         self.edit_layer.IsVisible = self.edit_layer.IsPrintable = True
         self.edit_layer.IsLocked = False
+        self.timing.mark('previews.layers.end', duration_ms=round((time.monotonic() - phase_started) * 1000, 2))
+        phase_started = time.monotonic()
+        self.timing.mark('previews.verify.begin')
         for number in range(1, self.count + 1):
             self._reading_preview(number, phase='initialization')
+            if number % 25 == 0 or number == self.count:
+                self.timing.mark('previews.verify.progress', completed=number, pages=self.count,
+                                 duration_ms=round((time.monotonic() - phase_started) * 1000, 2))
+        self.timing.mark('previews.verify.end', duration_ms=round((time.monotonic() - phase_started) * 1000, 2))
+        self.timing.mark('previews.finalize.begin')
         self.document.getUndoManager().clear()  # Initial session setup only.
         self.document.setModified(False)
         self.document.getCurrentController().setCurrentPage(self.pages.getByIndex(0))
+        self.timing.mark('previews.finalize.end')
 
     def current_page(self):
         controller = self.document.getCurrentController()
