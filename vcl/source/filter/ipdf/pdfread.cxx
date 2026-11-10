@@ -46,10 +46,12 @@ bool RenderPDFTile(const void* pBuffer, int nSize, sal_Int32 nPage,
     auto pPage = pDocument->openPage(nPage);
     if (!pPage)
         return false;
-    const int nWidth = static_cast<int>(rTilePixels.Width());
-    const int nHeight = static_cast<int>(rTilePixels.Height());
+    int nWidth = static_cast<int>(rTilePixels.Width());
+    int nHeight = static_cast<int>(rTilePixels.Height());
     auto pBitmap = pPdfium->createBitmap(nWidth, nHeight, 1);
-    if (!pBitmap)
+    // The allocation API may adjust dimensions on a fallback. A tile must
+    // match the requested pixel grid exactly; reject a resized allocation.
+    if (!pBitmap || nWidth != rTilePixels.Width() || nHeight != rTilePixels.Height())
         return false;
     pBitmap->fillRect(0, 0, nWidth, nHeight, 0xFFFFFFFF);
     // PDFium clips into the small destination. A negative origin selects the
