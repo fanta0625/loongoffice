@@ -95,3 +95,36 @@ make PARALLELISM=4 CppunitTest_xmloff_draw \
 可编辑、其他页预览完整、返回已编辑页修改仍在。比较 edit.direct.summary 总时长
 与旧 copy_seconds+import_seconds。目标机耗时尚待验证，不承诺具体倍数。
 保存仍未实现，不允许把混合预览页当成完整编辑结果覆盖原 PDF。
+
+## 现有文档导入的原生通知批处理（2026-11-10）
+
+500 页样本直接导入第一页实测约 200 秒：其中 direct_import 199.85 秒，
+commit 0.09 秒，view_unlock 0.66 秒。几何最终正确，中间构建状态可见。
+这说明去掉二次复制并不足以解决向已打开文档插入对象的成本。
+
+源码确认模型锁与修改通知是两个通道：
+
+- sd/source/ui/unoidl/unomodel.cxx：lockControllers 调用 SdrModel::setLock。
+- sd/source/core/drawdoc.cxx：加载完成且允许修改时，SetChanged 转入文档壳。
+- sd/source/ui/docshell/docshell.cxx：DrawDocShell::SetModified 每次都会在允许修改时
+  广播 DocChanged，即使修改标记已经为 true；控制器锁不检查这个条件。
+- sd/source/ui/slidesorter/controller/SlsListener.cxx：DocChanged 触发母版和切换效果检查；
+  具体扫描还有页数等条件，不能把每次广播都等同于扫描全部 500 页。
+- offapi/com/sun/star/util/XModifiable2.idl 明确提供导入期间抑制修改更新的原生接口。
+
+新增独立 Python 事务适配 native_import_batch.py，使用 isSetModifiedEnabled、
+disableSetModified、enableSetModified；不修改旧 C++、不重写通知系统，也不创建
+临时 Draw 文档。构建、提交预览替换、异常清理都在抑制期间执行，之后统一发布一次
+成功/回滚修改状态。外部已经关闭修改通知时保持关闭，不擅自恢复。
+使用显式状态查询，不依赖该基线 IDL 文档与实现存在歧义的返回值描述。
+
+新增 summary 阶段 modification_suspend、modification_restore、modified_publish。
+这项修复去掉一条确定存在的重复通知路径，但尚未在 Loongnix 的 500 页样本测量
+收益，不能宣称已消除 200 秒耗时或保证中间画面完全不刷新。
+模型/文字对象布局等其他成本仍可能存在。
+
+本轮本地 Python 60 项测试：59 通过、1 项 PyUNO 环境依赖跳过；新增真实 UNO
+探针检查导入中修改通知关闭，完成和失败后恢复，继续检查原生几何、图层和撤销。
+这次只修改 Python 和文档，无需重新编译已包含直接导入服务的 Office。
+先运行 probe_direct_edit.py，再运行原有 500 页 read_edit.py 命令，比较
+edit.direct.import 和 edit.direct.summary。真实原生探针与大文件耗时须在验证机确认。

@@ -22,6 +22,11 @@ class DirectEditTests(unittest.TestCase):
         s.document = Mock()
         s.document.hasControllersLocked.return_value = False
         s.document.isModified.return_value = True
+        s.document.isSetModifiedEnabled.return_value = True
+        s.document.disableSetModified.side_effect = lambda: setattr(
+            s.document.isSetModifiedEnabled, 'return_value', False)
+        s.document.enableSetModified.side_effect = lambda: setattr(
+            s.document.isSetModifiedEnabled, 'return_value', True)
         s.pdf_url = 'file:///fixture.pdf'
         s.timing = TimingLog()
         s.count, s.edited, s.import_calls = 3, set(), []
@@ -48,6 +53,49 @@ class DirectEditTests(unittest.TestCase):
         self.session.document.getUndoManager().clear.assert_not_called()
         self.session.document.getUndoManager().unlock.assert_called_once()
         self.session.document.unlockControllers.assert_called_once()
+        self.assertTrue(self.session.document.isSetModifiedEnabled())
+
+    def test_native_updates_suppressed_until_commit_then_published_once(self):
+        document = self.session.document
+        def import_page(*args):
+            self.assertFalse(document.isSetModifiedEnabled())
+            self.page.shapes.append(shape())
+        def publish(value):
+            self.assertTrue(document.isSetModifiedEnabled())
+            self.assertEqual(len(self.page.shapes), 1)
+            self.assertNotIn(self.preview, self.page.shapes)
+            self.assertTrue(value)
+        document.setModified.side_effect = publish
+        self.run_import(import_page)
+        document.disableSetModified.assert_called_once()
+        document.enableSetModified.assert_called_once()
+        document.setModified.assert_called_once_with(True)
+
+    def test_failure_restores_clean_state_after_suppressed_rollback(self):
+        document = self.session.document
+        document.isModified.return_value = False
+        original_remove = self.page.remove
+        def remove(obj):
+            self.assertFalse(document.isSetModifiedEnabled())
+            original_remove(obj)
+        self.page.remove = remove
+        def fail(*args):
+            self.page.shapes.append(shape())
+            raise RuntimeError('injected failure')
+        with self.assertRaisesRegex(RuntimeError, 'injected failure'):
+            self.run_import(fail)
+        self.assertEqual(self.page.shapes, [self.preview])
+        document.setModified.assert_called_once_with(False)
+        self.assert_undo_retained()
+
+    def test_outer_modification_suppression_not_released_or_published(self):
+        document = self.session.document
+        document.isSetModifiedEnabled.return_value = False
+        self.run_import(lambda *args: self.page.shapes.append(shape()))
+        document.disableSetModified.assert_not_called()
+        document.enableSetModified.assert_not_called()
+        document.setModified.assert_not_called()
+        self.assertFalse(document.isSetModifiedEnabled())
 
     def test_success_creates_once_without_copy_or_shape_enumeration(self):
         objects = [shape() for _ in range(100)]

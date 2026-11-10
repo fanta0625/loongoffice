@@ -11,6 +11,7 @@ from edit_copy import (CopyProfile, controller_batch, COPY_BATCH_SIZE,
                        COPY_BATCH_MIN_SIZE, COPY_BATCH_SECONDS)
 from timing_log import TimingLog
 from direct_edit import import_into_page, discard_resources
+from native_import_batch import modification_batch
 import time
 import uuid
 
@@ -437,42 +438,49 @@ class ReaderSession:
         try:
             with controller_batch(self.document, profile):
                 try:
-                    with profile.phase('direct_import'), self.timing.span('edit.direct.import', page=number):
-                        import_into_page(self.context, self.document, page, self.pdf_url,
-                                         number, self.edit_layer.Name, prefix)
-                    with profile.phase('commit'):
-                        count = page.getCount() - 1
-                        if (self.pages.getCount() != self.count
-                                or self.pages.getByIndex(number - 1) != page
-                                or page.Name != f'PDF source page {number}'
-                                or self.previews[number - 1] != preview
-                                or count < 0):
-                            raise RuntimeError('Direct PDF import changed target page identity')
-                        # Native SAX is synchronous: navigation cancellation is
-                        # checked before commit, not between imported shapes.
-                        if controller is None or controller.getCurrentPage() != page:
-                            raise ConversionCancelled('active-page-changed')
-                        self.document.setModified(True)
-                        page.remove(preview)
-                        self.edited.add(number)
-                        status = 'completed'
-                except BaseException:
-                    with profile.phase('rollback'):
-                        # Only failure walks objects across UNO. The target was
-                        # verified to contain exactly our owned preview before
-                        # entering the native content-only importer.
-                        preview_present = False
-                        for index in range(page.getCount() - 1, -1, -1):
-                            shape = page.getByIndex(index)
-                            if shape != preview:
-                                page.remove(shape)
-                            else:
-                                preview_present = True
-                        if not preview_present:
-                            page.add(preview)
-                        discard_resources(self.context, self.document, prefix)
-                        self.document.setModified(modified)
-                    raise
+                    with modification_batch(self.document, profile):
+                        try:
+                            with profile.phase('direct_import'), self.timing.span('edit.direct.import', page=number):
+                                import_into_page(self.context, self.document, page, self.pdf_url,
+                                                 number, self.edit_layer.Name, prefix)
+                            with profile.phase('commit'):
+                                count = page.getCount() - 1
+                                if (self.pages.getCount() != self.count
+                                        or self.pages.getByIndex(number - 1) != page
+                                        or page.Name != f'PDF source page {number}'
+                                        or self.previews[number - 1] != preview
+                                        or count < 0):
+                                    raise RuntimeError('Direct PDF import changed target page identity')
+                                # Native SAX is synchronous: navigation cancellation is
+                                # checked before commit, not between imported shapes.
+                                if controller is None or controller.getCurrentPage() != page:
+                                    raise ConversionCancelled('active-page-changed')
+                                page.remove(preview)
+                                self.edited.add(number)
+                                status = 'completed'
+                        except BaseException:
+                            with profile.phase('rollback'):
+                                # Only failure walks objects across UNO. The target was
+                                # verified to contain exactly our owned preview before
+                                # entering the native content-only importer.
+                                preview_present = False
+                                for index in range(page.getCount() - 1, -1, -1):
+                                    shape = page.getByIndex(index)
+                                    if shape != preview:
+                                        page.remove(shape)
+                                    else:
+                                        preview_present = True
+                                if not preview_present:
+                                    page.add(preview)
+                                discard_resources(self.context, self.document, prefix)
+                            raise
+                finally:
+                    # Publish only after restoring XModifiable2. Rollback must
+                    # run while notifications are suppressed too. Respect a
+                    # suppression already owned by an outer native operation.
+                    if self.document.isSetModifiedEnabled():
+                        with profile.phase('modified_publish'):
+                            self.document.setModified(True if status == 'completed' else modified)
             return {'page': number, 'reused': False, 'shapes': count,
                     'edit_route': 'native-direct-page', 'temporary_draw_documents': 0,
                     'copied_shapes': 0, 'page_geometry_verified': True,

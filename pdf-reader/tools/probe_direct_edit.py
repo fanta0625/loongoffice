@@ -168,7 +168,14 @@ def run(args):
                     expected_text = text_properties(oracle_page)
                 finally:
                     oracle.dispose()
-                result = session.edit_current_page()
+                def checked_import(*values):
+                    if session.document.isSetModifiedEnabled():
+                        raise RuntimeError('Native modified-state updates were not suppressed')
+                    return import_into_page(*values)
+                with patch('reader_session.import_into_page', side_effect=checked_import):
+                    result = session.edit_current_page()
+                if not session.document.isSetModifiedEnabled() or not session.document.isModified():
+                    raise RuntimeError('Native modified-state updates were not restored/published')
                 if result['copied_shapes'] != 0 or result['temporary_draw_documents'] != 0:
                     raise RuntimeError('Direct path used the old copier')
                 actual = trees(original_pages[1])
@@ -233,6 +240,8 @@ def run(args):
                         raise RuntimeError('Expected injected failure')
                 if original_pages[0].getCount() != 1 or original_pages[0].getByIndex(0) != preview:
                     raise RuntimeError('Failed import did not retain the preview')
+                if not session.document.isSetModifiedEnabled():
+                    raise RuntimeError('Failed import leaked native modification suppression')
                 def navigate_after_native(*values):
                     import_into_page(*values)
                     controller.setCurrentPage(original_pages[1])
@@ -249,6 +258,7 @@ def run(args):
                                   'native_layer_assignment': True, 'existing_page_render_retained': True,
                                   'previous_undo_history_retained': True,
                                   'native_delete_undo_redo_verified': True,
+                                  'native_modification_batch_verified': True,
                                   'ui_text_typing_undo_verified': False,
                                   'failure_retains_preview': True, 'navigation_before_commit_rollback': True,
                                   'page_identity_retained': True, 'first_result': result}, indent=2))
