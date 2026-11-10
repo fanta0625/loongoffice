@@ -18,6 +18,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'uno' / 'python'))
 from reader_session import ReaderSession, SessionClosed
 from reader_infobar import ReaderInfoBar
 from edit_mode import EditMode
+from viewport_tiles import ViewportTiles
 
 
 def file_digest(path):
@@ -44,7 +45,7 @@ def main(args):
         env = os.environ.copy()
         env['LO_IMPORT_USE_PDFIUM'] = '1'
         env.pop('LO_PDF_HYBRID_VIEW_PROBE', None)  # Do not activate fixed three-page test hooks.
-        session = desktop = ui = engine = None
+        session = desktop = ui = engine = tiles = None
         failure = None
         events = []
         with (directory / 'office.log').open('w+') as log:
@@ -69,6 +70,8 @@ def main(args):
                 ui = ReaderInfoBar(session.document, commands)
                 engine = EditMode(session, lambda: session.enable_editing(ui.native_edit),
                                   prefetch_seconds=None if args.no_prefetch else 2)
+                if not args.no_tiles:
+                    tiles = ViewportTiles(session, directory / 'tiles')
                 toolkit = context.ServiceManager.createInstanceWithContext('com.sun.star.awt.Toolkit', context)
                 transition_error = None
                 while process.poll() is None:
@@ -95,6 +98,8 @@ def main(args):
                             if action == 'edit':
                                 try:
                                     ui.show('正在进入编辑模式', '请稍候…')
+                                    if tiles:
+                                        tiles.clear()  # Never feed preview overlays to the editable importer.
                                     engine.request_edit()
                                     ui.set_edit_mode()
                                     transition_error = None
@@ -112,12 +117,19 @@ def main(args):
                         if result:
                             events.append(result)
                             print(json.dumps(result, ensure_ascii=False), flush=True)
+                        if tiles and engine.mode == 'reading':
+                            tile_event = tiles.tick(time.monotonic())
+                            if tile_event:
+                                events.append(tile_event)
+                                print(json.dumps(tile_event, ensure_ascii=False), flush=True)
                         page = session.current_page()
                         if transition_error:
                             ui.show('PDF 会话提示', transition_error,
                                     edit=engine.mode == 'reading', error=True)
                         elif engine.mode == 'reading':
-                            ui.show('PDF 阅读模式', f'第 {page}/{session.count} 页；点击“编辑”进入文档编辑模式。', edit=True)
+                            hint = ('高清瓦片不可用，保留整页预览。' if tiles and tiles.error else
+                                    '缩放或滚动停留后更新可见区域高清瓦片。' if tiles else '')
+                            ui.show('PDF 阅读模式', f'第 {page}/{session.count} 页；{hint}点击“编辑”进入编辑模式。', edit=True)
                         elif page in engine.failures:
                             ui.show('当前页转换失败，预览已保留', engine.failures[page], edit=True, error=True)
                         else:
@@ -142,14 +154,16 @@ def main(args):
                           'renderer': 'Office internal PDFium graphics',
                           'mode': engine.mode if engine else 'reading', 'ui': 'Draw InfoBar',
                           'page_failures': engine.failures if engine else {},
-                          'tiles': False, 'continuous_layout': False, 'pdf_save_supported': False}
+                          'tiles': bool(tiles and tiles.metrics['published']),
+                          'tile_reading': dict(tiles.metrics, error=tiles.error) if tiles else None,
+                          'continuous_layout': False, 'pdf_save_supported': False}
                 report['prefetch'] = {'enabled': not args.no_prefetch, 'neighbours_each_side': 1,
                                       'max_staged_pages': 2, 'max_staged_shapes': 20000,
                                       'synchronous_import_cancellable': False}
-                for resource in (ui, session):
+                for resource in (tiles, ui, session):
                     if resource:
                         try:
-                            resource.close() if resource is session else resource.dispose()
+                            resource.dispose() if resource is ui else resource.close()
                         except Exception:
                             pass
                 if desktop:
@@ -178,4 +192,5 @@ if __name__ == '__main__':
     parser.add_argument('--report', help='New JSON file written when the session closes')
     parser.add_argument('--no-prefetch', action='store_true',
                         help='Disable synchronous idle neighbour preparation (useful for very slow pages)')
+    parser.add_argument('--no-tiles', action='store_true', help='Use only the original whole-page preview')
     main(parser.parse_args())

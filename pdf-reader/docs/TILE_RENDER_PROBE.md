@@ -1,6 +1,6 @@
 # 内部 PDFium 区域渲染最小链路
 
-本轮是独立验证入口，不改变 `read_edit.py` 的阅读方式。已有阅读窗口仍使用整页预览；没有自动缩放监听、可见区域调度、LRU 图块缓存、编辑态图块资源接管。
+本文件描述独立的固定图块验证入口；`probe_tiles.py` 不监听缩放。后续 `read_edit.py` 已接入阅读态自动缩放、可见区域调度和 LRU，使用方式见 [VIEWPORT_TILES.md](VIEWPORT_TILES.md)。编辑态仍使用 Draw 对象。
 
 ## 接口及隔离
 
@@ -51,6 +51,6 @@ PDFium 在不同裁剪目标上可能产生少量抗锯齿差异，因此比较�
 - 29 项 Python 单元测试在 WSL PyUNO 环境通过，新增实际 UNO Any 类型检查，覆盖嵌套 FilterData 的类型传输，另有坐标共边、末端图块、非法请求、旧版拒绝和能力应答，以及原有会话检查。
 - 本机 WSL LibreOffice 25.2 的 `--expect-unsupported` 检查通过：旧入口明确被拒绝。
 - 直接调用本机 Office 自带的 `/usr/lib/libreoffice/program/libpdfiumlo.so` 验证负原点坐标计算（没有安装其他 PDF 渲染器）：小样本和 500 页大 PDF 的第 2 页各生成两个 512×512 图块，均通过上述误差检查。大文件两个图块的平均 RGB 误差分别约 0.0186 和 0.0047，较大误差通道占比分别约 0.0334% 和 0。
-- 这项直接库验证不覆盖新 C++ 包装、UNO 桥接、表单叠加和 Draw 贴图。用户的 LoongArch 构建已完成 `CppunitTest_vcl_pdfium_library_test`，修复保护边距后未再报失败；开发机未编译原生代码。正向 UNO／GUI 验证因嵌套参数类型问题中断，修复后仍待目标环境重跑。
+- 这项直接库验证不覆盖新 C++ 包装、UNO 桥接、表单叠加和 Draw 贴图。用户的 LoongArch 构建已完成 `CppunitTest_vcl_pdfium_library_test`，修复保护边距后未再报失败；开发机未编译原生代码。用户随后运行固定瓦片正向 UNO 探针，返回 `status=passed`、`pixel_crop_verified=true`、`placement_verified=true`。这仍是固定两块贴图，`automatic_zoom_tiles=false`，不证明自动缩放阅读通过；动态阅读需要另行验证。
 
 本地证据在忽略目录 `results/direct-internal-tiles-final/` 和 `results/tile-unsupported-1/`；不提交源 PDF 或生成图片。
