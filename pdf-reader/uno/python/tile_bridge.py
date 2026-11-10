@@ -44,7 +44,10 @@ class InternalTileRenderer:
         area.X, area.Y, area.Width, area.Height = rect
         self.provider.storeGraphic(graphic, (prop('URL', Path(path).resolve().as_uri()),
             prop('MimeType', 'image/png'),
-            prop('FilterData', (prop('PdfTilePageSize', size), prop('PdfTileRect', area)))))
+            # A tuple inside PropertyValue.Value otherwise becomes []any;
+            # GraphicProvider extracts a sequence<PropertyValue> from this Any.
+            prop('FilterData', uno.Any('[]com.sun.star.beans.PropertyValue',
+                (prop('PdfTilePageSize', size), prop('PdfTileRect', area))))))
 
     def render(self, graphic, path, page_pixels, rect):
         import uno

@@ -11,6 +11,21 @@ from tile_bridge import validate_tile, tile_placement, InternalTileRenderer, Til
 
 
 class TileGeometryTests(unittest.TestCase):
+    def test_export_preserves_nested_uno_property_sequence_type(self):
+        try:
+            import uno
+        except ImportError:
+            self.skipTest('Requires PyUNO for the actual Any transport contract')
+        renderer = object.__new__(InternalTileRenderer)
+        renderer.provider = Mock()
+        renderer._export(object(), Path('tile.png'), (2048, 1024), (256, 128, 512, 512))
+        options = renderer.provider.storeGraphic.call_args.args[1]
+        data = next(p for p in options if p.Name == 'FilterData')
+        self.assertIn('([]com.sun.star.beans.PropertyValue)', repr(data))
+        self.assertNotIn('([]any)', repr(data))
+        self.assertEqual(data.Value[0].Value.Width, 2048)
+        self.assertEqual(data.Value[1].Value.X, 256)
+
     def test_old_provider_ignoring_options_cannot_pass_capability_check(self):
         renderer = object.__new__(InternalTileRenderer)
         renderer.checked = False
