@@ -63,6 +63,38 @@ def layer_tree(page, name):
             layer_tree(shape, name)
 
 
+def text_properties(page):
+    """Inspect only the small test fixture, never the production edit path."""
+    names = ('CharFontName', 'CharFontNameAsian', 'CharFontNameComplex',
+             'CharHeight', 'CharWeight', 'CharPosture', 'CharScaleWidth',
+             'CharAutoKerning', 'CharKerning', 'ParaAdjust', 'ParaLeftMargin',
+             'ParaRightMargin', 'TextAutoGrowWidth', 'TextAutoGrowHeight',
+             'TextFitToSize', 'TextLeftDistance', 'TextRightDistance')
+    def properties(obj):
+        values = {}
+        info = obj.getPropertySetInfo()
+        for name in names:
+            if info.hasPropertyByName(name):
+                value = obj.getPropertyValue(name)
+                values[name] = value if value is None or isinstance(value, (str, int, float, bool)) else str(value)
+        return values
+    result = []
+    for index in range(page.getCount()):
+        shape = page.getByIndex(index)
+        if not hasattr(shape, 'getString'):
+            continue
+        entry = {'index': index, 'text': shape.getString(), 'shape': properties(shape), 'runs': []}
+        paragraphs = shape.createEnumeration()
+        while paragraphs.hasMoreElements():
+            paragraph = paragraphs.nextElement()
+            portions = paragraph.createEnumeration()
+            while portions.hasMoreElements():
+                portion = portions.nextElement()
+                entry['runs'].append({'text': portion.getString(), 'properties': properties(portion)})
+        result.append(entry)
+    return result
+
+
 def run(args):
     import uno
     with tempfile.TemporaryDirectory(prefix='pdf-direct-check-') as tmp:
@@ -106,6 +138,7 @@ def run(args):
                     oracle_page = oracle.getDrawPages().getByIndex(0)
                     expected = trees(oracle_page)
                     expected_size = [oracle_page.Width, oracle_page.Height]
+                    expected_text = text_properties(oracle_page)
                 finally:
                     oracle.dispose()
                 result = session.edit_current_page()
@@ -119,6 +152,8 @@ def run(args):
                                    'geometry_units': '1/100 mm; x,y,width,height',
                                    'differences': geometry_differences(expected, actual),
                                    'expected': expected, 'actual': actual,
+                                   'expected_text': expected_text,
+                                   'actual_text': text_properties(original_pages[1]),
                                    'first_result': result}
                     print(json.dumps(diagnostics, indent=2), flush=True)
                     if args.report:
