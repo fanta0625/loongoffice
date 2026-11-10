@@ -6,6 +6,8 @@ import unittest
 from unittest.mock import Mock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'uno' / 'python'))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'tools'))
+from probe_direct_edit import seed_native_undo
 from reader_session import ReaderSession
 from direct_edit import import_into_page, discard_resources, DirectImportUnavailable
 from timing_log import TimingLog
@@ -106,6 +108,26 @@ class DirectEditTests(unittest.TestCase):
         discard_resources(None, document, 'request-')
         for table in (dash, bitmap, graphics):
             table.removeByName.assert_called_once_with('request-standard')
+
+    def test_native_undo_probe_detects_leaked_lock_before_mutation(self):
+        document = Mock()
+        document.getUndoManager.return_value.isLocked.return_value = True
+        with self.assertRaisesRegex(RuntimeError, 'locked'):
+            seed_native_undo(Mock(), document, Mock())
+        document.createInstance.assert_not_called()
+
+    def test_native_undo_probe_uses_draw_dispatch(self):
+        document, context = Mock(), Mock()
+        document.getUndoManager.return_value.isLocked.return_value = False
+        document.getUndoManager.return_value.isUndoPossible.return_value = True
+        document.getCurrentController.return_value.select.return_value = True
+        page = Page(self.preview)
+        marker = document.createInstance.return_value
+        dispatch = context.ServiceManager.createInstanceWithContext.return_value
+        dispatch.executeDispatch.side_effect = lambda *args: page.remove(marker)
+        self.assertIs(seed_native_undo(context, document, page), marker)
+        self.assertEqual(dispatch.executeDispatch.call_args.args[1], '.uno:Delete')
+        document.getUndoManager.return_value.addUndoAction.assert_not_called()
 
 
 if __name__ == '__main__':

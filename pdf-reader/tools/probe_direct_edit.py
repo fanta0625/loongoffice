@@ -63,6 +63,33 @@ def layer_tree(page, name):
             layer_tree(shape, name)
 
 
+def seed_native_undo(context, document, page):
+    """Use Draw's delete command to create a genuine document undo entry.
+
+    XText.setString uses QuickInsertText/UpdateData; it is not a UI typing
+    operation and need not create a document undo entry.
+    """
+    undo = document.getUndoManager()
+    if undo.isLocked():
+        raise RuntimeError('Direct import left the undo manager locked')
+    marker = document.createInstance('com.sun.star.drawing.RectangleShape')
+    marker.Name = 'PDF_NATIVE_UNDO_PROBE'
+    page.add(marker)
+    controller = document.getCurrentController()
+    if not controller.select(marker):
+        raise RuntimeError('Cannot select the native undo fixture')
+    count = page.getCount()
+    dispatch = context.ServiceManager.createInstanceWithContext(
+        'com.sun.star.frame.DispatchHelper', context)
+    dispatch.executeDispatch(controller.getFrame(), '.uno:Delete', '', 0, ())
+    deadline = time.monotonic() + 3
+    while page.getCount() == count and time.monotonic() < deadline:
+        time.sleep(.05)
+    if page.getCount() != count - 1 or not undo.isUndoPossible():
+        raise RuntimeError('Native Draw Delete did not remove the fixture with an undo entry')
+    return marker
+
+
 def text_properties(page):
     """Inspect only the small test fixture, never the production edit path."""
     names = ('CharFontName', 'CharFontNameAsian', 'CharFontNameComplex',
@@ -169,9 +196,10 @@ def run(args):
                     raise RuntimeError('Native selected page did not produce expected editable text')
                 text.setString('DIRECT_USER_EDIT')
                 undo = session.document.getUndoManager()
+                marker = seed_native_undo(context, session.document, original_pages[1])
                 history = tuple(undo.getAllUndoActionTitles())
                 if not history:
-                    raise RuntimeError('Text editing did not create undo history')
+                    raise RuntimeError('Native Delete did not create undo history')
                 before = render_page(context, original_pages[1], root / 'before.png')
                 controller.setCurrentPage(original_pages[2])
                 session.edit_current_page()
@@ -179,6 +207,17 @@ def run(args):
                     raise RuntimeError('Direct import changed prior undo history')
                 if before != render_page(context, original_pages[1], root / 'after.png'):
                     raise RuntimeError('Importing another page changed an already edited page')
+                controller.setCurrentPage(original_pages[1])
+                undo.undo()
+                if not any(original_pages[1].getByIndex(i) == marker
+                           for i in range(original_pages[1].getCount())):
+                    raise RuntimeError('Retained native undo did not restore the deleted fixture')
+                undo.redo()
+                if any(original_pages[1].getByIndex(i) == marker
+                       for i in range(original_pages[1].getCount())):
+                    raise RuntimeError('Retained native redo did not delete the fixture')
+                if text.getString() != 'DIRECT_USER_EDIT':
+                    raise RuntimeError('Undo/redo damaged the edited PDF text')
                 controller.setCurrentPage(original_pages[0])
                 preview = session._reading_preview(1)
                 def fail_after_native(*values):
@@ -209,6 +248,8 @@ def run(args):
                                   'copied_shapes': 0, 'geometry_matches_existing_importer': True,
                                   'native_layer_assignment': True, 'existing_page_render_retained': True,
                                   'previous_undo_history_retained': True,
+                                  'native_delete_undo_redo_verified': True,
+                                  'ui_text_typing_undo_verified': False,
                                   'failure_retains_preview': True, 'navigation_before_commit_rollback': True,
                                   'page_identity_retained': True, 'first_result': result}, indent=2))
             finally:
