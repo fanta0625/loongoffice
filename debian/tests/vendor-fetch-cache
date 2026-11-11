@@ -82,6 +82,28 @@ lock_sources "$work/remotes/batch-print"
 sh "$root/debian/scripts/fetch-vendor-sources" > "$work/submodule.log"
 [ "$(git -C "$root/dictionaries" rev-parse HEAD)" = "$dictionaries" ]
 
+# A depth-one checkout must fetch pinned sources, including below a Unicode path.
+shallow_root="$work/下载/shallow"
+git clone -q --depth 1 "file://$root" "$shallow_root"
+mkdir -p "$shallow_root/debian/scripts"
+cp "$source_root/debian/scripts/fetch-vendor-sources" \
+    "$source_root/debian/scripts/check-vendor-sources" \
+    "$shallow_root/debian/scripts/"
+cp "$source_root/debian/build-variant" "$shallow_root/debian/build-variant"
+[ "$(git -C "$shallow_root" rev-parse --is-shallow-repository)" = true ]
+sh "$shallow_root/debian/scripts/fetch-vendor-sources" > "$work/shallow.log"
+[ "$(git -C "$shallow_root/dictionaries" rev-parse HEAD)" = "$dictionaries" ]
+
+# A changed lock must still be rejected before downloading any source.
+sed "s/LO_DICTIONARIES_COMMIT=.*/LO_DICTIONARIES_COMMIT=$batch/" \
+    "$shallow_root/debian/vendor-sources.lock" > "$work/wrong.lock"
+cp "$work/wrong.lock" "$shallow_root/debian/vendor-sources.lock"
+if sh "$shallow_root/debian/scripts/fetch-vendor-sources" > "$work/mismatch.log" 2>&1; then
+    echo 'ERROR: mismatching gitlink and lock unexpectedly accepted' >&2
+    exit 1
+fi
+grep -q 'gitlink is .*expected' "$work/mismatch.log"
+
 # A missing remote must fail if the newly locked object is not present.
 printf 'another update\n' >> "$work/remotes/batch-print/main.py"
 git -C "$work/remotes/batch-print" commit -qam update-again

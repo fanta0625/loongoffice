@@ -45,7 +45,10 @@ fetch_submodule()
     url=$3
     commit=$4
 
-    gitlink=$(git -C "$root" ls-tree HEAD -- "$path" | awk '$1 == "160000" { print $3 }')
+    if ! gitlink=$(git -C "$root" rev-parse --verify "HEAD:$path"); then
+        echo "ERROR: cannot read $path from the source checkout's HEAD tree" >&2
+        exit 1
+    fi
     if [ "$gitlink" != "$commit" ]; then
         echo "ERROR: $path gitlink is $gitlink; expected $commit" >&2
         exit 1

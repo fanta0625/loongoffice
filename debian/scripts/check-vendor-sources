@@ -44,9 +44,11 @@ check_gitlink()
 
     if [ -e "$root/.git" ] && \
        git -C "$root" rev-parse --git-dir >/dev/null 2>&1; then
-        actual=$(git -C "$root" ls-tree HEAD -- "$path" | \
-            awk '$1 == "160000" { print $3 }')
-        if [ -n "$actual" ] && [ "$actual" != "$expected" ]; then
+        if ! actual=$(git -C "$root" rev-parse --verify "HEAD:$path"); then
+            echo "ERROR: cannot read $path from the source checkout's HEAD tree" >&2
+            exit 1
+        fi
+        if [ "$actual" != "$expected" ]; then
             echo "ERROR: $path gitlink is $actual; expected $expected" >&2
             exit 1
         fi
