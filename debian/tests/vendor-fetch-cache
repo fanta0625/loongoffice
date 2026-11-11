@@ -83,7 +83,7 @@ sh "$root/debian/scripts/fetch-vendor-sources" > "$work/submodule.log"
 [ "$(git -C "$root/dictionaries" rev-parse HEAD)" = "$dictionaries" ]
 
 # A depth-one checkout must fetch pinned sources, including below a Unicode path.
-shallow_root="$work/下载/shallow"
+shallow_root="$work/涓嬭浇/shallow"
 git clone -q --depth 1 "file://$root" "$shallow_root"
 mkdir -p "$shallow_root/debian/scripts"
 cp "$source_root/debian/scripts/fetch-vendor-sources" \
@@ -91,7 +91,25 @@ cp "$source_root/debian/scripts/fetch-vendor-sources" \
     "$shallow_root/debian/scripts/"
 cp "$source_root/debian/build-variant" "$shallow_root/debian/build-variant"
 [ "$(git -C "$shallow_root" rev-parse --is-shallow-repository)" = true ]
-sh "$shallow_root/debian/scripts/fetch-vendor-sources" > "$work/shallow.log"
+# Model the observed successful-but-empty response to Git's -C invocation.
+# Fixture setup still uses the real Git; only packaging runs through the wrapper.
+mkdir -p "$work/wrapper"
+real_git=$(command -v git)
+cat > "$work/wrapper/git" <<'EOF'
+#!/bin/sh
+if [ "${1:-}" = -C ]; then
+    echo "unexpected Git -C invocation" >> "$WRAPPER_LOG"
+    exit 0
+fi
+exec "$REAL_GIT" "$@"
+EOF
+chmod +x "$work/wrapper/git"
+WRAPPER_LOG="$work/wrapper.log"
+REAL_GIT="$real_git"
+export WRAPPER_LOG REAL_GIT
+PATH="$work/wrapper:$PATH" \
+    sh "$shallow_root/debian/scripts/fetch-vendor-sources" > "$work/shallow.log"
+test ! -e "$WRAPPER_LOG"
 [ "$(git -C "$shallow_root/dictionaries" rev-parse HEAD)" = "$dictionaries" ]
 
 # A changed lock must still be rejected before downloading any source.
