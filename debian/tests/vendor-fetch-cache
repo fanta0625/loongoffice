@@ -11,6 +11,8 @@ cp "$source_root/debian/scripts/fetch-vendor-sources" \
     "$source_root/debian/scripts/check-vendor-sources" \
     "$root/debian/scripts/"
 
+cp "$source_root/debian/build-variant" "$root/debian/build-variant"
+
 git_init()
 {
     git -C "$1" init -q

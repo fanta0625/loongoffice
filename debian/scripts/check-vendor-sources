@@ -63,7 +63,12 @@ check_source "LibreOffice help" \
 check_source "LibreOffice translations" \
     "$root/translations" "$LO_TRANSLATIONS_COMMIT" source/zh-CN
 
-check_source "batch print" \
-    "$root/vendor/libreoffice-batch-print" "$BATCH_PRINT_COMMIT" main.py
+case " $(cat "$root/debian/build-variant") ${DEB_BUILD_PROFILES:-} " in
+    *" pkg.loongoffice.qt6-only "*) ;;
+    *)
+        check_source "batch print" \
+            "$root/vendor/libreoffice-batch-print" "$BATCH_PRINT_COMMIT" main.py
+        ;;
+esac
 
 echo "Vendor sources are consistent."

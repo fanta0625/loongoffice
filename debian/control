@@ -22,11 +22,11 @@ Build-Depends:
  libgstreamer-plugins-base1.0-dev,
  libgstreamer1.0-dev,
  libgtk-3-dev (>= 3.24),
- libkf6config-dev,
- libkf6coreaddons-dev,
- libkf6i18n-dev,
- libkf6kio-dev,
- libkf6windowsystem-dev,
+ libkf6config-dev <!pkg.loongoffice.qt6-only>,
+ libkf6coreaddons-dev <!pkg.loongoffice.qt6-only>,
+ libkf6i18n-dev <!pkg.loongoffice.qt6-only>,
+ libkf6kio-dev <!pkg.loongoffice.qt6-only>,
+ libkf6windowsystem-dev <!pkg.loongoffice.qt6-only>,
  libkrb5-dev,
  libnspr4-dev,
  libnss3-dev,
@@ -46,7 +46,7 @@ Build-Depends:
  python3-lxml,
  python3-setuptools,
  qt6-base-dev,
- qt6-multimedia-dev,
+ qt6-multimedia-dev <!pkg.loongoffice.qt6-only>,
  unzip,
  xsltproc,
  zip
@@ -61,15 +61,15 @@ Depends:
  ${shlibs:Depends},
  default-jre (>= 2:1.17) | java17-runtime,
  python3,
- python3-cups,
- python3-fitz,
- python3-lru-dict,
- python3-magic,
- python3-pyside6.qtwidgets
+ python3-cups <!pkg.loongoffice.qt6-only>,
+ python3-fitz <!pkg.loongoffice.qt6-only>,
+ python3-lru-dict <!pkg.loongoffice.qt6-only>,
+ python3-magic <!pkg.loongoffice.qt6-only>,
+ python3-pyside6.qtwidgets <!pkg.loongoffice.qt6-only>
 Recommends:
  cups-client
 Provides:
- loongbatchprint (= ${binary:Version}),
+ loongbatchprint (= ${binary:Version}) <!pkg.loongoffice.qt6-only>,
  loongoffice-debian-menus (= ${binary:Version}),
  loongoffice-extension-pdf-import (= ${binary:Version}),
  loongoffice-graphicfilter (= ${binary:Version}),
@@ -79,7 +79,7 @@ Provides:
  loongoffice-sdk (= ${binary:Version}),
  loongoffice-xsltfilter (= ${binary:Version}),
  loongoffice-zh-cn (= ${binary:Version}),
- loongofficebasis-kde-integration (= ${binary:Version}),
+ loongofficebasis-kde-integration (= ${binary:Version}) <!pkg.loongoffice.qt6-only>,
  loongofficebasis-zh-cn (= ${binary:Version}),
  loongofficebasis-zh-cn-help (= ${binary:Version})
 Replaces:
@@ -110,10 +110,10 @@ Conflicts:
  loongofficebasis-kde-integration,
  loongofficebasis-zh-cn,
  loongofficebasis-zh-cn-help
-Description: office productivity suite with OFD and batch printing
+Description: office productivity suite with an OFD reader
  LoongOffice is a full-featured office productivity suite with Writer, Calc,
  Impress, Draw, Math, Chinese localization, Chinese help, and the SDK.
  .
- This all-in-one package also contains the OFD reader extension and the batch
- print application and extension. The OFD extension requires a Java 17 capable
- runtime; batch printing uses the distribution Python and Qt 6 bindings.
+ This all-in-one package includes the OFD reader extension, which requires a
+ Java 17 capable runtime. Builds with KDE Frameworks 6 also include the batch
+ printing tool, which uses the distribution Python and Qt 6 bindings.

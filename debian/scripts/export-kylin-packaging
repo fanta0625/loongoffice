@@ -1,0 +1,68 @@
+#!/usr/bin/python3
+"""Export a fixed Kylin debian/ directory without changing the checkout."""
+
+import re
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+root = Path(__file__).resolve().parents[2]
+if len(sys.argv) != 2:
+    sys.exit("Usage: python3 debian/scripts/export-kylin-packaging OUTPUT_DIRECTORY")
+output = Path(sys.argv[1]).resolve()
+if output.exists():
+    sys.exit(f"ERROR: output already exists: {output}")
+if output == root or root in output.parents:
+    sys.exit("ERROR: export outside the source checkout to avoid copying build files")
+
+# Copy packaging inputs only, not debhelper state or a staged binary package.
+names = (
+    "patches", "prebuilt", "scripts", "source", "tests",
+    "batch-print-loongoffice-only.patch", "build-variant", "changelog",
+    "control", "copyright", "loongoffice-batch-print", "loongoffice.conffiles",
+    "loongoffice.postinst", "README.source", "rules", "vendor-sources.lock",
+)
+output.mkdir(parents=True)
+debian = output / "debian"
+debian.mkdir()
+for name in names:
+    source = root / "debian" / name
+    if source.is_dir():
+        shutil.copytree(source, debian / name)
+    else:
+        shutil.copy2(source, debian / name)
+
+# The submitted control file contains literal dependencies. The CI's dependency
+# resolver does not need Build Profiles or an environment-specific probe.
+control = debian / "control"
+control.write_text(
+    "".join(line for line in control.read_text().splitlines(keepends=True)
+            if "<!pkg.loongoffice.qt6-only>" not in line),
+    encoding="utf-8",
+)
+(debian / "build-variant").write_text("pkg.loongoffice.qt6-only\n", encoding="utf-8")
+changelog = debian / "changelog"
+text = changelog.read_text()
+match = re.match(r"(\S+) \(([^)]+)\)", text)
+if not match:
+    sys.exit("ERROR: invalid source changelog")
+version = match[2]
+upstream, revision = version.rsplit("-", 1)
+# Give Kylin's offline input archive its own upstream version and filename.
+revision = revision.replace(".lnd.", ".kylin.")
+if ".kylin." not in revision:
+    revision += ".kylin.1"
+if not upstream.endswith("+kylin"):
+    upstream += "+kylin"
+version = f"{upstream}-{revision}"
+text = (
+    f"{match[1]} ({version}) unstable; urgency=medium\n\n"
+    "  * Build the Qt 6 desktop backend without KF6 or batch printing for Kylin V11.\n\n"
+    + re.search(r"^ -- .+$", text, re.MULTILINE)[0] + "\n\n"
+    + text
+)
+changelog.write_text(text, encoding="utf-8")
+# Parsing validates the generated changelog before it is submitted to CI.
+subprocess.run(["dpkg-parsechangelog", f"-l{changelog}", "-SVersion"], check=True)
+print(f"Kylin packaging exported to {debian}")

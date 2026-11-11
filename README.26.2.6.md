@@ -5,7 +5,7 @@
 - 分支：`loongoffice/26.2.6`
 - 上游标签：`libreoffice-26.2.6.3`
 - 上游提交：`8221e31b3ac356a1623c672912a3d2b492f7e3d1`
-- Debian 版本：`26.2.6.3-1.lnd.2`
+- Debian 版本：`26.2.6.3-1.lnd.3`
 - 定制来源：`debian/single-package-source-build`，提交
   `34883c770a7c`，原基线 `libreoffice-25.8.7.3`。
 
@@ -48,10 +48,20 @@ debian/scripts/prepare-orig-tarball
 `../loongoffice_26.2.6.3.orig.tar.xz`。旧的 vendor/libreoffice-tarballs
 目录应先移走，以便生成与新版本匹配的依赖和校验清单。
 
-准备完输入后，使用标准 Debian 源包流程，或在准备好的 checkout 中执行：
+麒麟 V11 在联网准备主机上执行：
 
 ```sh
-./build.sh
+debian/scripts/prepare-orig-tarball --kylin
+```
+
+生成带 +kylin 版本后缀的 orig 源码包和 .packaging/debian/。
+向麒麟构建项目提交这两份匹配的产物；CI 无需传参数，照常构建。
+主线只维护一份打包配置，不维护麒麟专用开发分支。
+
+两种版本在 CI 中均使用标准 Debian 构建流程：
+
+```sh
+dpkg-buildpackage -b -us -uc
 ```
 
 `debian/` 携带预编译 OFD OXT。生成和提交源包的详细约定见

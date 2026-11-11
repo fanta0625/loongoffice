@@ -1,3 +1,13 @@
+loongoffice (26.2.6.3-1.lnd.3) unstable; urgency=medium
+
+  * Export fixed Qt6-only packaging and matching source inputs for Kylin V11
+    so distribution CI needs no extra build parameters.
+  * Omit KF6, Qt Multimedia and batch-print dependencies and integration in
+    Kylin builds while retaining OFD and normal CUPS printing.
+  * Validate exported packaging and both installed layouts.
+
+ -- wangxin <wangxxin0625@gmail.com>  Wed, 11 Nov 2026 10:01:35 +0800
+
 loongoffice (26.2.6.3-1.lnd.2) unstable; urgency=medium
 
   * Bundle and validate the refreshed prebuilt OFD OXT so public and offline
