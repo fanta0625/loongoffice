@@ -1,0 +1,35 @@
+#!/bin/sh
+
+set -eu
+
+root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
+
+# Exported source packages have a fixed variant and need no CI parameters.
+variant=$(cat "$root/debian/build-variant")
+if [ "$variant" = pkg.loongoffice.qt6-only ]; then
+    printf '%s\n' "$variant"
+    exit 0
+fi
+
+# An explicitly empty value selects the full build.
+if [ "${DEB_BUILD_PROFILES+x}" ]; then
+    printf '%s\n' "$DEB_BUILD_PROFILES"
+    exit 0
+fi
+
+# Probe the optional build and runtime dependencies together with local APT
+# metadata. Each tagged line in these fields is one unversioned package.
+optional_packages=$(sed -nE '
+    /^Build-Depends:/,/^Standards-Version:/s/^ ([a-z0-9.+-]+) <!pkg\.loongoffice\.qt6-only>,?$/\1/p
+    /^Depends:/,/^Recommends:/s/^ ([a-z0-9.+-]+) <!pkg\.loongoffice\.qt6-only>,?$/\1/p
+' "$root/debian/control")
+if [ -z "$optional_packages" ]; then
+    echo "ERROR: no optional build dependencies found in debian/control" >&2
+    exit 1
+fi
+
+if apt-get --simulate --no-install-recommends --no-remove install $optional_packages >/dev/null 2>&1; then
+    printf '\n'
+else
+    printf '%s\n' pkg.loongoffice.qt6-only
+fi

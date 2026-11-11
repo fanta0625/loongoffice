@@ -6,3 +6,6 @@ Depends: make, curl
 
 Test-Command: sh debian/tests/vendor-fetch-cache
 Depends: git
+
+Test-Command: sh debian/tests/kylin-packaging
+Depends: python3, dpkg-dev

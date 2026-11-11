@@ -8,6 +8,17 @@ tarball_dir=${1:-"$root/vendor/libreoffice-tarballs"}
 cd "$root"
 PYTHON=/usr/bin/python3
 export PYTHON
+case " $(cat "$root/debian/build-variant") ${DEB_BUILD_PROFILES:-} " in
+    *" pkg.loongoffice.qt6-only "*)
+        set -- --disable-kf6 --disable-kf5 --disable-qt5 \
+            --disable-gtk3 --disable-gtk3-kde5 --disable-gtk4 --disable-gen \
+            --disable-qt6-multimedia
+        ;;
+    *)
+        set -- --enable-kf6 --enable-qt6-multimedia
+        ;;
+esac
+
 exec ./autogen.sh \
     --prefix=/usr \
     --libdir=/opt \
@@ -21,8 +32,7 @@ exec ./autogen.sh \
     --disable-librelogo \
     --enable-release-build \
     --enable-qt6 \
-    --enable-kf6 \
-    --enable-qt6-multimedia \
+    "$@" \
     --enable-gstreamer-1-0 \
     --enable-odk \
     --enable-python=system \

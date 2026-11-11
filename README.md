@@ -1,142 +1,54 @@
-# LibreOffice
-[![Coverity Scan Build Status](https://scan.coverity.com/projects/211/badge.svg)](https://scan.coverity.com/projects/211) [![CII Best Practices](https://bestpractices.coreinfrastructure.org/projects/307/badge)](https://bestpractices.coreinfrastructure.org/projects/307) [![Translation status](https://weblate.documentfoundation.org/widgets/libo_ui-master/-/svg-badge.svg)](https://weblate.documentfoundation.org/engage/libo_ui-master/?utm_source=widget)
+# LoongOffice
 
-<img align="right" width="150" src="https://opensource.org/wp-content/uploads/2009/06/OSIApproved.svg">
+本分支基于 **LibreOffice 26.2.6**（源码基线为 `libreoffice-26.2.6.3`），添加了 **多格式批量打印**，以及 **OFD 导入阅读、编辑和导出** 功能。
 
-LibreOffice is an integrated office suite based on copyleft licenses
-and compatible with most document formats and standards. Libreoffice
-is backed by The Document Foundation, which represents a large
-independent community of enterprises, developers and other volunteers
-moved by the common goal of bringing to the market the best software
-for personal productivity. LibreOffice is open source, and free to
-download, use and distribute.
+Loongnix 版保留全部上述功能；麒麟 V11 版使用 Qt6 后端，暂不提供批量打印，保留普通打印及 OFD 功能。
 
-A quick overview of the LibreOffice code structure.
+## 功能与实现
 
-## Overview
+- **批量打印**：使用 Python + PySide6 构建界面，通过 UNO 调用 LoongOffice 文档处理和打印能力，结合 PyMuPDF 处理 PDF 预览与页面排版，并对接系统 CUPS 打印服务。支持各类文档格式的批量打印，包括 Word、Excel、PowerPoint、PDF、OFD 和图片等。可集中添加文件，预览内容，设置页码范围、份数、单双面和纸张参数后批量打印。通过 Office 菜单和文件管理器右键菜单提供入口。
+- **OFD 导入、编辑与导出**：以 Java UNO 扩展集成到 LoongOffice，基于 OFDRW 解析、渲染和转换 OFD。支持导入 OFD 阅读、打印，转入 Draw 编辑，并将 Writer、Calc、Impress、Draw、Math 等模块中的文档导出为 OFD。需要 Java 17 运行环境。
 
-You can develop for LibreOffice in one of two ways, one
-recommended and one much less so. First the somewhat less recommended
-way: it is possible to use the SDK to develop an extension,
-for which you can read the [API docs](https://api.libreoffice.org/)
-and [Developers Guide](https://wiki.documentfoundation.org/Documentation/DevGuide).
-This re-uses the (extremely generic) UNO APIs that are also used by
-macro scripting in StarBasic.
+## 准备 CI 包
 
-The best way to add a generally useful feature to LibreOffice
-is to work on the code base however. Overall this way makes it easier
-to compile and build your code, it avoids any arbitrary limitations of
-our scripting APIs, and in general is far more simple and intuitive -
-if you are a reasonably able C++ programmer.
+在联网的目标架构主机上安装对应构建依赖，从已提交、无未提交改动的源码目录执行。
 
-## The Build Chain and Runtime Baselines
+### Loongnix
 
-These are the current minimal operating system and compiler versions to
-run and compile LibreOffice, also used by the TDF builds:
+```sh
+debian/scripts/prepare-orig-tarball
+```
 
-* Windows:
-    * Runtime: Windows 10
-    * Build: [wsl-as-helper](https://wiki.documentfoundation.org/Development/BuildingOnWSLWindows) + Visual Studio 2022
-* macOS:
-    * Runtime: 11
-    * Build: 13 or later + Xcode 14.3 or later (using latest version available for a given version of macOS)
-* Linux:
-    * Runtime: RHEL 9 or CentOS 9 and comparable
-    * Build: either GCC 12; or Clang 18 with libstdc++ 11
-* iOS (only for LibreOfficeKit):
-    * Runtime: 14.5 (only support for newer i devices == 64 bit)
-    * Build: Xcode 12.5 and iPhone SDK 14.5
-* Android:
-    * Build: NDK 27 and SDK 30.0.3
-* Emscripten / WASM:
-    * Runtime: a browser with SharedMemory support (threads + atomics)
-    * Build: Qt 5.15 with Qt supported Emscripten 1.39.8
-    * See [README.wasm](static/README.wasm.md)
+将生成的 `../loongoffice_26.2.6.3.orig.tar.xz` 和仓库中的 `debian/` 一起提交到 CI。
 
-Java is required for building many parts of LibreOffice. In TDF Wiki article
-[Development/Java](https://wiki.documentfoundation.org/Development/Java), the
-exact modules that depend on Java are listed.
+### 麒麟 V11
 
-The baseline for Java is Java Development Kit (JDK) Version 17 or later.
+```sh
+debian/scripts/prepare-orig-tarball --kylin
+```
 
-The baseline for Python is version 3.11. It follows the version available
-in SUSE Linux Enterprise Desktop and the Maintenance Support version of
-Red Hat Enterprise Linux.
+将以下两份匹配的产物一起提交到 CI：
 
-If you want to use Clang with the LibreOffice compiler plugins, the minimal
-version of Clang is 18.1.8. Since Xcode doesn't provide the compiler plugin
-headers, you have to compile your own Clang to use them on macOS.
+- `../loongoffice_26.2.6.3+kylin.orig.tar.xz`
+- `../loongoffice_26.2.6.3+kylin.packaging/debian/`
 
-You can find the TDF configure switches in the `distro-configs/` directory.
+麒麟版的打包配置已固定为 Qt6-only，CI 无需额外参数或探测脚本。
 
-To setup your initial build environment on Windows and macOS, we provide
-the LibreOffice Development Environment
-([LODE](https://wiki.documentfoundation.org/Development/lode)) scripts.
+## 自己编译
 
-For more information see the build instructions for your platform in the
-[TDF wiki](https://wiki.documentfoundation.org/Development/How_to_build).
+以下命令生成 Debian 安装包，适用于 loong64 目标主机。先安装 `debian/control` 中对应配置的构建依赖，需要 GCC 12 或更新版本、GNU Make 4.2 或更新版本及 JDK 17。
 
-## The Important Bits of Code
+在联网的源码目录中执行：
 
-Each module should have a `README.md` file inside it which has some
-degree of documentation for that module; patches are most welcome to
-improve those. We have those turned into a web page here:
+```sh
+# Loongnix 完整版；麒麟版将此行改为 export DEB_BUILD_PROFILES=pkg.loongoffice.qt6-only
+export DEB_BUILD_PROFILES=
 
-<https://docs.libreoffice.org/>
+debian/scripts/fetch-vendor-sources
+debian/scripts/prepare-libreoffice-tarballs
+dpkg-buildpackage -b -us -uc
+```
 
-However, there are two hundred modules, many of them of only
-peripheral interest for a specialist audience. So - where is the
-good stuff, the code that is most useful. Here is a quick overview of
-the most important ones:
+生成的 `.deb` 位于源码目录的上一级。若使用已经准备好的 CI 源码包及其匹配的 `debian/`，解压组装后直接执行 `dpkg-buildpackage -b -us -uc` 即可。
 
-Module    | Description
-----------|-------------------------------------------------
-[sal/](sal)             | this provides a simple System Abstraction Layer
-[tools/](tools)         | this provides basic internal types: `Rectangle`, `Color` etc.
-[vcl/](vcl)             | this is the widget toolkit library and one rendering abstraction
-[framework/](framework) | UNO framework, responsible for building toolbars, menus, status bars, and the chrome around the document using widgets from VCL, and XML descriptions from `/uiconfig/` files
-[sfx2/](sfx2)           | legacy core framework used by Writer/Calc/Draw: document model / load/save / signals for actions etc.
-[svx/](svx)             | drawing model related helper code, including much of Draw/Impress
-
-Then applications
-
-Module    | Description
-----------|-------------------------------------------------
-[desktop/](desktop)  | this is where the `main()` for the application lives, init / bootstrap. the name dates back to an ancient StarOffice that also drew a desktop
-[sw/](sw/)           | Writer
-[sc/](sc/)           | Calc
-[sd/](sd/)           | Draw / Impress
-
-There are several other libraries that are helpful from a graphical perspective:
-
-Module    | Description
-----------|-------------------------------------------------
-[basegfx/](basegfx)  | algorithms and data-types for graphics as used in the canvas
-[canvas/](canvas)   | new (UNO) canvas rendering model with various backends
-[cppcanvas/](cppcanvas) | C++ helper classes for using the UNO canvas
-[drawinglayer/](drawinglayer) | View code to render drawable objects and break them down into primitives we can render more easily.
-
-## Rules for #include Directives (C/C++)
-
-Use the `"..."` form if and only if the included file is found next to the
-including file. Otherwise, use the `<...>` form. (For further details, see the
-mail [Re: C[++]: Normalizing include syntax ("" vs
-<>)](https://lists.freedesktop.org/archives/libreoffice/2017-November/078778.html).)
-
-The UNO API include files should consistently use double quotes, for the
-benefit of external users of this API.
-
-`loplugin:includeform (compilerplugins/clang/includeform.cxx)` enforces these rules.
-
-
-## Finding Out More
-
-Beyond this, you can read the `README.md` files, send us patches, ask
-on the mailing list libreoffice@lists.freedesktop.org (no subscription
-required) or poke people on IRC `#libreoffice-dev` on irc.libera.chat -
-we're a friendly and generally helpful mob. We know the code can be
-hard to get into at first, and so there are no silly questions.
-
-## SAST Tools
-
-[PVS-Studio](https://pvs-studio.com/en/pvs-studio/?utm_source=website&utm_medium=github&utm_campaign=open_source) - static analyzer for C, C++, C#, and Java code.
+详细说明见 [Debian 构建文档](debian/README.source) 和 [26.2.6 分支说明](README.26.2.6.md)。

@@ -68,17 +68,22 @@ for app in base calc draw impress writer; do
 done
 
 kde_metadata="$metainfo_dir/org.loongoffice.kde.metainfo.xml"
-if [ ! -f "$kde_metadata" ]; then
-    echo "ERROR: staged LoongOffice KDE metadata is missing: $kde_metadata" >&2
-    exit 1
-fi
-sed -i \
-    -e 's/org\.libreoffice\.kde/org.loongoffice.kde/g' \
-    -e 's/libreoffice-/loongoffice-/g' \
-    -e 's/LibreOffice/LoongOffice/g' \
-    "$kde_metadata"
-grep -Fqx '  <id>org.loongoffice.kde</id>' "$kde_metadata"
-xmllint --noout "$kde_metadata"
+case " $(cat "$root/debian/build-variant") ${DEB_BUILD_PROFILES:-} " in
+    *" pkg.loongoffice.qt6-only "*) rm -f "$kde_metadata" ;;
+    *)
+        if [ ! -f "$kde_metadata" ]; then
+            echo "ERROR: staged LoongOffice KDE metadata is missing: $kde_metadata" >&2
+            exit 1
+        fi
+        sed -i \
+            -e 's/org\.libreoffice\.kde/org.loongoffice.kde/g' \
+            -e 's/libreoffice-/loongoffice-/g' \
+            -e 's/LibreOffice/LoongOffice/g' \
+            "$kde_metadata"
+        grep -Fqx '  <id>org.loongoffice.kde</id>' "$kde_metadata"
+        xmllint --noout "$kde_metadata"
+        ;;
+esac
 
 if [ ! -x "$destdir$office_home/program/soffice" ]; then
     echo "ERROR: staged LoongOffice executable is missing." >&2

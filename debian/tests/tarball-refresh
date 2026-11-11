@@ -36,7 +36,8 @@ EOF
 chmod +x "$root/debian/scripts/"* "$work/bin/curl"
 PATH="$work/bin:$PATH"
 TEST_PAYLOADS="$work/payloads"
-export PATH TEST_PAYLOADS
+DEB_BUILD_PROFILES=
+export PATH TEST_PAYLOADS DEB_BUILD_PROFILES
 
 cat > "$root/Makefile" <<'EOF'
 include config_host.mk

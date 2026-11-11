@@ -28,6 +28,13 @@ else
     exit 1
 fi
 
+# Select the profile before configuring on the preparation host. An explicit profile
+# makes preparation reproducible when the build will run on another host.
+if [ -z "${DEB_BUILD_PROFILES+x}" ]; then
+    DEB_BUILD_PROFILES=$(sh "$root/debian/scripts/select-build-profile")
+    export DEB_BUILD_PROFILES
+fi
+
 echo "Using $download_client to download LibreOffice tarballs."
 
 "$root/debian/scripts/check-vendor-sources"

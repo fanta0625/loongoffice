@@ -10,10 +10,27 @@ if ! command -v dpkg-parsechangelog >/dev/null 2>&1; then
     exit 1
 fi
 
+kylin=no
+if [ "${1:-}" = --kylin ]; then
+    kylin=yes
+    shift
+fi
+if [ "$#" -gt 1 ]; then
+    echo "Usage: $0 [--kylin] [OUTPUT_TARBALL]" >&2
+    exit 1
+fi
+
 source_name=$(dpkg-parsechangelog -l"$root/debian/changelog" -SSource)
 source_version=$(dpkg-parsechangelog -l"$root/debian/changelog" -SVersion)
 upstream_version=${source_version#*:}
 upstream_version=${upstream_version%-*}
+if [ "$kylin" = yes ]; then
+    upstream_version="$upstream_version+kylin"
+    DEB_BUILD_PROFILES=pkg.loongoffice.qt6-only
+else
+    DEB_BUILD_PROFILES=${DEB_BUILD_PROFILES-}
+fi
+export DEB_BUILD_PROFILES
 release_dir="$source_name-$upstream_version"
 output=${1:-"$root/../${source_name}_${upstream_version}.orig.tar.xz"}
 
@@ -32,6 +49,12 @@ esac
 
 if [ -e "$output" ]; then
     echo "ERROR: output already exists: $output" >&2
+    exit 1
+fi
+
+packaging_output="${output%.orig.tar.xz}.packaging"
+if [ "$kylin" = yes ] && [ -e "$packaging_output" ]; then
+    echo "ERROR: packaging output already exists: $packaging_output" >&2
     exit 1
 fi
 
@@ -112,4 +135,9 @@ if [ -n "$private_entries" ]; then
 fi
 
 echo "Orig tarball written to $output"
-echo "Submit this file together with debian/ to the system-source Gerrit project."
+if [ "$kylin" = yes ]; then
+    python3 "$root/debian/scripts/export-kylin-packaging" "$packaging_output"
+    echo "Submit the orig tarball together with $packaging_output/debian/."
+else
+    echo "Submit this file together with debian/ to the system-source Gerrit project."
+fi

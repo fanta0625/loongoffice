@@ -2,7 +2,7 @@ LoongOffice Debian source inputs
 ================================
 
 This branch is based on LibreOffice tag libreoffice-26.2.6.3. The Debian
-version is 26.2.6.3-1.lnd.2. See README.26.2.6.md for migration details and
+version is 26.2.6.3-1.lnd.3. See README.26.2.6.md for migration details and
 the remaining target-platform validation.
 
 The package is intentionally built without network access. debian/rules never
@@ -118,9 +118,41 @@ manage the vendor archive independently.
 Build layout
 ------------
 
-After preparing the locked inputs, run ./build.sh (or
-dpkg-buildpackage -b -us -uc) to build the single Debian package. build.sh
-no longer invokes EPM or combines intermediate DEBs. The build host needs
+Maintain one debian/ directory on the release branch. For Loongnix, submit
+the normal orig tarball and the tracked debian/ directory. For Kylin V11,
+run this on the connected preparation host, from a clean committed checkout:
+
+    debian/scripts/prepare-orig-tarball --kylin
+
+This prepares the Qt 6 only inputs and writes:
+
+    ../loongoffice_<upstream>+kylin.orig.tar.xz
+    ../loongoffice_<upstream>+kylin.packaging/debian/
+
+Submit that generated debian/ directory together with the matching orig
+tarball to the Kylin system-source project. Do not replace it with the
+tracked full-build debian/. The source tree stays unchanged and no second
+development branch is needed. The generated changelog uses a +kylin
+upstream suffix and a Kylin Debian revision to distinguish the artifacts.
+
+The CI runs its normal dpkg-buildpackage command. No parameters,
+environment variables, selection script, or build.sh are required in CI.
+The generated control contains literal dependencies without KF6, Qt 6
+Multimedia, or the batch-print Python modules, and build-variant fixes the
+configure and install steps to Qt 6 only. OFD and normal CUPS printing remain
+enabled. The CI still needs all declared common build dependencies.
+
+To review or regenerate only Kylin's packaging, without downloading inputs:
+
+    python3 debian/scripts/export-kylin-packaging ../kylin-packaging-review
+
+Keep generated packaging outside the source checkout and do not maintain it
+as a second source of truth. Changes belong in the tracked debian/ files and
+the exporter. For local experiments only, the tracked full-build packaging
+also supports the pkg.loongoffice.qt6-only Build Profile, and
+select-build-profile can suggest a profile from local APT metadata.
+
+The build host needs
 GCC 12 or newer with C++20 support, GNU Make 4.2 or newer, GTK 3.24 or newer,
 and ATK 2.36 or newer, in addition to the declared Debian build dependencies.
 The LoongArch compiler must support -mlsx for the bundled libpng filters.

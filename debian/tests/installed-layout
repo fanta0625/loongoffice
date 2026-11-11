@@ -8,10 +8,7 @@ app_home=/opt/loongoffice/share/batch-print
 test -x "$office_home/soffice"
 test -x /usr/bin/loongoffice
 test "$(readlink /usr/bin/loongoffice)" = /opt/loongoffice/program/soffice
-test -x /usr/bin/loongoffice-batch-print
-test -f "$app_home/main.py"
 test -f /opt/loongoffice/share/extensions/org.loongoffice.ofd.extension/description.xml
-test -f /opt/loongoffice/share/extensions/org.loongoffice.batchprint/description.xml
 PYTHONDONTWRITEBYTECODE=1 python3 - <<'PY'
 from pathlib import Path
 from zipfile import ZipFile
@@ -48,8 +45,6 @@ grep -Fqx 'UserInstallation=$SYSUSERCONFIG/loongoffice/4' \
     "$office_home/bootstraprc"
 grep -Fqx '  <id>loongoffice-writer.desktop</id>' \
     /usr/share/metainfo/loongoffice-writer.appdata.xml
-grep -Fqx '  <id>org.loongoffice.kde</id>' \
-    /usr/share/metainfo/org.loongoffice.kde.metainfo.xml
 if grep -Eq '(^|[^[:alnum:]_])(libreoffice|loffice|lowriter|unopkg|ooffice)([^[:alnum:]_]|$)' \
     /usr/share/bash-completion/completions/loongoffice; then
     echo "LoongOffice completion must not register LibreOffice commands" >&2
@@ -77,6 +72,18 @@ for command in libreoffice soffice loffice lobase localc lodraw lomath \
     fi
 done
 
+test -f "$office_home/libvclplug_qt6lo.so"
+batch_extension=/opt/loongoffice/share/extensions/org.loongoffice.batchprint
+batch_service=/usr/share/kio/servicemenus/loongoffice-batch-print.desktop
+kde_metadata=/usr/share/metainfo/org.loongoffice.kde.metainfo.xml
+if dpkg-query -W -f='${Provides}\n' loongoffice | grep -Eq '(^|, )loongbatchprint( |,|$)'; then
+    test -f "$office_home/libvclplug_kf6lo.so"
+    test -x /usr/bin/loongoffice-batch-print
+    test -f "$app_home/main.py"
+    test -f "$batch_extension/description.xml"
+    test -f "$batch_service"
+    grep -Fqx '  <id>org.loongoffice.kde</id>' "$kde_metadata"
+
 PYTHONDONTWRITEBYTECODE=1 python3 - <<'PY'
 import ast
 from pathlib import Path
@@ -92,6 +99,18 @@ from utils.utils import get_executable_path
 
 assert get_executable_path() == "/opt/loongoffice/program/soffice"
 PY
+else
+    for path in "$office_home/libvclplug_kf6lo.so" /usr/bin/loongoffice-batch-print \
+        "$office_home/lobatchprint" "$app_home" "$batch_extension" \
+        "$batch_service" "$kde_metadata"; do
+        test ! -e "$path"
+        test ! -L "$path"
+    done
+    if dpkg-query -W -f='${Depends}\n' loongoffice | grep -Eq '(python3-pyside6|libkf6)'; then
+        echo "qt6-only package declares a KF6 or PySide6 dependency" >&2
+        exit 1
+    fi
+fi
 
 URE_BOOTSTRAP="file://$office_home/fundamentalrc" \
 LD_LIBRARY_PATH="$office_home:$office_home/ure/lib" \

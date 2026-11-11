@@ -1,0 +1,42 @@
+#!/bin/sh
+set -eu
+source_root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
+work=$(mktemp -d)
+trap 'rm -rf "$work"' 0 HUP INT TERM
+python3 "$source_root/debian/scripts/export-kylin-packaging" "$work/export"
+cd "$work/export"
+unset DEB_BUILD_PROFILES
+test "$(sh debian/scripts/select-build-profile)" = pkg.loongoffice.qt6-only
+! grep -Eq 'libkf6|pyside6|qt6-multimedia-dev|<!pkg.loongoffice.qt6-only>' debian/control
+dpkg-parsechangelog -SVersion | grep -q '+kylin-.*kylin'
+mkdir -p debian/loongoffice
+DEB_HOST_ARCH=loong64 dpkg-gencontrol -ploongoffice \
+    -Vmisc:Depends= -Vshlibs:Depends= -O > "$work/control"
+! grep -Eq '^(Depends|Provides):.*(pyside6|loongbatchprint|kde-integration)' "$work/control"
+grep -Eq '^Depends:.*java17-runtime.*python3' "$work/control"
+cat > autogen.sh <<'EOF'
+#!/bin/sh
+printf '%s\n' "$@"
+EOF
+chmod +x autogen.sh
+sh debian/scripts/configure-libreoffice "$work/cache" > "$work/options"
+grep -Fxq -- --enable-qt6 "$work/options"
+grep -Fxq -- --disable-kf6 "$work/options"
+grep -Fxq -- --disable-qt6-multimedia "$work/options"
+! grep -Fxq -- --enable-kf6 "$work/options"
+mkdir -p "$work/staged/opt/loongoffice/program"
+python3 - "$work/ofd.oxt" <<'PY'
+import sys
+from zipfile import ZipFile
+with ZipFile(sys.argv[1], 'w') as archive:
+    archive.writestr('description.xml', '<description/>')
+PY
+sh debian/scripts/install-custom-components "$work/staged" "$work/ofd.oxt"
+test -f "$work/staged/opt/loongoffice/share/extensions/org.loongoffice.ofd.extension/description.xml"
+test ! -e "$work/staged/opt/loongoffice/share/extensions/org.loongoffice.batchprint"
+test ! -e "$work/staged/usr/bin/loongoffice-batch-print"
+if python3 debian/scripts/export-kylin-packaging "$work/export" >/dev/null 2>&1; then
+    echo "Exporter overwrote an existing output" >&2
+    exit 1
+fi
+echo "Kylin packaging works with no build profile or CI parameters."
