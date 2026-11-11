@@ -335,6 +335,14 @@ bool SelectionFunction::MouseButtonDown (const MouseEvent& rEvent)
 
 bool SelectionFunction::MouseMove (const MouseEvent& rEvent)
 {
+    if (isPdfEditGestureTraceEnabled() && rEvent.IsLeft())
+    {
+        tracePdfEditGesture("thumbnail.motion.buttons", rEvent.GetButtons());
+        tracePdfEditGesture("thumbnail.motion.mode", static_cast<int>(rEvent.GetMode()));
+        tracePdfEditGesture("thumbnail.motion.synthetic", rEvent.IsSynthetic());
+        if (mpWindow)
+            tracePdfEditGesture("thumbnail.motion.pointer", mpWindow->GetPointerState().mnState);
+    }
     ProcessMouseEvent(MOUSE_MOTION, rEvent);
     return true;
 }

@@ -234,3 +234,42 @@ mnState 还可能包含修饰键，分析时按位判断。关闭诊断时不额
 
 本地 diff --check 通过；Windows 工作区无法编译原生目标，此次 C++ 改动需目标机
 重新 build 并复测。没有修改 Python，也没有把诊断结果当作修复验收。
+## 2026-11-11: 110311 trace, drag requested after release
+
+The complete `pdf-500p-gesture-20261111-110311.log` distinguishes two cases:
+
+- Page 2: `drag-request.motion` at `1794366222069980`, with both
+  `drag-prepare.pointer` and `drag-start.pointer` equal to 1. This request
+  occurred while the backend reported the left button held; completion was NONE.
+- Page 3: `mouse-up.pointer=0` at `1794366236249455`, followed by
+  `drag-request.motion` at `1794366236267589` (18.1 ms later).
+  Both preparation and start report pointer state 0. Completion at
+  `1794366241157550` is COPY. Data preparation cannot explain this instance:
+  the release was observed before the request entered preparation.
+
+The motion path in `NormalModeHandler::ProcessMotionEvent` starts dragging when
+the event encodes a left-button single-click motion over a page, a previous
+button-down location exists, and displacement exceeds 3 pixels. Consequently
+this episode reached a path whose event reported a held left button while the
+backend pointer query reported none. The current trace does not identify who
+constructed that event, nor explain why this happens in the lazy editor.
+
+VCL has a relevant candidate path: `Window::ImplGenerateMouseMoveHdl` passes
+the frame's cached `mnMouseCode` to `ImplCallMouseMove`, which adds SYNTHETIC.
+The button-up dispatch in `winproc.cxx` includes the released button in its
+event code and stores that code in the frame. Window visibility, enable/input,
+geometry and capture changes can schedule generated motion. This is a source
+candidate, not confirmation that this particular event was synthetic. Qt queued
+events or other code constructing a MouseEvent still need to be distinguished.
+
+With tracing enabled, left-button motion now records `thumbnail.motion.buttons`,
+`thumbnail.motion.mode`, `thumbnail.motion.synthetic`, and
+`thumbnail.motion.pointer` before dispatch. A synthetic value of 1 with buttons
+1 and pointer 0 immediately before the abnormal request supports the VCL path;
+synthetic 0 requires investigating the backend or other event producers instead.
+No event is discarded, modified or cancelled by this instrumentation, and there
+is no change to automatic conversion, input policy or drag thresholds.
+
+The final `Unspecified Application Error` cannot be attributed from this gesture
+trace alone. A process error message or crash backtrace is needed separately.
+Native compilation and runtime verification remain to be done on LoongArch.
