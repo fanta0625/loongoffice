@@ -494,6 +494,9 @@ void Clipboard::CreateSlideTransferable (
     if (bDrag)
     {
         pTransferable->SetView (&mrSlideSorter.GetView());
+        if (isPdfEditGestureTraceEnabled())
+            tracePdfEditGesture("thumbnail.drag-start.pointer",
+                                pActionWindow->GetPointerState().mnState);
         tracePdfEditGesture("thumbnail.drag-start");
         pTransferable->StartDrag (pActionWindow, DND_ACTION_COPY | DND_ACTION_MOVE);
         tracePdfEditGesture("thumbnail.drag-source-return");
@@ -592,6 +595,9 @@ void Clipboard::StartDrag (
     const Point& rPosition,
     vcl::Window* pWindow)
 {
+    tracePdfEditGesture("thumbnail.drag-prepare.begin");
+    if (isPdfEditGestureTraceEnabled() && pWindow)
+        tracePdfEditGesture("thumbnail.drag-prepare.pointer", pWindow->GetPointerState().mnState);
     maPagesToRemove.clear();
     CreateSlideTransferable(pWindow, true);
 

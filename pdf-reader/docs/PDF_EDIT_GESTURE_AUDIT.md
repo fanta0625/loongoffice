@@ -201,3 +201,36 @@ tool_control=native-draw。
 本次仅 Python 变更，无需编译 C++。本地 73 项 Python 回归中 72 通过、1 跳过，
 覆盖一次启用后跨页自动转换、不查询鼠标、原生导入不传自动守卫参数，以及
 EditDoc 后不强制切工具。真实 500 页鼠标行为待目标机测试，尚不能宣称问题修复。
+
+## 500 页实测：区分拖放请求与进入系统拖放
+
+2026-11-11 的 pdf-500p-gesture-20261111-103754.log 中，所有记录到的
+thumbnail.drag-start 都有 drag-source-return 和 drag-finish-processed。
+三次 mouse-up 后约 25.5、23.6、24.2 ms 出现 drag-start，分别持续约
+9.28、5.26、5.96 秒，结束 action=1（COPY）。这些拖放没有与上一轮给出的
+edit.direct.import 时间段重叠；不能据此把本次异常归因于自动导入阻塞释放事件，
+也没有证据表明拖放完成回调丢失。
+
+注意旧 drag-start 日志位于 Clipboard::CreateSlideTransferable 末尾，
+在准备预览、transferable 和 SetPageBookmarks 之后。因而 mouse-up 早于该日志
+不等于请求发起时已经释放，必须区分请求入口与准备期间发生的事件。
+正常拖动也可能产生同类日志，这份记录没有标记用户感知异常的确切时刻。
+
+此次只补环境变量控制的诊断，不改变拖放判断、鼠标捕获、工具或自动导入策略：
+
+- thumbnail.drag-request.motion：NormalMode 的运动阈值启动路径。
+- thumbnail.drag-request.drop-event：NormalMode 收到拖入事件的启动路径。
+- thumbnail.drag-over：收到拖入事件，detail 为协商动作。
+- thumbnail.drag-prepare.begin / .pointer：进入 Clipboard::StartDrag 及窗口按键状态。
+- thumbnail.drag-start.pointer：准备结束、进入系统拖放前的窗口按键状态。
+- thumbnail.mouse-down / .mouse-up：detail 改为 MouseEvent 的 GetButtons()；
+  mouse-up.pointer 单独记录窗口 GetPointerState().mnState。
+
+MouseButtonUp 的 GetButtons() 可以包含刚释放的按键，不能直接当作当前物理按键。
+pointer 日志使用后端当前查询状态，其中 MOUSE_LEFT=1、MOUSE_MIDDLE=2、MOUSE_RIGHT=4；
+mnState 还可能包含修饰键，分析时按位判断。关闭诊断时不额外查询窗口按键状态。
+若请求在释放之前、系统拖放开始时左键已无，则调查准备过程的事件重入；若请求
+本身在释放之后，则调查运动/拖入事件来源。两者目前均未证实。
+
+本地 diff --check 通过；Windows 工作区无法编译原生目标，此次 C++ 改动需目标机
+重新 build 并复测。没有修改 Python，也没有把诊断结果当作修复验收。

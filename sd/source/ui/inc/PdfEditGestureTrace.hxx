@@ -9,10 +9,15 @@
 
 namespace sd
 {
-inline void tracePdfEditGesture(const char* pEvent, int nDetail = 0)
+inline bool isPdfEditGestureTraceEnabled()
 {
     static const bool bEnabled = std::getenv("LO_PDF_EDIT_GESTURE_TRACE") != nullptr;
-    if (!bEnabled)
+    return bEnabled;
+}
+
+inline void tracePdfEditGesture(const char* pEvent, int nDetail = 0)
+{
+    if (!isPdfEditGestureTraceEnabled())
         return;
     const auto nTime = std::chrono::duration_cast<std::chrono::microseconds>(
                            std::chrono::system_clock::now().time_since_epoch()).count();

@@ -327,7 +327,7 @@ bool SelectionFunction::MouseButtonDown (const MouseEvent& rEvent)
 
     //  mpWindow->CaptureMouse();
 
-    tracePdfEditGesture("thumbnail.mouse-down");
+    tracePdfEditGesture("thumbnail.mouse-down", rEvent.GetButtons());
     ProcessMouseEvent(BUTTON_DOWN, rEvent);
 
     return true;
@@ -343,7 +343,9 @@ bool SelectionFunction::MouseButtonUp (const MouseEvent& rEvent)
 {
     mrController.GetScrollBarManager().StopAutoScroll ();
 
-    tracePdfEditGesture("thumbnail.mouse-up");
+    tracePdfEditGesture("thumbnail.mouse-up", rEvent.GetButtons());
+    if (isPdfEditGestureTraceEnabled() && mpWindow)
+        tracePdfEditGesture("thumbnail.mouse-up.pointer", mpWindow->GetPointerState().mnState);
     ProcessMouseEvent(BUTTON_UP, rEvent);
 
     return true;
@@ -632,6 +634,7 @@ void SelectionFunction::MouseDragged (
     const AcceptDropEvent& rEvent,
     const sal_Int8 nDragAction)
 {
+    tracePdfEditGesture("thumbnail.drag-over", nDragAction);
     EventDescriptor aEventDescriptor (MOUSE_DRAG, rEvent, nDragAction, mrSlideSorter);
     ProcessEvent(aEventDescriptor);
 }
@@ -953,6 +956,7 @@ void SelectionFunction::ModeHandler::SwitchView (const model::SharedPageDescript
 void SelectionFunction::ModeHandler::StartDrag (
     const Point& rMousePosition)
 {
+    tracePdfEditGesture("thumbnail.drag-request.motion");
     // Do not start a drag-and-drop operation when one is already active.
     // (when dragging pages from one document into another, pressing a
     // modifier key can trigger a MouseMotion event in the originating
@@ -1137,6 +1141,7 @@ bool NormalModeHandler::ProcessMotionEvent (
 
 bool NormalModeHandler::ProcessDragEvent (SelectionFunction::EventDescriptor& rDescriptor)
 {
+    tracePdfEditGesture("thumbnail.drag-request.drop-event");
     mrSelectionFunction.SwitchToDragAndDropMode(rDescriptor.maMousePosition);
     ReprocessEvent(rDescriptor);
     return true;
