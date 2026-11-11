@@ -7,7 +7,7 @@ from unittest.mock import Mock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'uno' / 'python'))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'tools'))
-from probe_direct_edit import seed_native_undo
+from probe_direct_edit import seed_native_undo, prepare_ui_text_probe
 from reader_session import ReaderSession
 from direct_edit import import_into_page, discard_resources, DirectImportUnavailable, DIRECT_IMPORTER
 from timing_log import TimingLog
@@ -97,6 +97,19 @@ class DirectEditTests(unittest.TestCase):
         document.enableSetModified.assert_not_called()
         document.setModified.assert_not_called()
         self.assertFalse(document.isSetModifiedEnabled())
+
+    def test_ui_probe_restores_native_selector_and_selects_imported_text(self):
+        controller = self.session.document.getCurrentController.return_value
+        native = controller.getFrame.return_value.queryDispatch.return_value
+        self.session.view_state.return_value = {'read_only': False, 'edit_locked': False}
+        fake_ui = SimpleNamespace(command_url=lambda command: command)
+        with patch.dict(sys.modules, {'reader_infobar': fake_ui}):
+            prepare_ui_text_probe(self.session.context, self.session, 'imported-text')
+        controller.getFrame().activate.assert_called_once()
+        controller.getFrame().getComponentWindow().setFocus.assert_called_once()
+        native.dispatch.assert_called_once_with('.uno:SelectObject', ())
+        controller.select.assert_called_once_with('imported-text')
+        self.session.document.getUndoManager().clear.assert_not_called()
 
     def test_success_creates_once_without_copy_or_shape_enumeration(self):
         objects = [shape() for _ in range(100)]

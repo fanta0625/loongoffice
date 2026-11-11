@@ -124,3 +124,15 @@ python3 pdf-reader/tools/read_edit.py \
 对齐；原生日志包含鼠标按下、释放、拖放开始、结束投递及回调处理完成，Python
 日志包含忙碌状态、原生暂缓和导入时序。若再复现，保留同一次运行的两个日志。
 本机仅能运行 Python 回归；C++ 构建和上述桌面操作仍待目标机验证。
+
+## 真实文字探针的初始化修正
+
+目标机 UI 探针在输入内容核对阶段失败，尚未到达撤销验证。该探针此前没有执行
+正式阅读器 enable_editing 中的原生 SelectObject 初始化，而且可见文档之后又
+加载过隐藏对照文档。现在在提示键入前激活测试 Frame、将焦点返回 ComponentWindow，
+设置我们自己的未锁定编辑图层、调用原生 SelectObject 并选中待测文字对象。
+仅在测试准备时执行一次，不每次轮询抢焦点、不替用户发 Esc，不改产品拖放代码。
+
+失败诊断增加 actual_text、expected_text、view、controllers_locked 和 undo_locked。
+这次只修正探针准备和诊断，不宣称产品加号鼠标根因已经确定或真实键入验证通过。
+本地 Python 66 项测试中 65 通过、1 项跳过，目标机需要重跑 UI 探针。

@@ -122,13 +122,42 @@ def text_properties(page):
     return result
 
 
-def verify_ui_typing_undo(text):
+def prepare_ui_text_probe(context, session, text):
+    """Activate the native Draw selector once, just as reader EditDoc does."""
+    from reader_infobar import command_url
+    controller = session.document.getCurrentController()
+    frame = controller.getFrame()
+    frame.activate()
+    # The hidden oracle was loaded after our visible document. Return focus to
+    # this document's component before dispatching a focus-sensitive Draw slot.
+    frame.getComponentWindow().setFocus()
+    controller.setPropertyValue('ActiveLayer', session.edit_layer)
+    dispatch = frame.queryDispatch(command_url('.uno:SelectObject'), '', 0)
+    if dispatch is None:
+        raise RuntimeError('Native Draw object selection command is unavailable')
+    dispatch.dispatch(command_url('.uno:SelectObject'), ())
+    if not controller.select(text):
+        raise RuntimeError('Cannot select the imported text using native Draw')
+    state = session.view_state()
+    if state['read_only'] or state['edit_locked']:
+        raise RuntimeError(f'Native Draw edit view is unavailable: {state}')
+    return state
+
+
+def verify_ui_typing_undo(text, session=None):
     original = text.getString()
     expected = original + ' ZUNDO'
     print('In Draw, double-click the PDF SOURCE PAGE 2 text, go to its end, '
           'type a space followed by ZUNDO, then click outside the text box.', flush=True)
     input('After leaving the text box, return here and press Enter: ')
     if text.getString() != expected:
+        diagnostics = {'stage': 'ui-text-input', 'expected_text': expected,
+                       'actual_text': text.getString()}
+        if session is not None:
+            diagnostics.update(view=session.view_state(),
+                               controllers_locked=session.document.hasControllersLocked(),
+                               undo_locked=session.document.getUndoManager().isLocked())
+        print(json.dumps(diagnostics, indent=2, ensure_ascii=False), flush=True)
         raise RuntimeError('Typed text did not reach the imported shape')
     print('In Draw, press Ctrl+Z once.', flush=True)
     input('Return here and press Enter: ')
@@ -153,6 +182,7 @@ def run(args):
         if not args.ui_text_undo:
             command.insert(1, '--headless')
         env = dict(os.environ, LO_IMPORT_USE_PDFIUM='1')
+        env.pop('LO_PDF_HYBRID_VIEW_PROBE', None)
         session = desktop = None
         with (root / 'office.log').open('w+') as log:
             process = subprocess.Popen(command, env=env, stdout=log, stderr=subprocess.STDOUT)
@@ -222,7 +252,8 @@ def run(args):
                 if text is None:
                     raise RuntimeError('Native selected page did not produce expected editable text')
                 if args.ui_text_undo:
-                    verify_ui_typing_undo(text)
+                    prepare_ui_text_probe(context, session, text)
+                    verify_ui_typing_undo(text, session)
                 else:
                     text.setString('DIRECT_USER_EDIT')
                 edited_text = text.getString()
