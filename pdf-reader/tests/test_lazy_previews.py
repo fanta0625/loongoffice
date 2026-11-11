@@ -101,6 +101,32 @@ class LazyPreviewTests(unittest.TestCase):
         self.session.ensure_preview(450)
         self.assertEqual(self.document.createInstance.call_count, 1)
 
+    def test_poll_and_revisit_edited_page_preserve_native_view_choices(self):
+        controller = self.document.getCurrentController()
+        self.session.edited.add(450)
+        controller.getCurrentPage.return_value = self.pages[449]
+        # A user can hide/lock a layer or choose another active layer in Draw.
+        self.session.edit_layer.IsVisible = False
+        self.session.edit_layer.IsLocked = True
+        controller.reset_mock()
+        with patch.object(self.session, '_prepare_view') as prepare, \
+             patch.object(self.session, 'automatic_edit_busy_reason') as busy:
+            self.assertEqual(self.session.current_page(), 450)
+            self.assertEqual(self.session.current_page(), 450)
+            controller.getCurrentPage.return_value = self.pages[0]
+            self.assertEqual(self.session.current_page(), 1)
+            prepare.reset_mock()
+            busy.reset_mock()
+            controller.reset_mock()
+            controller.getCurrentPage.return_value = self.pages[449]
+            self.assertEqual(self.session.current_page(), 450)
+            prepare.assert_not_called()
+            busy.assert_not_called()
+        controller.setPropertyValue.assert_not_called()
+        self.assertFalse(self.session.edit_layer.IsVisible)
+        self.assertTrue(self.session.edit_layer.IsLocked)
+        self.assertEqual(self.document.createInstance.call_count, 1)
+
 
 if __name__ == '__main__':
     unittest.main()

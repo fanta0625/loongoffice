@@ -179,6 +179,11 @@ class ReaderSession:
             if (1 <= number <= self.count and name == f'{prefix}{number}'
                     and self.pages.getByIndex(number - 1) == current
                     and self.page_refs[number - 1] == current):
+                # Converted pages belong to the native Draw editor. Polling
+                # must not reset the user's layer visibility/lock choices or
+                # active layer, including when returning from another page.
+                if number in self.edited:
+                    return number
                 if not (self._active_view != (controller, current)
                         and self.automatic_edit_busy_reason(controller)):
                     self.ensure_preview(number)
@@ -196,6 +201,8 @@ class ReaderSession:
         return controller.getPropertyValue('PdfReaderEditBusyReason')
 
     def _prepare_view(self, controller, page):
+        # Only prepare unconverted preview pages; current_page deliberately
+        # leaves converted pages entirely under native Draw view control.
         # SdLayer reads/writes the CURRENT SdrPageView as well as FrameView.
         # Setting flags once while hidden does not validate later page views,
         # nor the rebuilt view after ReadOnly -> EditDoc. Restore only our two
