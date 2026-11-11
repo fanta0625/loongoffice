@@ -50,6 +50,7 @@
 #include <Window.hxx>
 #include <fupoor.hxx>
 #include <sdmod.hxx>
+#include <PdfEditGestureTrace.hxx>
 #include <Ruler.hxx>
 #include <sdresid.hxx>
 #include <sdpage.hxx>
@@ -317,6 +318,14 @@ void DrawViewShell::FreshNavigatrTree()
 void DrawViewShell::MouseButtonDown(const MouseEvent& rMEvt,
     ::sd::Window* pWin)
 {
+    // Diagnostic bits: transferable=1, view action=2, create=4,
+    // input locked=8, fixed hybrid test hook=16. No input-state changes.
+    tracePdfEditGesture("canvas.mouse-down.state",
+        (SdModule::get()->pTransferDrag ? 1 : 0) | (mpDrawView->IsAction() ? 2 : 0)
+        | (mpDrawView->IsCreateObj() ? 4 : 0) | (IsInputLocked() ? 8 : 0)
+        | (mpPdfHybridViewProbe ? 16 : 0));
+    tracePdfEditGesture("canvas.mouse-down.tool",
+        GetCurrentFunction().is() ? GetCurrentFunction()->GetSlotID() : 0);
     if (mpPdfHybridViewProbe && !mpDrawView->IsAction()
         && IsPdfHybridPreviewPoint(pWin->PixelToLogic(rMEvt.GetPosPixel())))
     {
@@ -476,6 +485,12 @@ void DrawViewShell::MouseMove(const MouseEvent& rMEvt, ::sd::Window* pWin)
 
 void DrawViewShell::MouseButtonUp(const MouseEvent& rMEvt, ::sd::Window* pWin)
 {
+    tracePdfEditGesture("canvas.mouse-up.state",
+        (SdModule::get()->pTransferDrag ? 1 : 0) | (mpDrawView->IsAction() ? 2 : 0)
+        | (mpDrawView->IsCreateObj() ? 4 : 0) | (IsInputLocked() ? 8 : 0)
+        | (mpPdfHybridViewProbe ? 16 : 0));
+    tracePdfEditGesture("canvas.mouse-up.tool",
+        GetCurrentFunction().is() ? GetCurrentFunction()->GetSlotID() : 0);
     if (mbPdfHybridBlockedMouse)
     {
         mbPdfHybridBlockedMouse = false;

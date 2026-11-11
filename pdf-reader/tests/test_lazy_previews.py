@@ -101,6 +101,29 @@ class LazyPreviewTests(unittest.TestCase):
         self.session.ensure_preview(450)
         self.assertEqual(self.document.createInstance.call_count, 1)
 
+    def test_gesture_on_same_preview_does_not_repair_layer_flags(self):
+        controller = self.document.getCurrentController()
+        controller.getCurrentPage.return_value = self.pages[0]
+        self.session.current_page()
+        self.session.edit_layer.IsVisible = False
+        with patch.object(self.session, 'automatic_edit_busy_reason', return_value='thumbnail-gesture'), \
+             patch.object(self.session, 'ensure_preview') as prepare:
+            self.assertEqual(self.session.current_page(), 1)
+            prepare.assert_not_called()
+        self.assertFalse(self.session.edit_layer.IsVisible)
+        self.session.current_page()
+        self.assertTrue(self.session.edit_layer.IsVisible)
+
+    def test_new_preview_waits_until_native_gesture_finishes(self):
+        controller = self.document.getCurrentController()
+        controller.getCurrentPage.return_value = self.pages[449]
+        with patch.object(self.session, 'automatic_edit_busy_reason', return_value='thumbnail-gesture'):
+            self.assertEqual(self.session.current_page(), 450)
+        self.assertEqual(self.document.createInstance.call_count, 1)
+        self.assertIsNone(self.session.previews[449])
+        self.assertEqual(self.session.current_page(), 450)
+        self.assertEqual(self.document.createInstance.call_count, 2)
+
     def test_poll_and_revisit_edited_page_preserve_native_view_choices(self):
         controller = self.document.getCurrentController()
         self.session.edited.add(450)

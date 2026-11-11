@@ -151,3 +151,30 @@ Draw 图层选择。未转换页仍需准备受保护的 PDF 预览，自动转�
 本次仅修改 Python，不需要重编译 C++。本地 67 项 Python 回归中 66 通过、1 项跳过，
 新增回归覆盖已转换页轮询和重访不写入视图状态。龙芯桌面的偶发光标及真实键入
 仍需验证；若复现，应保留同次运行的原生手势与 Python 日志，不宣称已修复。
+
+## 500 页交互复现后的检查补充
+
+真实文字输入、撤销重做探针已由目标机验证通过，但 500 页会话仍报告禁止光标及
+点击画布复制页面。该次日志没有启用 --trace-gestures，只能确认导入完成，不能
+确认拖放收尾或工具状态。减少已转换页图层写入尚未解决此问题。
+
+源码确认 IsInGesture 先前只检查非 NormalMode，而按下到越过拖动阈值之间仍是
+NormalMode。既有按键兜底查询键盘焦点窗口，焦点属于另一个 Frame 时不等价于
+缩略图输入窗口。因此补充查询缩略图自身窗口的 GetPointerState；复用原生状态，
+不改变选择或拖放流程。不能直接把 NormalModeHandler 的 maButtonDownLocation
+当作“仍按着鼠标”，它在普通释放后可以保留。
+
+Python 先前只在视图身份改变时检查忙碌，现在未转换页每次准备前均检查，防止
+同页手势中修正图层。已转换页仍直接返回，不恢复图层或工具。
+
+画布 MouseButtonDown/Up 增加环境变量控制的只读诊断：
+canvas.mouse-down.state / canvas.mouse-up.state 的 detail 为位掩码：
+transferable=1、Draw view action=2、create object=4、input locked=8、
+固定三页 hybrid 测试钩子存在=16；对应 *.tool 记录原生 FuPoor::GetSlotID。
+结合现有 thumbnail.* 事件、Python edit.input 与导入时间，区分页面拖放残留、
+创建工具和输入锁。诊断不更改鼠标、焦点、Esc、投放或复制语义。
+
+本地 71 项 Python 测试中 70 通过、1 跳过，新增覆盖同页手势不修改图层、
+新页等待释放后才准备预览。Windows 工作区没有配置可用的 LibreOffice C++ 构建，
+原生编译、CppunitTest_xmloff_draw 和真实交互待目标机运行。此改动修补已知检查
+缺口并完善证据，不代表已证明此次复制页面的完整根因。

@@ -654,7 +654,13 @@ static bool Match (
 
 bool SelectionFunction::IsInGesture() const
 {
-    return mpModeHandler->GetMode() != NormalMode;
+    // NormalMode also handles button-down before the drag threshold is met.
+    // Query this input window, not the keyboard focus window (which can still
+    // belong to another frame). Do not use the mouse anchor as a held-button
+    // flag: native NormalMode deliberately retains it after button-up.
+    return mpModeHandler->GetMode() != NormalMode
+           || (mpWindow && (mpWindow->GetPointerState().mnState
+                            & (MOUSE_LEFT | MOUSE_MIDDLE | MOUSE_RIGHT)));
 }
 
 void SelectionFunction::SwitchToNormalMode()

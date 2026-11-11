@@ -184,8 +184,9 @@ class ReaderSession:
                 # active layer, including when returning from another page.
                 if number in self.edited:
                     return number
-                if not (self._active_view != (controller, current)
-                        and self.automatic_edit_busy_reason(controller)):
+                # A gesture may begin on the same preview page too. Do not
+                # mutate its shapes or layer flags until native input is idle.
+                if not self.automatic_edit_busy_reason(controller):
                     self.ensure_preview(number)
                     self._prepare_view(controller, current)
                 return number
