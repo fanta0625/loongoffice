@@ -56,6 +56,7 @@ def main(args):
         env.pop('LO_PDF_HYBRID_VIEW_PROBE', None)  # Do not activate fixed three-page test hooks.
         session = desktop = ui = engine = tiles = None
         failure = None
+        exit_reason = 'office-process-exit'
         events = []
         log_path = Path(args.trace_gestures) if args.trace_gestures else directory / 'office.log'
         with log_path.open('x+', encoding='utf-8', errors='replace') as log:
@@ -104,6 +105,7 @@ def main(args):
                         if not commands.empty():
                             action = commands.get()
                             if action == 'closed':
+                                exit_reason = 'document-close-notification'
                                 break
                             if action == 'save-unsupported':
                                 transition_error = '本开发版尚不支持保存完整 PDF；原文件不会被覆盖。'
@@ -119,6 +121,7 @@ def main(args):
                                     finally:
                                         box.dispose()
                                 ui.allow_close = True
+                                exit_reason = 'requested-close'
                                 break
                             if action == 'edit':
                                 try:
@@ -160,19 +163,34 @@ def main(args):
                         else:
                             state = '可直接编辑' if page in session.edited else '页面停留后自动准备编辑'
                             ui.show('PDF 编辑模式', f'第 {page}/{session.count} 页：{state}。开发版暂不支持保存回 PDF。')
-                    except (SessionClosed, uno.getClass('com.sun.star.lang.DisposedException')):
+                    except (SessionClosed, uno.getClass('com.sun.star.lang.DisposedException')) as error:
+                        exit_reason = 'session-unavailable'
+                        event = {'event': 'session-unavailable', 'type': type(error).__name__,
+                                 'message': str(error)}
+                        events.append(event)
+                        print(json.dumps(event, ensure_ascii=False), flush=True)
                         break
                     except RuntimeError as error:
                         ui.show('页面状态异常', str(error), error=True)
                     time.sleep(.1)
             except BaseException as error:
+                exit_reason = 'python-exception'
                 failure = {'type': type(error).__name__, 'message': str(error)}
                 log.flush()
                 log.seek(0)
                 print(log.read(), file=sys.stderr)
                 raise
             finally:
+                # Capture before our own terminate/kill cleanup changes the exit code.
+                office_exit = {'reason': exit_reason, 'returncode_before_cleanup': process.poll(),
+                               'log': str(log_path) if args.trace_gestures else None}
+                if office_exit['returncode_before_cleanup'] not in (None, 0) and failure is None:
+                    failure = {'type': 'OfficeProcessExit',
+                               'message': 'Office exited with code '
+                                          + str(office_exit['returncode_before_cleanup'])}
+                print(json.dumps({'event': 'reader.exit', **office_exit}, ensure_ascii=False), flush=True)
                 report = {'source': str(source), 'source_sha256': digest, 'events': events,
+                          'office_exit': office_exit,
                           'timings': timing.events,
                           'status': 'failed' if failure else 'closed', 'error': failure,
                           'edited_pages': sorted(session.edited) if session else [],
@@ -207,6 +225,7 @@ def main(args):
                     except subprocess.TimeoutExpired:
                         process.kill()
                         process.wait()
+                office_exit['returncode_after_cleanup'] = process.returncode
                 if args.report:
                     with Path(args.report).open('x', encoding='utf-8') as output:
                         json.dump(report, output, indent=2, ensure_ascii=False)
