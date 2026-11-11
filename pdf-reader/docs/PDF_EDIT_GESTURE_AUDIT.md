@@ -178,3 +178,26 @@ transferable=1、Draw view action=2、create object=4、input locked=8、
 新页等待释放后才准备预览。Windows 工作区没有配置可用的 LibreOffice C++ 构建，
 原生编译、CppunitTest_xmloff_draw 和真实交互待目标机运行。此改动修补已知检查
 缺口并完善证据，不代表已证明此次复制页面的完整根因。
+
+## 按用户要求先关闭鼠标协调，保留自动按页转换
+
+read_edit.py 明确设置 guard_automatic_edit=False，不再检查控制器是否提供
+PdfReaderEditBusyReason，也不向 EditMode 传入鼠标忙碌回调。因此当前阅读器不会
+查询该属性，不根据按键、捕获、缩略图模式或拖放收尾状态推迟转换，也不会向
+PDFPageImportFilter 传 Automatic=True。既有可选守卫接口和其独立探针仅保留兼容
+验证，未在实际阅读器中启用；此次不修改 C++ 或重新启用任何手势保护。
+
+ReaderSession.enable_editing 只调用原生 EditDoc，不再额外派发 SelectObject，
+不发送 Esc、改鼠标样式或抢焦点。UI 文字探针为建立测试初始条件而选中文字的
+动作属于探针本身，不是阅读器的运行策略。--trace-gestures 仍仅记录原生事件，
+不会启用守卫。启动日志 edit.policy 明示 automatic_pages=true、mouse_guard=false、
+tool_control=native-draw。
+
+一次进入编辑模式后，切到未转换页仍按既有 0.35 秒停留计时自动导入，无需再次
+点击编辑；已转换页不重复导入、不修正其视图选择。源页身份校验、预览保护、
+导入事务、失败回滚及提交前导航取消仍保留。此处关闭的是附加鼠标协调，
+并非绕过对象导入所需的原生执行锁或预览保护层。
+
+本次仅 Python 变更，无需编译 C++。本地 73 项 Python 回归中 72 通过、1 跳过，
+覆盖一次启用后跨页自动转换、不查询鼠标、原生导入不传自动守卫参数，以及
+EditDoc 后不强制切工具。真实 500 页鼠标行为待目标机测试，尚不能宣称问题修复。

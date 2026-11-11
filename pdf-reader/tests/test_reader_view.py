@@ -56,6 +56,22 @@ class ReaderViewTests(unittest.TestCase):
         self.assertFalse(self.session.edit_layer.IsLocked)
         self.controller.setPropertyValue.assert_called_once_with('ActiveLayer', self.session.edit_layer)
 
+    def test_native_edit_transition_does_not_force_tool_or_pointer(self):
+        frame = self.controller.getFrame.return_value
+        self.session.document.getCurrentController.return_value = self.controller
+        frame.getController().getModel.return_value = self.session.document
+        self.session.page_refs = [self.page]
+        self.session.current_page = Mock(return_value=1)
+        native_edit = Mock()
+        fake_uno = SimpleNamespace(createUnoStruct=lambda _: SimpleNamespace())
+        with patch.dict(sys.modules, {'uno': fake_uno}), \
+             patch('reader_session.prop', side_effect=lambda name, value: (name, value)):
+            self.session.enable_editing(native_edit)
+        self.assertEqual(native_edit.dispatch.call_count, 1)
+        self.assertEqual(native_edit.dispatch.call_args.args[0].Complete, '.uno:EditDoc')
+        frame.queryDispatch.assert_not_called()
+        self.controller.select.assert_not_called()
+
     def test_reading_does_not_activate_an_edit_layer(self):
         self.session.document.isReadonly.return_value = True
         self.session._prepare_view(self.controller, self.page)

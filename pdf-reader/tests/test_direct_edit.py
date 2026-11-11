@@ -136,6 +136,7 @@ class DirectEditTests(unittest.TestCase):
         self.assertEqual(result['temporary_draw_documents'], 0)
         self.assertEqual(self.session.edited, {2})
         importer.assert_called_once()
+        self.assertNotIn('automatic', importer.call_args.kwargs)
         cleanup.assert_not_called()
         for obj in objects:
             obj.setPosition.assert_not_called()

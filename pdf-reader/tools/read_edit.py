@@ -80,20 +80,19 @@ def main(args):
                 with timing.span('reader.session'):
                     session = ReaderSession(context, snapshot.as_uri(), read_only=True, timing=timing,
                                             direct_edit=not args.legacy_edit_copy,
-                                            guard_automatic_edit=not args.legacy_edit_copy)
-                if not args.legacy_edit_copy:
-                    controller = session.document.getCurrentController()
-                    if not controller.getPropertySetInfo().hasPropertyByName('PdfReaderEditBusyReason'):
-                        raise RuntimeError('Rebuild Office with the PDF gesture guard')
+                                            guard_automatic_edit=False)
                 session.document.setTitle(source.name + ' — PDF 阅读／按页编辑（开发版）')
                 print(f'Reading {session.count} pages; editable imports so far: 0', flush=True)
                 commands = SimpleQueue()
                 with timing.span('infobar.setup'):
                     ui = ReaderInfoBar(session.document, commands)
                 engine = EditMode(session, lambda: session.enable_editing(ui.native_edit),
-                                  prefetch_seconds=None if args.no_prefetch or not args.legacy_edit_copy else 2,
-                                  busy_reason=session.automatic_edit_busy_reason,
-                                  trace=timing.mark if args.trace_gestures else None)
+                                  prefetch_seconds=None if args.no_prefetch or not args.legacy_edit_copy else 2)
+                # Keep settled-page auto conversion, but let Draw own mouse,
+                # drag and tool state. Native gesture guards are not enabled.
+                timing.mark('edit.policy', automatic_pages=True,
+                            settle_seconds=engine.settle_seconds,
+                            mouse_guard=False, tool_control='native-draw')
                 if not args.no_tiles:
                     with timing.span('tiles.setup'):
                         tiles = ViewportTiles(session, directory / 'tiles', timing=timing)

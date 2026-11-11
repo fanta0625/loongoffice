@@ -556,11 +556,5 @@ class ReaderSession:
         self.document.getCurrentController().setCurrentPage(self.page_refs[page - 1])
         self._active_view = None
         self.current_page()  # Validate retained page mapping before any import.
-        # Leave any reading/navigation tool and restore the native object
-        # selection tool once, without stealing focus on every page poll.
-        select = uno.createUnoStruct('com.sun.star.util.URL')
-        select.Complete = select.Main = '.uno:SelectObject'
-        select.Protocol, select.Path = '.uno:', 'SelectObject'
-        dispatch = frame.queryDispatch(select, '', 0)
-        if dispatch is not None:
-            dispatch.dispatch(select, ())
+        # Native EditDoc owns the tool transition too. Do not dispatch a
+        # selection tool, change the pointer, or synthesize Escape here.

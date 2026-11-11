@@ -56,6 +56,22 @@ class EditModeTests(unittest.TestCase):
         self.mode.tick(21)
         self.assertEqual(self.session.calls, [2, 7, 10])
 
+    def test_default_auto_conversion_does_not_consult_mouse_state(self):
+        # read_edit uses the default scheduler without a native busy callback.
+        # Even an exposed busy-query method must never gate page conversion.
+        from unittest.mock import Mock
+        self.session.automatic_edit_busy_reason = Mock(
+            side_effect=AssertionError('Draw owns mouse state'))
+        self.mode.prefetch_seconds = None
+        self.mode.request_edit()
+        for page, now in ((1, 0), (450, 2)):
+            self.session.page = page
+            self.mode.tick(now)
+            self.mode.tick(now + .5)
+        self.assertEqual(self.transitions, ['edit'])
+        self.assertEqual(self.session.calls, [1, 450])
+        self.session.automatic_edit_busy_reason.assert_not_called()
+
     def test_fast_navigation_skips_intermediate_pages(self):
         self.mode.request_edit()
         for page, now in ((1, 0), (2, .1), (3, .2), (4, .3)):
