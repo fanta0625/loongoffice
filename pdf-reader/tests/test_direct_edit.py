@@ -18,6 +18,7 @@ class DirectEditTests(unittest.TestCase):
     def setUp(self):
         self.session = object.__new__(ReaderSession)
         s = self.session
+        s.guard_automatic_edit = False
         s.context = Mock()
         s.document = Mock()
         s.document.hasControllersLocked.return_value = False
@@ -125,6 +126,21 @@ class DirectEditTests(unittest.TestCase):
         self.assertFalse(self.session.edited)
         cleanup.assert_called_once()
         self.session.document.setModified.assert_called_with(True)
+        self.assert_undo_retained()
+
+    def test_native_deferral_never_rolls_back_or_marks_preview_modified(self):
+        from direct_edit import DirectImportDeferred
+        def defer(*args, **kwargs):
+            raise DirectImportDeferred()
+        self.session.guard_automatic_edit = True
+        result, importer, cleanup = self.run_import(defer)
+        self.assertTrue(result['deferred'])
+        self.assertTrue(importer.call_args.kwargs['automatic'])
+        self.assertEqual(self.page.shapes, [self.preview])
+        self.assertEqual(self.session.import_calls, [])
+        self.assertFalse(self.session.edited)
+        self.session.document.setModified.assert_not_called()
+        cleanup.assert_not_called()
         self.assert_undo_retained()
 
     def test_navigation_after_native_call_rolls_back_before_commit(self):

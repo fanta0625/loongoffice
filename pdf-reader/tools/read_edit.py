@@ -28,7 +28,7 @@ def file_digest(path):
 
 
 def main(args):
-    timing = TimingLog(enabled=True)
+    timing = TimingLog(enabled=True, wall_clock=args.trace_gestures)
     timing.mark('startup.begin')
     with timing.span('uno.import'):
         import uno
@@ -51,11 +51,14 @@ def main(args):
                    f'--accept=pipe,name={pipe};urp;StarOffice.ComponentContext']
         env = os.environ.copy()
         env['LO_IMPORT_USE_PDFIUM'] = '1'
+        if args.trace_gestures:
+            env['LO_PDF_EDIT_GESTURE_TRACE'] = '1'
         env.pop('LO_PDF_HYBRID_VIEW_PROBE', None)  # Do not activate fixed three-page test hooks.
         session = desktop = ui = engine = tiles = None
         failure = None
         events = []
-        with (directory / 'office.log').open('w+') as log:
+        log_path = Path(args.trace_gestures) if args.trace_gestures else directory / 'office.log'
+        with log_path.open('x+', encoding='utf-8', errors='replace') as log:
             timing.mark('office.launch.begin')
             process = subprocess.Popen(command, env=env, stdout=log, stderr=subprocess.STDOUT)
             timing.mark('office.launch.end', pid=process.pid)
@@ -76,14 +79,21 @@ def main(args):
                 desktop = context.ServiceManager.createInstanceWithContext('com.sun.star.frame.Desktop', context)
                 with timing.span('reader.session'):
                     session = ReaderSession(context, snapshot.as_uri(), read_only=True, timing=timing,
-                                            direct_edit=not args.legacy_edit_copy)
+                                            direct_edit=not args.legacy_edit_copy,
+                                            guard_automatic_edit=not args.legacy_edit_copy)
+                if not args.legacy_edit_copy:
+                    controller = session.document.getCurrentController()
+                    if not controller.getPropertySetInfo().hasPropertyByName('PdfReaderEditBusyReason'):
+                        raise RuntimeError('Rebuild Office with the PDF gesture guard')
                 session.document.setTitle(source.name + ' — PDF 阅读／按页编辑（开发版）')
                 print(f'Reading {session.count} pages; editable imports so far: 0', flush=True)
                 commands = SimpleQueue()
                 with timing.span('infobar.setup'):
                     ui = ReaderInfoBar(session.document, commands)
                 engine = EditMode(session, lambda: session.enable_editing(ui.native_edit),
-                                  prefetch_seconds=None if args.no_prefetch or not args.legacy_edit_copy else 2)
+                                  prefetch_seconds=None if args.no_prefetch or not args.legacy_edit_copy else 2,
+                                  busy_reason=session.automatic_edit_busy_reason,
+                                  trace=timing.mark if args.trace_gestures else None)
                 if not args.no_tiles:
                     with timing.span('tiles.setup'):
                         tiles = ViewportTiles(session, directory / 'tiles', timing=timing)
@@ -208,6 +218,8 @@ if __name__ == '__main__':
     parser.add_argument('--office', default='libreoffice')
     parser.add_argument('--pdf', required=True, help='Local non-encrypted PDF')
     parser.add_argument('--report', help='New JSON file written when the session closes')
+    parser.add_argument('--trace-gestures', metavar='OFFICE_LOG',
+                        help='Record native thumbnail gestures in a new log file')
     parser.add_argument('--no-prefetch', action='store_true',
                         help='Disable synchronous idle neighbour preparation (useful for very slow pages)')
     parser.add_argument('--no-tiles', action='store_true', help='Use only the original whole-page preview')

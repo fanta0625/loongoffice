@@ -21,6 +21,7 @@
 #include <sal/config.h>
 
 #include <controller/SlsSelectionFunction.hxx>
+#include <PdfEditGestureTrace.hxx>
 
 #include <SlideSorter.hxx>
 #include <SlideSorterViewShell.hxx>
@@ -326,6 +327,7 @@ bool SelectionFunction::MouseButtonDown (const MouseEvent& rEvent)
 
     //  mpWindow->CaptureMouse();
 
+    tracePdfEditGesture("thumbnail.mouse-down");
     ProcessMouseEvent(BUTTON_DOWN, rEvent);
 
     return true;
@@ -341,6 +343,7 @@ bool SelectionFunction::MouseButtonUp (const MouseEvent& rEvent)
 {
     mrController.GetScrollBarManager().StopAutoScroll ();
 
+    tracePdfEditGesture("thumbnail.mouse-up");
     ProcessMouseEvent(BUTTON_UP, rEvent);
 
     return true;
@@ -399,6 +402,7 @@ bool SelectionFunction::KeyInput (const KeyEvent& rEvent)
             break;
 
         case KEY_ESCAPE:
+            tracePdfEditGesture("thumbnail.escape");
             // When there is an active multiselection or drag-and-drop
             // operation then stop that.
             mpModeHandler->Abort();
@@ -646,6 +650,11 @@ static bool Match (
     const sal_uInt32 nPositivePattern)
 {
     return (nEventCode & nPositivePattern)==nPositivePattern;
+}
+
+bool SelectionFunction::IsInGesture() const
+{
+    return mpModeHandler->GetMode() != NormalMode;
 }
 
 void SelectionFunction::SwitchToNormalMode()
@@ -897,6 +906,7 @@ bool SelectionFunction::ModeHandler::HandleUnprocessedEvent (EventDescriptor&)
 void SelectionFunction::ModeHandler::SetCurrentPage (
     const model::SharedPageDescriptor& rpDescriptor)
 {
+    tracePdfEditGesture("thumbnail.select-page", rpDescriptor ? rpDescriptor->GetPageIndex() + 1 : 0);
     SelectOnePage(rpDescriptor);
     mrSlideSorter.GetController().GetCurrentSlideManager().SwitchCurrentSlide(rpDescriptor);
 }

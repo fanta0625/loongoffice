@@ -8,7 +8,8 @@ import time
 
 
 class EditMode:
-    def __init__(self, session, enable_editing, *, settle_seconds=.35, prefetch_seconds=2):
+    def __init__(self, session, enable_editing, *, settle_seconds=.35, prefetch_seconds=2, busy_reason=lambda: "",
+                 trace=None):
         self.session = session
         self.enable_editing = enable_editing
         self.settle_seconds = settle_seconds
@@ -18,6 +19,9 @@ class EditMode:
         self.failures = {}
         self.prefetch_seconds = prefetch_seconds
         self.prefetch_attempted = set()
+        self.busy_reason = busy_reason
+        self.trace = trace
+        self._last_busy = None
 
     def request_edit(self):
         if self.mode == 'reading':
@@ -32,6 +36,17 @@ class EditMode:
         if page != self.candidate:
             self.candidate, self.since = page, now
             self.prefetch_attempted.clear()
+        busy = self.busy_reason()
+        busy_state = (page, busy)
+        if busy_state != self._last_busy:
+            if self._last_busy and self._last_busy[1]:
+                self.since = now
+            self._last_busy = busy_state
+            if self.trace:
+                self.trace('edit.input', page=page, reason=busy)
+        if busy:
+            self.since = now
+            return None
         if page in self.failures or now - self.since < self.settle_seconds:
             return None
         if page in self.session.edited:
@@ -54,6 +69,10 @@ class EditMode:
             # Start the idle window AFTER the potentially long conversion.
             # Caller clocks may be synthetic; preserve their time base.
             self.since = now + time.monotonic() - started
+            if result.get('deferred'):
+                if self.trace:
+                    self.trace('edit.native-deferred', page=page)
+                return None
             return result
         except Exception as error:
             # Keep the preview; never retry every polling tick or destroy an

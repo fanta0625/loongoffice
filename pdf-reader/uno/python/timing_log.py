@@ -6,16 +6,19 @@ import time
 
 
 class TimingLog:
-    def __init__(self, enabled=False):
+    def __init__(self, enabled=False, wall_clock=False):
         self.enabled = enabled
         self.started = time.monotonic()
         self.events = []
+        self.wall_clock = wall_clock
 
     def mark(self, stage, **details):
         if self.enabled:
             event = dict(event='timing', stage=stage,
                          elapsed_ms=round((time.monotonic() - self.started) * 1000, 2),
                          **details)
+            if self.wall_clock:
+                event["unix_us"] = time.time_ns() // 1000
             self.events.append(event)
             print(json.dumps(event, ensure_ascii=False), flush=True)
 

@@ -18,6 +18,14 @@
  */
 
 #include <DrawController.hxx>
+#include <SlideSorterViewShell.hxx>
+#include <SlideSorter.hxx>
+#include <controller/SlideSorterController.hxx>
+#include <controller/SlsClipboard.hxx>
+#include <controller/SlsSelectionFunction.hxx>
+#include <sdmod.hxx>
+#include <vcl/event.hxx>
+#include <vcl/window.hxx>
 
 #include <sdpage.hxx>
 #include <ViewShell.hxx>
@@ -630,6 +638,8 @@ void DrawController::FillPropertyTable (
             PROPERTY_MASTERPAGEMODE,
             cppu::UnoType<bool>::get(),
             beans::PropertyAttribute::BOUND );
+    rProperties.emplace_back("PdfReaderEditBusyReason", PROPERTY_PDF_EDIT_BUSY,
+                             cppu::UnoType<OUString>::get(), beans::PropertyAttribute::READONLY);
     rProperties.emplace_back("ActiveLayer",
             PROPERTY_ACTIVE_LAYER,
             cppu::UnoType<drawing::XLayer>::get(),
@@ -797,6 +807,37 @@ void DrawController::getFastPropertyValue (
         case PROPERTY_SUB_CONTROLLER:
             rRet <<= mxSubController;
             break;
+
+        case PROPERTY_PDF_EDIT_BUSY:
+        {
+            OUString aReason;
+            const auto* pModule = SdModule::get();
+            if (pModule && pModule->pTransferDrag)
+                aReason = u"page-or-object-drag"_ustr;
+            else if (mpBase)
+            {
+                if (auto* pSorter = SlideSorterViewShell::GetSlideSorter(*mpBase))
+                {
+                    auto& rController = pSorter->GetSlideSorter().GetController();
+                    auto xSelection = rController.GetCurrentSelectionFunction();
+                    if (rController.GetClipboard().HasPendingDragFinish())
+                        aReason = u"thumbnail-drag-finishing"_ustr;
+                    else if (xSelection && xSelection->IsInGesture())
+                        aReason = u"thumbnail-gesture"_ustr;
+                }
+            }
+            if (aReason.isEmpty())
+            {
+                auto* pFocus = Application::GetFocusWindow();
+                if (Application::IsUICaptured())
+                    aReason = u"ui-captured"_ustr;
+                else if (pFocus && (pFocus->GetPointerState().mnState
+                                    & (MOUSE_LEFT | MOUSE_MIDDLE | MOUSE_RIGHT)))
+                    aReason = u"mouse-button-held"_ustr;
+            }
+            rRet <<= aReason;
+            break;
+        }
 
         default:
             if (mxSubController.is())

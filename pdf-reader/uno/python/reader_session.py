@@ -10,7 +10,7 @@ from edit_cache import StagedPageCache
 from edit_copy import (CopyProfile, controller_batch, COPY_BATCH_SIZE,
                        COPY_BATCH_MIN_SIZE, COPY_BATCH_SECONDS)
 from timing_log import TimingLog
-from direct_edit import import_into_page, discard_resources
+from direct_edit import import_into_page, discard_resources, DirectImportDeferred
 from native_import_batch import modification_batch
 import time
 import uuid
@@ -35,10 +35,11 @@ def set_graphic(shape, graphic):
 
 class ReaderSession:
     def __init__(self, context, pdf_url, *, hidden=False, importer=open_for_edit, read_only=False,
-                 timing=None, direct_edit=False):
+                 timing=None, direct_edit=False, guard_automatic_edit=False):
         self.timing = timing or TimingLog()
         self.context, self.pdf_url, self.importer = context, pdf_url, importer
         self.direct_edit = direct_edit
+        self.guard_automatic_edit = guard_automatic_edit
         self.edited = set()
         self.import_calls = []
         self.staged_cache = StagedPageCache()
@@ -178,10 +179,21 @@ class ReaderSession:
             if (1 <= number <= self.count and name == f'{prefix}{number}'
                     and self.pages.getByIndex(number - 1) == current
                     and self.page_refs[number - 1] == current):
-                self.ensure_preview(number)
-                self._prepare_view(controller, current)
+                if not (self._active_view != (controller, current)
+                        and self.automatic_edit_busy_reason(controller)):
+                    self.ensure_preview(number)
+                    self._prepare_view(controller, current)
                 return number
         raise RuntimeError('Page rename/reorder is unsupported; select an unchanged source page')
+
+    def automatic_edit_busy_reason(self, controller=None):
+        if not self.guard_automatic_edit or self.document.isReadonly():
+            return ''
+        if controller is None:
+            controller = self.document.getCurrentController()
+        if controller is None:
+            raise SessionClosed('PDF window no longer has a controller')
+        return controller.getPropertyValue('PdfReaderEditBusyReason')
 
     def _prepare_view(self, controller, page):
         # SdLayer reads/writes the CURRENT SdrPageView as well as FrameView.
@@ -441,8 +453,9 @@ class ReaderSession:
                     with modification_batch(self.document, profile):
                         try:
                             with profile.phase('direct_import'), self.timing.span('edit.direct.import', page=number):
+                                options = {'automatic': True} if self.guard_automatic_edit else {}
                                 import_into_page(self.context, self.document, page, self.pdf_url,
-                                                 number, self.edit_layer.Name, prefix)
+                                                 number, self.edit_layer.Name, prefix, **options)
                             with profile.phase('commit'):
                                 count = page.getCount() - 1
                                 if (self.pages.getCount() != self.count
@@ -458,6 +471,9 @@ class ReaderSession:
                                 page.remove(preview)
                                 self.edited.add(number)
                                 status = 'completed'
+                        except DirectImportDeferred:
+                            status = 'deferred'
+                            raise
                         except BaseException:
                             with profile.phase('rollback'):
                                 # Only failure walks objects across UNO. The target was
@@ -478,7 +494,7 @@ class ReaderSession:
                     # Publish only after restoring XModifiable2. Rollback must
                     # run while notifications are suppressed too. Respect a
                     # suppression already owned by an outer native operation.
-                    if self.document.isSetModifiedEnabled():
+                    if status != 'deferred' and self.document.isSetModifiedEnabled():
                         with profile.phase('modified_publish'):
                             self.document.setModified(True if status == 'completed' else modified)
             return {'page': number, 'reused': False, 'shapes': count,
@@ -487,6 +503,9 @@ class ReaderSession:
                     'copied_shapes': 0, 'page_geometry_verified': True,
                     'import_seconds': time.monotonic() - started,
                     'copy_seconds': 0.0, 'view': self.view_state()}
+        except DirectImportDeferred:
+            self.import_calls.pop()
+            return {'page': number, 'deferred': True}
         except ConversionCancelled:
             status = 'cancelled'
             return {'page': number, 'cancelled': True, 'preview_retained': True,

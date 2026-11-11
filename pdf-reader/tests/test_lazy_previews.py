@@ -34,6 +34,7 @@ class LazyPreviewTests(unittest.TestCase):
         self.session.timing = TimingLog()
         self.session.edited = set()
         self.session._active_view = None
+        self.session.guard_automatic_edit = False
         self.document = self.session.document = Mock()
         self.document.isModified.return_value = True
         self.originals = []

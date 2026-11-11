@@ -2,6 +2,10 @@
 // Page-level orchestration only. PDF conversion and Draw XML import stay in
 // their existing services; no replacement parser or object-copy loop lives here.
 #include <com/sun/star/beans/PropertyValue.hpp>
+#include <com/sun/star/beans/XPropertySet.hpp>
+#include <com/sun/star/drawing/XDrawView.hpp>
+#include <com/sun/star/frame/XController.hpp>
+#include <com/sun/star/uno/RuntimeException.hpp>
 #include <com/sun/star/document/XFilter.hpp>
 #include <com/sun/star/document/XImporter.hpp>
 #include <com/sun/star/drawing/XDrawPage.hpp>
@@ -68,18 +72,34 @@ public:
         SolarMutexGuard aGuard;
         OUString aURL;
         sal_Int32 nPage = 0;
+        bool bAutomatic = false;
         for (const auto& rProperty : rDescriptor)
         {
             if (rProperty.Name == "URL")
                 rProperty.Value >>= aURL;
             else if (rProperty.Name == "SourcePage")
                 rProperty.Value >>= nPage;
+            else if (rProperty.Name == "Automatic")
+                rProperty.Value >>= bAutomatic;
         }
         if (!mxDocument.is() || !mxPage.is() || aURL.isEmpty() || nPage < 1)
             throw lang::IllegalArgumentException(u"PDF page import needs target, URL and SourcePage"_ustr,
                                                   {}, 0);
         if (mbCancelled)
             return false;
+
+        uno::Reference<frame::XModel> xModel(mxDocument, uno::UNO_QUERY_THROW);
+        if (bAutomatic)
+        {
+            auto xController = xModel->getCurrentController();
+            uno::Reference<drawing::XDrawView> xView(xController, uno::UNO_QUERY_THROW);
+            uno::Reference<beans::XPropertySet> xProperties(xController, uno::UNO_QUERY_THROW);
+            OUString aBusyReason;
+            if (xView->getCurrentPage() != mxPage
+                || !(xProperties->getPropertyValue(u"PdfReaderEditBusyReason"_ustr) >>= aBusyReason)
+                || !aBusyReason.isEmpty())
+                throw uno::RuntimeException(u"PDFReaderAutomaticEditDeferred"_ustr, {});
+        }
 
         // Construct the existing content-only importer and let it validate
         // target membership, preview count, layer and resource prefix first.
@@ -91,7 +111,6 @@ public:
         uno::Reference<document::XImporter>(xHandler, uno::UNO_QUERY_THROW)
             ->setTargetDocument(mxDocument);
         uno::Reference<drawing::XShape> xPreview(mxPage->getByIndex(0), uno::UNO_QUERY_THROW);
-        uno::Reference<frame::XModel> xModel(mxDocument, uno::UNO_QUERY_THROW);
         const bool bOwnModelLock = !xModel->hasControllersLocked();
         if (bOwnModelLock)
             xModel->lockControllers();

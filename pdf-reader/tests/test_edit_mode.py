@@ -64,6 +64,32 @@ class EditModeTests(unittest.TestCase):
         self.mode.tick(1)
         self.assertEqual(self.session.calls, [4])
 
+    def test_busy_thumbnail_defers_and_new_page_gets_a_full_settle_interval(self):
+        self.mode.request_edit()
+        self.mode.busy_reason = lambda: 'thumbnail-drag-finishing'
+        self.mode.tick(0)
+        self.mode.tick(2)
+        self.assertEqual(self.session.calls, [])
+        self.mode.busy_reason = lambda: ''
+        self.session.page = 4
+        self.mode.tick(3)
+        self.mode.tick(3.1)
+        self.assertEqual(self.session.calls, [])
+        self.mode.tick(3.5)
+        self.assertEqual(self.session.calls, [4])
+
+    def test_native_deferral_is_retried_without_failure(self):
+        self.mode.request_edit()
+        self.mode.tick(0)
+        real_edit = self.session.edit_current_page
+        self.session.edit_current_page = lambda: {'deferred': True}
+        self.assertIsNone(self.mode.tick(1))
+        self.assertEqual(self.mode.failures, {})
+        self.session.edit_current_page = real_edit
+        self.assertIsNone(self.mode.tick(1.1))
+        self.mode.tick(2)
+        self.assertEqual(self.session.calls, [1])
+
     def test_failure_requires_explicit_retry(self):
         self.mode.request_edit()
         self.session.reject = True

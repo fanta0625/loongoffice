@@ -13,7 +13,12 @@ class DirectImportUnavailable(RuntimeError):
     pass
 
 
-def import_into_page(context, document, target, pdf_url, page, layer_name, resource_prefix):
+class DirectImportDeferred(RuntimeError):
+    """The target or native input changed before import could start."""
+
+
+def import_into_page(context, document, target, pdf_url, page, layer_name, resource_prefix,
+                     *, automatic=False):
     if type(page) is not int or page < 1:
         raise ValueError('Expected a positive source page')
     services = context.ServiceManager
@@ -28,7 +33,16 @@ def import_into_page(context, document, target, pdf_url, page, layer_name, resou
     # One native operation owns stream creation, conversion, SAX and the
     # outer SolarMutex execution boundary. Do not call the raw converter here:
     # individual object locks allowed the GUI to paint partial imports.
-    if not importer.filter((prop('URL', pdf_url), prop('SourcePage', page))):
+    descriptor = (prop('URL', pdf_url), prop('SourcePage', page))
+    if automatic:
+        descriptor += (prop('Automatic', True),)
+    try:
+        imported = importer.filter(descriptor)
+    except Exception as error:
+        if automatic and getattr(error, 'Message', '') == 'PDFReaderAutomaticEditDeferred':
+            raise DirectImportDeferred() from error
+        raise
+    if not imported:
         raise RuntimeError('Native PDF page import returned false or was cancelled')
 
 

@@ -94,6 +94,7 @@ public:
         SdrLayerID nLayer );
 
     void Abort();
+    bool HasPendingDragFinish() const { return mnDragFinishedUserEventId != nullptr; }
 
 private:
     virtual sal_uInt16 DetermineInsertPosition () override;

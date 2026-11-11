@@ -88,6 +88,7 @@ public:
         PROPERTY_DRAWVIEWMODE = 9
         ,PROPERTY_UPDATEACC = 10
         ,PROPERTY_PAGE_CHANGE = 11
+        ,PROPERTY_PDF_EDIT_BUSY = 12
     };
 
     /** Create a new DrawController object for the given ViewShellBase.

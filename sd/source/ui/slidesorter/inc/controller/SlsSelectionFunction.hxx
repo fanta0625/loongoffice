@@ -92,6 +92,7 @@ public:
         being interpreted as drag-and-drop start.
     */
     void ResetMouseAnchor();
+    bool IsInGesture() const;
 
 private:
     SlideSorter& mrSlideSorter;

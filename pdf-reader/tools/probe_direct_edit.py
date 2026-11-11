@@ -13,7 +13,7 @@ from unittest.mock import patch
 import uuid
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'uno' / 'python'))
-from direct_edit import import_into_page, DIRECT_IMPORTER
+from direct_edit import import_into_page, DIRECT_IMPORTER, DirectImportDeferred
 from edit_bridge import open_for_edit
 from reader_session import ReaderSession
 from p0a_preview_probe import write_fixture
@@ -122,6 +122,24 @@ def text_properties(page):
     return result
 
 
+def verify_ui_typing_undo(text):
+    original = text.getString()
+    expected = original + ' ZUNDO'
+    print('In Draw, double-click the PDF SOURCE PAGE 2 text, go to its end, '
+          'type a space followed by ZUNDO, then click outside the text box.', flush=True)
+    input('After leaving the text box, return here and press Enter: ')
+    if text.getString() != expected:
+        raise RuntimeError('Typed text did not reach the imported shape')
+    print('In Draw, press Ctrl+Z once.', flush=True)
+    input('Return here and press Enter: ')
+    if text.getString() != original:
+        raise RuntimeError('UI Undo did not restore original text')
+    print('In Draw, use Edit > Redo.', flush=True)
+    input('Return here and press Enter: ')
+    if text.getString() != expected:
+        raise RuntimeError('UI Redo did not restore typed text')
+
+
 def run(args):
     import uno
     with tempfile.TemporaryDirectory(prefix='pdf-direct-check-') as tmp:
@@ -130,8 +148,10 @@ def run(args):
         write_fixture(pdf, page_count=3)
         pipe = 'direct_check_' + uuid.uuid4().hex
         command = [args.office, '-env:UserInstallation=' + (root / 'profile').as_uri(),
-                   '--headless', '--nologo', '--nodefault', '--nofirststartwizard', '--norestore',
+                   '--nologo', '--nodefault', '--nofirststartwizard', '--norestore',
                    f'--accept=pipe,name={pipe};urp;StarOffice.ComponentContext']
+        if not args.ui_text_undo:
+            command.insert(1, '--headless')
         env = dict(os.environ, LO_IMPORT_USE_PDFIUM='1')
         session = desktop = None
         with (root / 'office.log').open('w+') as log:
@@ -151,7 +171,7 @@ def run(args):
                 if DIRECT_IMPORTER not in context.ServiceManager.getAvailableServiceNames():
                     raise RuntimeError('Native direct-page service unavailable; rebuild Office first')
                 desktop = context.ServiceManager.createInstanceWithContext('com.sun.star.frame.Desktop', context)
-                session = ReaderSession(context, pdf.as_uri(), hidden=True, direct_edit=True)
+                session = ReaderSession(context, pdf.as_uri(), hidden=not args.ui_text_undo, direct_edit=True)
                 controller = session.document.getCurrentController()
                 pages = session.pages
                 original_pages = [pages.getByIndex(i) for i in range(3)]
@@ -201,7 +221,11 @@ def run(args):
                         text = candidate
                 if text is None:
                     raise RuntimeError('Native selected page did not produce expected editable text')
-                text.setString('DIRECT_USER_EDIT')
+                if args.ui_text_undo:
+                    verify_ui_typing_undo(text)
+                else:
+                    text.setString('DIRECT_USER_EDIT')
+                edited_text = text.getString()
                 undo = session.document.getUndoManager()
                 marker = seed_native_undo(context, session.document, original_pages[1])
                 history = tuple(undo.getAllUndoActionTitles())
@@ -223,7 +247,7 @@ def run(args):
                 if any(original_pages[1].getByIndex(i) == marker
                        for i in range(original_pages[1].getCount())):
                     raise RuntimeError('Retained native redo did not delete the fixture')
-                if text.getString() != 'DIRECT_USER_EDIT':
+                if text.getString() != edited_text:
                     raise RuntimeError('Undo/redo damaged the edited PDF text')
                 controller.setCurrentPage(original_pages[0])
                 preview = session._reading_preview(1)
@@ -242,27 +266,62 @@ def run(args):
                     raise RuntimeError('Failed import did not retain the preview')
                 if not session.document.isSetModifiedEnabled():
                     raise RuntimeError('Failed import leaked native modification suppression')
+                if not controller.getPropertySetInfo().hasPropertyByName('PdfReaderEditBusyReason'):
+                    raise RuntimeError('Native gesture guard unavailable')
+                # Request page 1 while page 2 is active. Native guard must reject
+                # before touching page 1, even though Python chose it earlier.
+                controller.setCurrentPage(original_pages[1])
+                try:
+                    import_into_page(context, session.document, original_pages[0], pdf.as_uri(),
+                                     1, session.edit_layer.Name, 'probe-stale-', automatic=True)
+                except DirectImportDeferred:
+                    pass
+                else:
+                    raise RuntimeError('Native guard accepted a stale target')
+                if original_pages[0].getCount() != 1 or original_pages[0].getByIndex(0) != preview:
+                    raise RuntimeError('Native deferral changed the target preview')
+                controller.setCurrentPage(original_pages[0])
+                history_before_cancel = tuple(undo.getAllUndoActionTitles())
+
                 def navigate_after_native(*values):
                     import_into_page(*values)
                     controller.setCurrentPage(original_pages[1])
                 with patch('reader_session.import_into_page', side_effect=navigate_after_native):
                     cancelled = session.edit_current_page()
-                if not cancelled.get('cancelled') or original_pages[0].getCount() != 1:
+                if (not cancelled.get('cancelled') or original_pages[0].getCount() != 1
+                        or original_pages[0].getByIndex(0) != preview
+                        or controller.getCurrentPage() != original_pages[1]
+                        or 1 in session.edited
+                        or session.document.hasControllersLocked()
+                        or not session.document.isSetModifiedEnabled()
+                        or undo.isLocked()
+                        or tuple(undo.getAllUndoActionTitles()) != history_before_cancel):
                     raise RuntimeError('Navigation before commit did not roll back')
+                controller.setCurrentPage(original_pages[0])
+                session.guard_automatic_edit = not args.ui_text_undo
+                retry = session.edit_current_page()
+                if retry.get('page') != 1 or 1 not in session.edited or retry.get('reused'):
+                    raise RuntimeError('Cancelled page could not be imported again')
                 if pages.getCount() != 3 or any(pages.getByIndex(i) != p for i, p in enumerate(original_pages)):
                     raise RuntimeError('Reader page identities changed')
                 if names != [p.Name for p in original_pages] or dimensions != [(p.Width, p.Height) for p in original_pages]:
                     raise RuntimeError('Reader page names/dimensions changed')
-                print(json.dumps({'status': 'passed', 'edit_route': 'native-direct-page',
+                report = {'status': 'passed', 'edit_route': 'native-direct-page',
                                   'copied_shapes': 0, 'geometry_matches_existing_importer': True,
                                   'native_entry': 'PDFPageImportFilter',
                                   'native_layer_assignment': True, 'existing_page_render_retained': True,
                                   'previous_undo_history_retained': True,
                                   'native_delete_undo_redo_verified': True,
                                   'native_modification_batch_verified': True,
-                                  'ui_text_typing_undo_verified': False,
+                                  'ui_text_typing_undo_verified': args.ui_text_undo,
+                                  'stale_native_target_deferred': True,
+                                  'cancelled_page_retry_verified': True,
                                   'failure_retains_preview': True, 'navigation_before_commit_rollback': True,
-                                  'page_identity_retained': True, 'first_result': result}, indent=2))
+                                  'page_identity_retained': True, 'first_result': result}
+                payload = json.dumps(report, indent=2)
+                if args.report:
+                    Path(args.report).write_text(payload + '\n', encoding='utf-8')
+                print(payload, flush=True)
             finally:
                 if session:
                     session.close()
@@ -278,5 +337,7 @@ def run(args):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--office', default='libreoffice')
-    parser.add_argument('--report', help='Write geometry failure diagnostics as JSON')
+    parser.add_argument('--ui-text-undo', action='store_true',
+                        help='Open a visible fixture and verify real keyboard Undo and Redo')
+    parser.add_argument('--report', help='Write the success report or geometry failure diagnostics as JSON')
     run(parser.parse_args())

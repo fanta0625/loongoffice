@@ -22,6 +22,7 @@
 #include <cassert>
 
 #include <controller/SlsClipboard.hxx>
+#include <PdfEditGestureTrace.hxx>
 
 #include <SlideSorterViewShell.hxx>
 #include <SlideSorter.hxx>
@@ -493,7 +494,9 @@ void Clipboard::CreateSlideTransferable (
     if (bDrag)
     {
         pTransferable->SetView (&mrSlideSorter.GetView());
+        tracePdfEditGesture("thumbnail.drag-start");
         pTransferable->StartDrag (pActionWindow, DND_ACTION_COPY | DND_ACTION_MOVE);
+        tracePdfEditGesture("thumbnail.drag-source-return");
     }
     else
         pTransferable->CopyToClipboard (pActionWindow);
@@ -599,6 +602,7 @@ void Clipboard::StartDrag (
 
 void Clipboard::DragFinished (sal_Int8 nDropAction)
 {
+    tracePdfEditGesture("thumbnail.drag-finish-post", nDropAction);
     if (mnDragFinishedUserEventId == nullptr)
     {
         mnDragFinishedUserEventId = Application::PostUserEvent(
@@ -633,6 +637,7 @@ IMPL_LINK(Clipboard, ProcessDragFinished, void*, pUserData, void)
     }
     mxUndoContext.reset();
     mxSelectionObserverContext.reset();
+    tracePdfEditGesture("thumbnail.drag-finish-processed", nDropAction);
 }
 
 sal_Int8 Clipboard::AcceptDrop (
