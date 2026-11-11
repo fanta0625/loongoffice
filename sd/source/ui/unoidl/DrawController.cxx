@@ -816,7 +816,7 @@ void DrawController::getFastPropertyValue (
                 aReason = u"page-or-object-drag"_ustr;
             else if (mpBase)
             {
-                if (auto* pSorter = SlideSorterViewShell::GetSlideSorter(*mpBase))
+                if (auto* pSorter = slidesorter::SlideSorterViewShell::GetSlideSorter(*mpBase))
                 {
                     auto& rController = pSorter->GetSlideSorter().GetController();
                     auto xSelection = rController.GetCurrentSelectionFunction();
