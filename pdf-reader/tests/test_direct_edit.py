@@ -7,7 +7,7 @@ from unittest.mock import Mock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'uno' / 'python'))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'tools'))
-from probe_direct_edit import seed_native_undo, prepare_ui_text_probe
+from probe_direct_edit import seed_native_undo, prepare_ui_text_probe, verify_ui_typing_undo
 from reader_session import ReaderSession
 from direct_edit import import_into_page, discard_resources, DirectImportUnavailable, DIRECT_IMPORTER
 from timing_log import TimingLog
@@ -15,6 +15,21 @@ from test_edit_copy import Page, shape
 
 
 class DirectEditTests(unittest.TestCase):
+    def test_ui_typing_accepts_extra_spaces_and_checks_exact_undo_redo(self):
+        original = 'PDF SOURCE PAGE 2'
+        typed = original + '  ZUNDO'
+        text = Mock()
+        text.getString.side_effect = [original, typed, original, typed]
+        with patch('builtins.input', return_value=''), patch('builtins.print'):
+            verify_ui_typing_undo(text)
+
+    def test_ui_typing_rejects_changes_to_original_text(self):
+        text = Mock()
+        text.getString.return_value = 'PDF SOURCE PAGE 2'
+        with patch('builtins.input', return_value=''), patch('builtins.print'):
+            with self.assertRaisesRegex(RuntimeError, 'Expected original text'):
+                verify_ui_typing_undo(text)
+
     def setUp(self):
         self.session = object.__new__(ReaderSession)
         s = self.session

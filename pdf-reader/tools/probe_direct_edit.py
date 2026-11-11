@@ -150,7 +150,12 @@ def verify_ui_typing_undo(text, session=None):
     print('In Draw, double-click the PDF SOURCE PAGE 2 text, go to its end, '
           'type a space followed by ZUNDO, then click outside the text box.', flush=True)
     input('After leaving the text box, return here and press Enter: ')
-    if text.getString() != expected:
+    typed = text.getString()
+    suffix = typed[len(original):] if typed.startswith(original) else ''
+    # Human input may contain more than one separator space. Keep the source
+    # text exact, and use the actual accepted edit for the redo comparison.
+    if not (suffix.endswith('ZUNDO') and suffix[:-5]
+            and all(char == ' ' for char in suffix[:-5])):
         diagnostics = {'stage': 'ui-text-input', 'expected_text': expected,
                        'actual_text': text.getString()}
         if session is not None:
@@ -158,7 +163,8 @@ def verify_ui_typing_undo(text, session=None):
                                controllers_locked=session.document.hasControllersLocked(),
                                undo_locked=session.document.getUndoManager().isLocked())
         print(json.dumps(diagnostics, indent=2, ensure_ascii=False), flush=True)
-        raise RuntimeError('Typed text did not reach the imported shape')
+        raise RuntimeError('Expected original text followed by space(s) and ZUNDO')
+    expected = typed
     print('In Draw, press Ctrl+Z once.', flush=True)
     input('Return here and press Enter: ')
     if text.getString() != original:
