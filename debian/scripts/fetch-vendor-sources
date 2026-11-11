@@ -5,15 +5,6 @@ set -eu
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 . "$root/debian/vendor-sources.lock"
 
-# Some compatibility-environment Git wrappers do not handle -C correctly.
-# Change directory in a subshell so argument handling stays with Git itself.
-git_in()
-(
-    CDPATH= cd -- "$1" || exit 1
-    shift
-    git "$@"
-)
-
 fetch_source()
 {
     name=$1
@@ -27,20 +18,20 @@ fetch_source()
             exit 1
         fi
         mkdir -p "$path"
-        git_in "$path" init -q
+        git -C "$path" init -q
     fi
 
-    if git_in "$path" remote get-url origin >/dev/null 2>&1; then
-        git_in "$path" remote set-url origin "$url"
+    if git -C "$path" remote get-url origin >/dev/null 2>&1; then
+        git -C "$path" remote set-url origin "$url"
     else
-        git_in "$path" remote add origin "$url"
+        git -C "$path" remote add origin "$url"
     fi
-    if ! git_in "$path" cat-file -e "$commit^{commit}" 2>/dev/null; then
-        git_in "$path" fetch --no-tags --depth 1 origin "$commit"
+    if ! git -C "$path" cat-file -e "$commit^{commit}" 2>/dev/null; then
+        git -C "$path" fetch --no-tags --depth 1 origin "$commit"
     fi
-    git_in "$path" checkout --detach "$commit"
-    if ! git_in "$path" diff --quiet "$commit" -- || \
-       [ -n "$(git_in "$path" clean -ndx)" ]; then
+    git -C "$path" checkout --detach "$commit"
+    if ! git -C "$path" diff --quiet "$commit" -- || \
+       [ -n "$(git -C "$path" clean -ndx)" ]; then
         echo "ERROR: $path contains changes outside locked commit $commit" >&2
         exit 1
     fi
@@ -54,10 +45,7 @@ fetch_submodule()
     url=$3
     commit=$4
 
-    if ! gitlink=$(git_in "$root" rev-parse --verify "HEAD:$path"); then
-        echo "ERROR: cannot read $path from the source checkout's HEAD tree" >&2
-        exit 1
-    fi
+    gitlink=$(git -C "$root" ls-tree HEAD -- "$path" | awk '$1 == "160000" { print $3 }')
     if [ "$gitlink" != "$commit" ]; then
         echo "ERROR: $path gitlink is $gitlink; expected $commit" >&2
         exit 1
@@ -79,38 +67,38 @@ fetch_submodule()
             existing_tree=yes
         fi
         mkdir -p "$root/$path"
-        git_in "$root/$path" init -q
+        git init -q "$root/$path"
     fi
 
-    if git_in "$root/$path" remote get-url origin >/dev/null 2>&1; then
-        git_in "$root/$path" remote set-url origin "$url"
+    if git -C "$root/$path" remote get-url origin >/dev/null 2>&1; then
+        git -C "$root/$path" remote set-url origin "$url"
     else
-        git_in "$root/$path" remote add origin "$url"
+        git -C "$root/$path" remote add origin "$url"
     fi
-    if ! git_in "$root/$path" cat-file -e "$commit^{commit}" 2>/dev/null; then
-        git_in "$root/$path" fetch --no-tags --depth 1 origin "$commit"
+    if ! git -C "$root/$path" cat-file -e "$commit^{commit}" 2>/dev/null; then
+        git -C "$root/$path" fetch --no-tags --depth 1 origin "$commit"
     fi
 
     if [ "$existing_tree" = yes ]; then
         temporary_index=$(mktemp)
         rm -f "$temporary_index"
         GIT_INDEX_FILE="$temporary_index" \
-            git_in "$root/$path" add -A -f .
+            git -C "$root/$path" add -A -f .
         actual_tree=$(GIT_INDEX_FILE="$temporary_index" \
-            git_in "$root/$path" write-tree)
+            git -C "$root/$path" write-tree)
         rm -f "$temporary_index"
-        expected_tree=$(git_in "$root/$path" rev-parse "$commit^{tree}")
+        expected_tree=$(git -C "$root/$path" rev-parse "$commit^{tree}")
         if [ "$actual_tree" != "$expected_tree" ]; then
             echo "ERROR: existing $path source does not match $commit" >&2
             echo "Move the unverified directory aside and run this script again." >&2
             exit 1
         fi
-        git_in "$root/$path" reset --hard "$commit"
+        git -C "$root/$path" reset --hard "$commit"
     fi
 
-    git_in "$root/$path" checkout --detach "$commit"
-    if ! git_in "$root/$path" diff --quiet "$commit" -- || \
-       [ -n "$(git_in "$root/$path" clean -ndx)" ]; then
+    git -C "$root/$path" checkout --detach "$commit"
+    if ! git -C "$root/$path" diff --quiet "$commit" -- || \
+       [ -n "$(git -C "$root/$path" clean -ndx)" ]; then
         echo "ERROR: $path contains changes outside locked commit $commit" >&2
         exit 1
     fi

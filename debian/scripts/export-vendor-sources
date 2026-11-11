@@ -5,15 +5,6 @@ set -eu
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 . "$root/debian/vendor-sources.lock"
 
-# Some compatibility-environment Git wrappers do not handle -C correctly.
-# Change directory in a subshell so argument handling stays with Git itself.
-git_in()
-(
-    CDPATH= cd -- "$1" || exit 1
-    shift
-    git "$@"
-)
-
 output=${1:-}
 if [ -z "$output" ]; then
     echo "Usage: $0 OUTPUT.tar.xz" >&2
@@ -39,7 +30,7 @@ export_source()
     destination="$work/$path"
 
     mkdir -p "$destination"
-    git_in "$root/$path" archive --format=tar "$commit" | \
+    git -C "$root/$path" archive --format=tar "$commit" | \
         tar -xf - -C "$destination"
     printf '%s\n' "$commit" > "$destination/.source-commit"
 }
@@ -54,7 +45,7 @@ find "$root/vendor/libreoffice-tarballs" -maxdepth 1 -type f \
     ! -name 'fetch.log' ! -name '.loongoffice-tarballs-preparing' \
     -exec cp -p -- '{}' "$work/vendor/libreoffice-tarballs/" \;
 
-epoch=${SOURCE_DATE_EPOCH:-$(git_in "$root" show -s --format=%ct HEAD)}
+epoch=${SOURCE_DATE_EPOCH:-$(git -C "$root" show -s --format=%ct HEAD)}
 tar --sort=name --mtime="@$epoch" --owner=0 --group=0 --numeric-owner \
     -cJf "$output" -C "$work" \
     vendor dictionaries helpcontent2 translations
