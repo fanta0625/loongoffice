@@ -1650,6 +1650,11 @@ libo_FUZZ_ARG_ENABLE(pdfium,
         [Disable building PDFium. Results in insecure PDF signature verification.])
 )
 
+AC_ARG_ENABLE(loongoffice-pdf-fast,
+    AS_HELP_STRING([--enable-loongoffice-pdf-fast],
+        [Build the independent LoongOffice PDF reader with on-demand editing (default: no).])
+)
+
 libo_FUZZ_ARG_ENABLE(skia,
     AS_HELP_STRING([--disable-skia],
         [Disable building Skia. Use --enable-skia=debug to build without optimizations.])
@@ -13068,6 +13073,29 @@ AC_SUBST(ENABLE_PDFIMPORT)
 AC_SUBST(SYSTEM_POPPLER)
 AC_SUBST(POPPLER_CFLAGS)
 AC_SUBST(POPPLER_LIBS)
+
+AC_MSG_CHECKING([whether to build the LoongOffice PDF reader])
+ENABLE_LOONGOFFICE_PDF_FAST=
+if test "$enable_loongoffice_pdf_fast" = yes; then
+    if test "$ENABLE_PDFIUM" != TRUE -o "$ENABLE_PDFIMPORT" != TRUE -o "$ENABLE_POPPLER" != TRUE; then
+        AC_MSG_ERROR([--enable-loongoffice-pdf-fast requires PDFium and native Poppler PDF import.])
+    fi
+    if test -n "$DISABLE_GUI" -o "$DISABLE_DYNLOADING" = TRUE -o "$ENABLE_WASM_STRIP_BASIC_DRAW_MATH_IMPRESS" = TRUE; then
+        AC_MSG_ERROR([The LoongOffice PDF reader requires a desktop GUI build with dynamic loading and drawing support.])
+    fi
+    case " $BUILD_TYPE " in
+        *" DESKTOP "*) ;;
+        *) AC_MSG_ERROR([The LoongOffice PDF reader requires desktop support.]) ;;
+    esac
+    ENABLE_LOONGOFFICE_PDF_FAST=TRUE
+    AC_DEFINE(HAVE_FEATURE_LOONGOFFICE_PDF_FAST)
+    AC_MSG_RESULT([yes])
+elif test -z "$enable_loongoffice_pdf_fast" -o "$enable_loongoffice_pdf_fast" = no; then
+    AC_MSG_RESULT([no])
+else
+    AC_MSG_ERROR([--enable-loongoffice-pdf-fast accepts only yes or no.])
+fi
+AC_SUBST(ENABLE_LOONGOFFICE_PDF_FAST)
 
 # Skia?
 ENABLE_SKIA=

@@ -70,4 +70,8 @@ $(eval $(call gb_CppunitTest_use_vcl,sd_pdf_import_test))
 $(eval $(call gb_CppunitTest_use_rdb,sd_pdf_import_test,services))
 $(eval $(call gb_CppunitTest_use_configuration,sd_pdf_import_test))
 
+ifeq ($(ENABLE_LOONGOFFICE_PDF_FAST),TRUE)
+$(eval $(call gb_CppunitTest_use_executable,sd_pdf_import_test,xpdfimport))
+endif
+
 # vim: set noet sw=4 ts=4:

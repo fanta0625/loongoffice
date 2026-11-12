@@ -18,6 +18,10 @@
  */
 
 #include "pdfioutdev_gpl.hxx"
+#include <config_features.h>
+#if HAVE_FEATURE_LOONGOFFICE_PDF_FAST
+#include "../inc/page_selection.hxx"
+#endif
 #ifdef _WIN32
 # include <io.h>
 # include <fcntl.h>  /*_O_BINARY*/
@@ -269,13 +273,22 @@ int main(int argc, char **argv)
 
     // tell the receiver early - needed for proper progress calculation
     const int nPages = pDoc->getNumPages();
-    pdfi::PDFOutDev::setPageNum(nPages);
+    int firstPage = 1;
+    int lastPage = nPages;
+#if HAVE_FEATURE_LOONGOFFICE_PDF_FAST
+    const auto selection = pdfi::selectPages(myStringToStdString(my_string(options)), nPages);
+    if (!selection)
+        return EXIT_FAILURE;
+    firstPage = selection->first;
+    lastPage = selection->last;
+#endif
+    pdfi::PDFOutDev::setPageNum(lastPage - firstPage + 1);
 
     // virtual resolution of the PDF OutputDev in dpi
     static const int PDFI_OUTDEV_RESOLUTION = 7200;
 
     // do the conversion
-    for (int i = 1; i <= nPages; ++i)
+    for (int i = firstPage; i <= lastPage; ++i)
     {
         pDoc->displayPage(&aOutDev,
                 i,

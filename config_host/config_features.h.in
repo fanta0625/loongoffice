@@ -116,6 +116,9 @@
  */
 #define HAVE_FEATURE_PDFIMPORT 0
 
+/* Native Draw tiled PDF preview and deferred page editing. */
+#define HAVE_FEATURE_LOONGOFFICE_PDF_FAST 0
+
 /*
  * Whether poppler is available
  */

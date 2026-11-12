@@ -1,0 +1,12 @@
+pdffast-native-pages.pdf is an original, synthetic regression fixture created
+for this change and licensed under the Mozilla Public License, v. 2.0.
+
+The uncompressed PDF contains three distinct pages:
+1. Text "FIRST native page", a stroked path, an axial gradient and a transformed
+   Form XObject containing a filled rectangle and text.
+2. Text "SECOND native page", filled/stroked paths, a transformed Form and a
+   small embedded RGB image.
+3. A blank page, with a different size from both preceding pages.
+
+Used by the sd and sdext tests to compare default native Draw import with
+deferred single-page import, including object geometry and rendered pixels.

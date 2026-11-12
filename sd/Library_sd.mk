@@ -609,4 +609,16 @@ endif # ENABLE_SDREMOTE_BLUETOOTH=TRUE
 
 endif # ENABLE_SDREMOTE=TRUE
 
+ifeq ($(ENABLE_LOONGOFFICE_PDF_FAST),TRUE)
+$(eval $(call gb_Library_add_defs,sd,-DSAL_LOG_INFO))
+$(eval $(call gb_Library_set_include,sd,\
+    $$(INCLUDE) \
+    -I$(SRCDIR)/pdffast/inc \
+))
+$(eval $(call gb_Library_add_exception_objects,sd,\
+    sd/source/filter/pdf/pdffast \
+))
+$(eval $(call gb_Library_use_static_libraries,sd,pdffastcore))
+endif
+
 # vim: set noet sw=4 ts=4:

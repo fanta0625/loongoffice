@@ -66,6 +66,9 @@
 
 #include <editeng/outliner.hxx>
 #include <drawdoc.hxx>
+#if HAVE_FEATURE_LOONGOFFICE_PDF_FAST
+#include <PdfFastDocument.hxx>
+#endif
 #include <sdpage.hxx>
 #include <strings.hrc>
 #include <glob.hxx>
@@ -385,6 +388,9 @@ SdDrawDocument::SdDrawDocument(DocumentType eType, SfxObjectShell* pDrDocSh)
 // Destructor
 SdDrawDocument::~SdDrawDocument()
 {
+#if HAVE_FEATURE_LOONGOFFICE_PDF_FAST
+    mpPdfFastDocument.reset();
+#endif
     s_pLast = nullptr;
 
     Broadcast(SdrHint(SdrHintKind::ModelCleared));

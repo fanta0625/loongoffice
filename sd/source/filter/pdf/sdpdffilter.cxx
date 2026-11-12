@@ -26,6 +26,12 @@
 
 #include <sdpage.hxx>
 #include <drawdoc.hxx>
+#if HAVE_FEATURE_LOONGOFFICE_PDF_FAST
+#include <PdfFastDocument.hxx>
+#include <vcl/svapp.hxx>
+#include <chrono>
+#include <sal/log.hxx>
+#endif
 #include <sdpdffilter.hxx>
 
 #include <vcl/graph.hxx>
@@ -264,13 +270,25 @@ static bool ImportPDF(SvStream& rStream, SdDrawDocument& rDocument)
 
 bool SdPdfFilter::Import()
 {
+#if HAVE_FEATURE_LOONGOFFICE_PDF_FAST
+    const auto started = std::chrono::steady_clock::now();
+#endif
     const OUString aFileName(
         mrMedium.GetURLObject().GetMainURL(INetURLObject::DecodeMechanism::NONE));
 
     std::unique_ptr<SvStream> xStream(::utl::UcbStreamHelper::CreateStream(
         aFileName, StreamMode::READ | StreamMode::SHARE_DENYNONE));
 
-    return ImportPDF(*xStream, mrDocument);
+    const bool imported = xStream && ImportPDF(*xStream, mrDocument);
+#if HAVE_FEATURE_LOONGOFFICE_PDF_FAST
+    SAL_INFO("pdffast", "native-import success=" << imported
+        << " pages=" << mrDocument.GetSdPageCount(PageKind::Standard)
+        << " total_us=" << std::chrono::duration_cast<std::chrono::microseconds>(
+            std::chrono::steady_clock::now() - started).count());
+    if (imported && !Application::IsHeadlessModeEnabled())
+        sd::PdfFastDocument::Attach(mrDocument);
+#endif
+    return imported;
 }
 
 bool SdPdfFilter::Export() { return false; }

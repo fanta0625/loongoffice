@@ -20,6 +20,10 @@ $(eval $(call gb_Module_add_targets,libreoffice,\
 ))
 endif
 
+ifeq ($(ENABLE_LOONGOFFICE_PDF_FAST),TRUE)
+$(eval $(call gb_Module_add_moduledirs,libreoffice,pdffast))
+endif
+
 # WASM_CHART change
 ifneq ($(ENABLE_WASM_STRIP_CHART),TRUE)
 $(eval $(call gb_Module_add_moduledirs,libreoffice,\

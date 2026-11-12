@@ -11,6 +11,8 @@
 #pragma once
 
 #include <memory>
+#include <cstddef>
+#include <functional>
 #include <stdint.h>
 
 #include <com/sun/star/util/DateTime.hpp>
@@ -73,6 +75,16 @@ public:
     virtual sal_Int32 getFontDictObjNum() const = 0;
 };
 
+// Random input resources must stay valid until the document is closed. Calls
+// are serialized by the embedder together with all other PDFium operations.
+class VCL_DLLPUBLIC PDFiumInput
+{
+public:
+    virtual ~PDFiumInput() = default;
+    virtual sal_uInt64 size() const = 0;
+    virtual bool read(sal_uInt64 offset, void* buffer, std::size_t length) noexcept = 0;
+};
+
 class VCL_DLLPUBLIC PDFium
 {
 public:
@@ -83,6 +95,9 @@ public:
     virtual std::unique_ptr<PDFiumDocument> openDocument(const void* pData, int nSize,
                                                          const OString& rPassword)
         = 0;
+    // Optional additive entry point; existing memory callers remain unchanged.
+    virtual std::unique_ptr<PDFiumDocument> openDocument(
+        const std::shared_ptr<PDFiumInput>&, const OString&);
     virtual PDFErrorType getLastErrorCode() = 0;
     /// createBitmap can reduce requested size to possible value
     virtual std::unique_ptr<PDFiumBitmap> createBitmap(int& nWidth, int& nHeight, int nAlpha) = 0;
@@ -98,6 +113,17 @@ public:
     virtual void renderPageBitmap(PDFiumDocument* pDoc, PDFiumPage* pPage, int nStartX, int nStartY,
                                   int nSizeX, int nSizeY)
         = 0;
+    // Return false on cooperative cancellation; no partial pixels may be used.
+    // Callback must not throw or re-enter PDFium. The default preserves support
+    // for alternate implementations that only provide synchronous rendering.
+    virtual bool renderPageBitmapCancelable(PDFiumDocument* doc, PDFiumPage* page,
+        int x, int y, int width, int height, const std::function<bool()>& cancelled)
+    {
+        if (cancelled())
+            return false;
+        renderPageBitmap(doc, page, x, y, width, height);
+        return !cancelled();
+    }
     virtual ConstScanline getBuffer() = 0;
     virtual int getStride() = 0;
     virtual int getWidth() = 0;
@@ -336,6 +362,12 @@ public:
     virtual std::vector<unsigned int> getTrailerEnds() = 0;
     virtual OUString getBookmarks() = 0;
 };
+
+inline std::unique_ptr<PDFiumDocument> PDFium::openDocument(
+    const std::shared_ptr<PDFiumInput>&, const OString&)
+{
+    return nullptr;
+}
 
 struct VCL_DLLPUBLIC PDFiumLibrary final
 {

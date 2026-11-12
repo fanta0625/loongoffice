@@ -559,6 +559,10 @@ bool DrawDocShell::ConvertFrom( SfxMedium& rMedium )
         mpDoc->CreateFirstPages();
         mpDoc->StopWorkStartupDelay();
         bRet = SdPdfFilter(rMedium, *this).Import();
+#if HAVE_FEATURE_LOONGOFFICE_PDF_FAST
+        if (bRet && mpDoc->GetPdfFastDocument())
+            SetReadOnlyUI(true);
+#endif
     }
     else
     {

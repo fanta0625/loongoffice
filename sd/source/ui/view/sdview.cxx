@@ -58,6 +58,9 @@
 #include <Window.hxx>
 #include <Client.hxx>
 #include <drawdoc.hxx>
+#if HAVE_FEATURE_LOONGOFFICE_PDF_FAST
+#include <PdfFastDocument.hxx>
+#endif
 #include <DrawDocShell.hxx>
 #include <sdmod.hxx>
 #include <sdpage.hxx>
@@ -171,8 +174,19 @@ namespace {
 
 class ViewRedirector : public sdr::contact::ViewObjectContactRedirector
 {
+#if HAVE_FEATURE_LOONGOFFICE_PDF_FAST
+    sd::PdfFastDocument* mpPdfFast = nullptr;
+    OutputDevice* mpPdfOutput = nullptr;
+#endif
 public:
     ViewRedirector();
+#if HAVE_FEATURE_LOONGOFFICE_PDF_FAST
+    void SetPdfFast(sd::PdfFastDocument* document, OutputDevice* output)
+    {
+        mpPdfFast = document;
+        mpPdfOutput = output;
+    }
+#endif
 
     // all default implementations just call the same methods at the original. To do something
     // different, override the method and at least do what the method does.
@@ -216,6 +230,11 @@ void ViewRedirector::createRedirectedPrimitive2DSequence(
     const SdrPage* pVisualizedPage = GetSdrPageFromXDrawPage(rOriginal.GetObjectContact().getViewInformation2D().getVisualizedPage());
     const SdPage* pObjectsSdPage = dynamic_cast< SdPage* >(pSdrPage);
     const bool bIsInsidePageObj(pPageView && pPageView->GetPage() != pVisualizedPage);
+#if HAVE_FEATURE_LOONGOFFICE_PDF_FAST
+    if (mpPdfFast && mpPdfOutput && !bSubContentProcessing && !bIsInsidePageObj
+        && !bIsPrinting && mpPdfFast->Paint(rOriginal, *mpPdfOutput, rVisitor))
+        return;
+#endif
 
     // check if we need to draw a placeholder border. Never do it for
     // objects inside a SdrPageObj and never when printing
@@ -496,6 +515,14 @@ void View::CompleteRedraw(OutputDevice* pOutDev, const vcl::Region& rReg, sdr::c
     }
 
     ViewRedirector aViewRedirector;
+#if HAVE_FEATURE_LOONGOFFICE_PDF_FAST
+    if (pOutDev && pOutDev->GetOutDevType() == OUTDEV_WINDOW)
+    {
+        if (auto* pdf = mrDoc.GetPdfFastDocument())
+            pdf->PreparePaint(*this, *pOutDev);
+        aViewRedirector.SetPdfFast(mrDoc.GetPdfFastDocument(), pOutDev);
+    }
+#endif
     FmFormView::CompleteRedraw(pOutDev, rReg, pRedirector ? pRedirector : &aViewRedirector);
 }
 

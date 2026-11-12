@@ -741,7 +741,8 @@ bool SfxObjectShell::DoLoad( SfxMedium *pMed )
             constexpr bool bUsePdfium = true;
 #else
             const bool bUsePdfium
-                = comphelper::LibreOfficeKit::isActive() || getenv("LO_IMPORT_USE_PDFIUM");
+                = comphelper::LibreOfficeKit::isActive() || getenv("LO_IMPORT_USE_PDFIUM")
+                  || (HAVE_FEATURE_LOONGOFFICE_PDF_FAST && !Application::IsHeadlessModeEnabled());
 #endif
             const bool bPdfiumImport
                 = bUsePdfium && pMedium->GetFilter()
