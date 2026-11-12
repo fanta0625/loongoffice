@@ -53,6 +53,9 @@
 #include <sdpage.hxx>
 #include <FrameView.hxx>
 #include <drawdoc.hxx>
+#if HAVE_FEATURE_LOONGOFFICE_PDF_FAST
+#include <PdfFastDocument.hxx>
+#endif
 #include <sdresid.hxx>
 #include <DrawDocShell.hxx>
 #include <Window.hxx>
@@ -770,6 +773,11 @@ void DrawViewShell::Notify (SfxBroadcaster&, const SfxHint& rHint)
 {
     if (rHint.GetId()!=SfxHintId::ModeChanged)
         return;
+
+#if HAVE_FEATURE_LOONGOFFICE_PDF_FAST
+    if (!GetDocSh()->IsReadOnly() && mpDrawView && GetDoc()->GetPdfFastDocument())
+        GetDoc()->GetPdfFastDocument()->PrepareCurrentPage(*mpDrawView);
+#endif
 
     // Change to selection when turning on read-only mode.
     if(GetDocSh()->IsReadOnly() && dynamic_cast< FuSelection* >( GetCurrentFunction().get() ) )

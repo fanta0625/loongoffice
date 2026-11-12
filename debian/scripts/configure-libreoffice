@@ -31,6 +31,7 @@ exec ./autogen.sh \
     --with-system-postgresql \
     --disable-librelogo \
     --enable-release-build \
+    --enable-loongoffice-pdf-fast \
     --enable-qt6 \
     "$@" \
     --enable-gstreamer-1-0 \

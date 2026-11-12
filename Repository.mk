@@ -261,6 +261,16 @@ $(eval $(call gb_Helper_register_executables_for_install,OOO,pdfimport, \
 ))
 endif
 
+ifeq ($(ENABLE_LOONGOFFICE_PDF_FAST),TRUE)
+$(eval $(call gb_Helper_register_executables_for_install,OOO,ooo,\
+    loongoffice-pdf-fast \
+))
+$(eval $(call gb_Helper_register_libraries_for_install,OOOLIBS,ooo,\
+    pdffastedit \
+))
+$(eval $(call gb_Helper_register_uiconfigs,pdffast))
+endif
+
 $(eval $(call gb_Helper_register_executables_for_install,UREBIN,ure,\
 	$(if $(and $(ENABLE_JAVA),$(filter-out HAIKU MACOSX WNT,$(OS)),$(filter DESKTOP,$(BUILD_TYPE))),javaldx) \
     $(call gb_CondExeRegistryTools, \

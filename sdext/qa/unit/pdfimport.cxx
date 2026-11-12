@@ -18,6 +18,9 @@
  */
 
 #include <config_features.h>
+#if HAVE_FEATURE_LOONGOFFICE_PDF_FAST
+#include <page_selection.hxx>
+#endif
 
 #include <outputwrap.hxx>
 #include <contentsink.hxx>
@@ -64,7 +67,7 @@ namespace
     class TestSink : public ContentSink
     {
     public:
-        TestSink() :
+        explicit TestSink(bool validateFixture = true) :
             m_nNextFontId( 1 ),
             m_aIdToFont(),
             m_aFontToId(),
@@ -78,8 +81,13 @@ namespace
             m_bRedCircleSeen(false),
             m_bGreenStrokeSeen(false),
             m_bDashedLineSeen(false),
-            m_bImageSeen(false)
+            m_bImageSeen(false),
+            m_validateFixture(validateFixture)
         {}
+
+        sal_Int32 pageCount() const { return m_nNumPages; }
+        sal_Int32 startedPages() const { return m_nStartedPages; }
+        OUString text() const { return m_aTextOut.toString(); }
 
         void check()
         {
@@ -124,6 +132,7 @@ namespace
 
         virtual void startPage( const geometry::RealSize2D& rSize ) override
         {
+            ++m_nStartedPages;
             m_aPageSize = rSize;
         }
 
@@ -217,6 +226,8 @@ namespace
 
         virtual void strokePath( const uno::Reference<rendering::XPolyPolygon2D>& rPath ) override
         {
+            if (!m_validateFixture)
+                return;
             GraphicsContext& rContext( getCurrentContext() );
             basegfx::B2DPolyPolygon aPath = basegfx::unotools::b2DPolyPolygonFromXPolyPolygon2D(rPath);
             aPath.transform( rContext.Transformation );
@@ -275,6 +286,8 @@ namespace
 
         virtual void fillPath( const uno::Reference<rendering::XPolyPolygon2D>& rPath ) override
         {
+            if (!m_validateFixture)
+                return;
             GraphicsContext& rContext( getCurrentContext() );
             basegfx::B2DPolyPolygon aPath = basegfx::unotools::b2DPolyPolygonFromXPolyPolygon2D(rPath);
             aPath.transform( rContext.Transformation );
@@ -294,6 +307,8 @@ namespace
 
         virtual void eoFillPath( const uno::Reference<rendering::XPolyPolygon2D>& rPath ) override
         {
+            if (!m_validateFixture)
+                return;
             GraphicsContext& rContext( getCurrentContext() );
             basegfx::B2DPolyPolygon aPath = basegfx::unotools::b2DPolyPolygonFromXPolyPolygon2D(rPath);
             aPath.transform( rContext.Transformation );
@@ -464,11 +479,13 @@ namespace
         OUString           m_aURI;
         OUStringBuffer     m_aTextOut;
         sal_Int32                 m_nNumPages;
+        sal_Int32                 m_nStartedPages = 0;
         bool                      m_bPageEnded;
         bool                      m_bRedCircleSeen;
         bool                      m_bGreenStrokeSeen;
         bool                      m_bDashedLineSeen;
         bool                      m_bImageSeen;
+        bool                      m_validateFixture;
     };
 #endif
 
@@ -489,6 +506,67 @@ namespace
             pSink->check();
 #endif
         }
+
+#if HAVE_FEATURE_LOONGOFFICE_PDF_FAST
+        void testNativePageSelection()
+        {
+            auto all = pdfi::selectPages("", 3);
+            CPPUNIT_ASSERT(all);
+            CPPUNIT_ASSERT_EQUAL(1, all->first);
+            CPPUNIT_ASSERT_EQUAL(3, all->last);
+            all = pdfi::selectPages("SkipImages", 3);
+            CPPUNIT_ASSERT(all);
+            CPPUNIT_ASSERT_EQUAL(3, all->last);
+            auto selected = pdfi::selectPages("LoongOfficePdfPage=2", 3);
+            CPPUNIT_ASSERT(selected);
+            CPPUNIT_ASSERT_EQUAL(2, selected->first);
+            CPPUNIT_ASSERT_EQUAL(2, selected->last);
+            for (const auto options : { "LoongOfficePdfPage=", "LoongOfficePdfPage=0",
+                    "LoongOfficePdfPage=-1", "LoongOfficePdfPage=2x", "LoongOfficePdfPage=4",
+                    "LoongOfficePdfPage=99999999999999999999999999999" })
+                CPPUNIT_ASSERT(!pdfi::selectPages(options, 3));
+            CPPUNIT_ASSERT(!pdfi::selectPages("LoongOfficePdfPage=1", 0));
+        }
+
+        void testNativeSinglePageImport()
+        {
+#if HAVE_FEATURE_POPPLER
+            const OUString source = m_directories.getURLFromSrc(
+                u"/sd/qa/unit/data/pdf/pdffast-native-pages.pdf");
+            auto import = [&](sal_Int32 page) {
+                auto sink = std::make_shared<TestSink>(false);
+                CPPUNIT_ASSERT(pdfi::xpdf_ImportFromFile(source, sink,
+                    uno::Reference<task::XInteractionHandler>(), OUString(), getComponentContext(),
+                    u"LoongOfficePdfPage="_ustr + OUString::number(page)));
+                CPPUNIT_ASSERT_EQUAL(sal_Int32(1), sink->pageCount());
+                CPPUNIT_ASSERT_EQUAL(sal_Int32(1), sink->startedPages());
+                return sink->text();
+            };
+            const OUString first = import(1);
+            CPPUNIT_ASSERT(first.indexOf(u"FIRST") >= 0);
+            CPPUNIT_ASSERT(first.indexOf(u"SECOND") < 0);
+            const OUString second = import(2);
+            CPPUNIT_ASSERT(second.indexOf(u"SECOND") >= 0);
+            CPPUNIT_ASSERT(second.indexOf(u"FIRST") < 0);
+            CPPUNIT_ASSERT(import(3).isEmpty()); // Empty page still emits startPage/endPage.
+
+            auto sink = std::make_shared<TestSink>(false);
+            CPPUNIT_ASSERT(pdfi::xpdf_ImportFromFile(source, sink,
+                uno::Reference<task::XInteractionHandler>(), OUString(), getComponentContext(),
+                OUString()));
+            CPPUNIT_ASSERT_EQUAL(sal_Int32(3), sink->pageCount());
+            CPPUNIT_ASSERT_EQUAL(sal_Int32(3), sink->startedPages());
+            CPPUNIT_ASSERT(sink->text().indexOf(u"FIRST") >= 0);
+            CPPUNIT_ASSERT(sink->text().indexOf(u"SECOND") >= 0);
+
+            sink = std::make_shared<TestSink>(false);
+            CPPUNIT_ASSERT(!pdfi::xpdf_ImportFromFile(source, sink,
+                uno::Reference<task::XInteractionHandler>(), OUString(), getComponentContext(),
+                u"LoongOfficePdfPage=4"_ustr));
+            CPPUNIT_ASSERT_EQUAL(sal_Int32(0), sink->startedPages());
+#endif
+        }
+#endif
 
         void testTdf55425_decrypt()
         {
@@ -914,6 +992,10 @@ namespace
 
         CPPUNIT_TEST_SUITE(PDFITest);
         CPPUNIT_TEST(testXPDFParser);
+#if HAVE_FEATURE_LOONGOFFICE_PDF_FAST
+        CPPUNIT_TEST(testNativePageSelection);
+        CPPUNIT_TEST(testNativeSinglePageImport);
+#endif
         CPPUNIT_TEST(testOdfWriterExport);
         CPPUNIT_TEST(testOdfDrawExport);
         CPPUNIT_TEST(testTdf96993);

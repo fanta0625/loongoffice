@@ -187,6 +187,12 @@ void BinaryDataContainer::ensureSwappedIn() const
         mpImpl->ensureSwappedIn();
 }
 
+std::shared_ptr<const std::vector<sal_uInt8>> BinaryDataContainer::getDataShared() const
+{
+    ensureSwappedIn();
+    return mpImpl ? mpImpl->mpData : nullptr;
+}
+
 void BinaryDataContainer::swapOut() const
 {
     // Only bother reducing memory footprint in kit mode - for mobile/online etc.

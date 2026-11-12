@@ -19,6 +19,11 @@
 
 #pragma once
 
+#include <config_features.h>
+#if HAVE_FEATURE_LOONGOFFICE_PDF_FAST
+namespace sd { class PdfFastDocument; }
+#endif
+
 #include <com/sun/star/text/WritingMode.hpp>
 #include <svl/style.hxx>
 #include <svx/fmmodel.hxx>
@@ -341,11 +346,18 @@ struct PageInsertionParams
 class SD_DLLPUBLIC SdDrawDocument final : public FmFormModel
 {
 public:
+#if HAVE_FEATURE_LOONGOFFICE_PDF_FAST
+    SAL_DLLPRIVATE sd::PdfFastDocument* GetPdfFastDocument() const { return mpPdfFastDocument.get(); }
+    SAL_DLLPRIVATE void SetPdfFastDocument(std::unique_ptr<sd::PdfFastDocument>);
+#endif
     SAL_DLLPRIVATE void setDocAccTitle( const OUString& rTitle ) { msDocAccTitle = rTitle; }
     SAL_DLLPRIVATE const OUString& getDocAccTitle() const { return msDocAccTitle; }
     SAL_DLLPRIVATE bool getDocReadOnly() const { return m_bReadOnly; }
 private:
     OUString            msDocAccTitle;
+#if HAVE_FEATURE_LOONGOFFICE_PDF_FAST
+    std::unique_ptr<sd::PdfFastDocument> mpPdfFastDocument;
+#endif
     std::unique_ptr<SdOutliner>
                         mpOutliner;          ///< local outliner for outline mode
     std::unique_ptr<SdOutliner>

@@ -52,6 +52,9 @@
 #include <Window.hxx>
 #include <drawview.hxx>
 #include <drawdoc.hxx>
+#if HAVE_FEATURE_LOONGOFFICE_PDF_FAST
+#include <PdfFastDocument.hxx>
+#endif
 #include <DrawDocShell.hxx>
 #include <Ruler.hxx>
 #include <Client.hxx>
@@ -1182,6 +1185,10 @@ bool DrawViewShell::SwitchPage(sal_uInt16 nSelectedPage, bool bAllowChangeFocus,
             }
         }
 
+#if HAVE_FEATURE_LOONGOFFICE_PDF_FAST
+        if (!GetDocSh()->IsReadOnly() && GetDoc()->GetPdfFastDocument())
+            GetDoc()->GetPdfFastDocument()->PrepareCurrentPage(*mpDrawView);
+#endif
         Size aVisSizePixel = GetActiveWindow()->GetOutputSizePixel();
         ::tools::Rectangle aVisAreaWin = GetActiveWindow()->PixelToLogic( ::tools::Rectangle( Point(0,0), aVisSizePixel) );
         VisAreaChanged(aVisAreaWin);

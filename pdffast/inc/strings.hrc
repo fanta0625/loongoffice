@@ -1,0 +1,47 @@
+/* This file is part of the LibreOffice project.
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+#pragma once
+#include <unotools/resmgr.hxx>
+#define NC_(Context, String) TranslateId(Context, u8##String)
+
+inline constexpr TranslateId STR_FILE = NC_("pdffast", "~File");
+inline constexpr TranslateId STR_VIEW = NC_("pdffast", "~View");
+inline constexpr TranslateId STR_EDIT = NC_("pdffast", "~Edit");
+inline constexpr TranslateId STR_OPEN = NC_("pdffast", "~Open PDF…");
+inline constexpr TranslateId STR_EXPORT = NC_("pdffast", "~Export PDF Copy…");
+inline constexpr TranslateId STR_CLOSE = NC_("pdffast", "~Close");
+inline constexpr TranslateId STR_PREVIOUS = NC_("pdffast", "~Previous Page");
+inline constexpr TranslateId STR_NEXT = NC_("pdffast", "~Next Page");
+inline constexpr TranslateId STR_GOTO = NC_("pdffast", "~Go to Page…");
+inline constexpr TranslateId STR_FIT = NC_("pdffast", "Fit Page ~Width");
+inline constexpr TranslateId STR_ZOOM_IN = NC_("pdffast", "Zoom ~In");
+inline constexpr TranslateId STR_ZOOM_OUT = NC_("pdffast", "Zoom ~Out");
+inline constexpr TranslateId STR_EDIT_PAGE = NC_("pdffast", "~Edit Current Page");
+inline constexpr TranslateId STR_READ = NC_("pdffast", "~Reading Mode");
+inline constexpr TranslateId STR_UNDO = NC_("pdffast", "~Undo");
+inline constexpr TranslateId STR_REDO = NC_("pdffast", "~Redo");
+inline constexpr TranslateId STR_EMPTY = NC_("pdffast", "Open a PDF to start reading.");
+inline constexpr TranslateId STR_LOADING = NC_("pdffast", "Opening PDF…");
+inline constexpr TranslateId STR_PREPARING = NC_("pdffast", "Preparing this page for editing…");
+inline constexpr TranslateId STR_PASSWORD = NC_("pdffast", "Enter the PDF password:");
+inline constexpr TranslateId STR_PAGE_NUMBER = NC_("pdffast", "Page number:");
+inline constexpr TranslateId STR_PAGE_STATUS = NC_("pdffast", "Page %1 of %2 — %3%");
+inline constexpr TranslateId STR_MODIFIED = NC_("pdffast", "Modified");
+inline constexpr TranslateId STR_DISCARD = NC_("pdffast", "Discard Changes");
+inline constexpr TranslateId STR_CANCEL = NC_("pdffast", "Cancel");
+inline constexpr TranslateId STR_SAVE_PROMPT = NC_("pdffast", "Export your changes before closing?");
+inline constexpr TranslateId STR_EXPORT_NOTICE = NC_("pdffast", "Create a new PDF copy? Document signatures, interactive forms, annotations and document navigation are not preserved by this export. Your editable pages will remain open.");
+inline constexpr TranslateId STR_EXPORTED = NC_("pdffast", "PDF copy exported. Editable pages and undo history remain available.");
+inline constexpr TranslateId STR_PROTECTED_EDIT = NC_("pdffast", "Reading is available, but editing password-protected PDFs is not supported yet.");
+inline constexpr TranslateId STR_EDITOR_MISSING = NC_("pdffast", "The PDF editing component could not be loaded.");
+
+namespace pdffast
+{
+inline OUString tr(TranslateId id)
+{
+    static const auto locale = Translate::Create("pdffast");
+    return Translate::get(id, locale);
+}
+}

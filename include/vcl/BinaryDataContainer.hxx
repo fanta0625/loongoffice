@@ -45,6 +45,10 @@ public:
     size_t getSize() const;
     bool isEmpty() const;
     const sal_uInt8* getData() const;
+    /// Pin an immutable view of the current bytes, including across swapOut().
+    /// Acquire on the container's owning thread; the returned bytes may then be
+    /// read by a worker without accessing or synchronizing the container itself.
+    std::shared_ptr<const std::vector<sal_uInt8>> getDataShared() const;
     SAL_DLLPRIVATE css::uno::Sequence<sal_Int8> getCopyAsByteSequence() const;
 
     // Returns the data as a readonly stream open for reading
