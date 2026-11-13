@@ -87,7 +87,8 @@ private:
     void ProcessRequests();
     void ProcessOneRequest (
         CacheKey aKey,
-        const RequestPriorityClass ePriorityClass);
+        const RequestPriorityClass ePriorityClass,
+        bool bAllowSynchronous);
 };
 
 } // end of namespace ::sd::slidesorter::cache

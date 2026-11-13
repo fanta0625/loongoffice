@@ -12,6 +12,17 @@
 
 namespace pdffast
 {
+// A single, zoom-independent image serves both the page and small thumbnails.
+inline TileKey pagePreview(int page, double width, double height)
+{
+    if (width <= 0 || height <= 0)
+        return {};
+    const double scale = std::min(256.0 / width, 512.0 / height);
+    const int w = std::max(1, int(width * scale));
+    const int h = std::max(1, int(height * scale));
+    return { page, w, h, 0, 0, w, h };
+}
+
 // Scrolling at one scale is immediate. Only successive resolution changes
 // delay expensive tiles; repainting a delivered preview must not reset this.
 class ZoomSettle

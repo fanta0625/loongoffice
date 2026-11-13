@@ -1237,6 +1237,10 @@ bool DrawViewShell::SwitchPage(sal_uInt16 nSelectedPage, bool bAllowChangeFocus,
 
         if(bUpdateScrollbars)
             UpdateScrollBars();
+#if HAVE_FEATURE_LOONGOFFICE_PDF_FAST
+        if (auto* fast = GetDoc()->GetPdfFastDocument(); fast && fast->IsEditMode())
+            RequestPdfPage();
+#endif
     }
 
     return bOK;

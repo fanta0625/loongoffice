@@ -523,9 +523,8 @@ void View::CompleteRedraw(OutputDevice* pOutDev, const vcl::Region& rReg, sdr::c
 #if HAVE_FEATURE_LOONGOFFICE_PDF_FAST
     if (pOutDev && pOutDev->GetOutDevType() == OUTDEV_WINDOW)
     {
-        if (auto* pdf = mrDoc.GetPdfFastDocument())
-            pdf->PreparePaint(*this, *pOutDev);
-        aViewRedirector.SetPdfFast(mrDoc.GetPdfFastDocument(), pOutDev);
+        if (auto* pdf = mrDoc.GetPdfFastDocument(); pdf && pdf->PreparePaint(*this, *pOutDev))
+            aViewRedirector.SetPdfFast(pdf, pOutDev);
     }
 #endif
     FmFormView::CompleteRedraw(pOutDev, rReg, pRedirector ? pRedirector : &aViewRedirector);

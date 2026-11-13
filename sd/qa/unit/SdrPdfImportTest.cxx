@@ -40,6 +40,7 @@
 #include <vcl/filter/PngImageWriter.hxx>
 #include <vcl/svapp.hxx>
 #include <vcl/pdfread.hxx>
+#include <vcl/virdev.hxx>
 #include <tools/stream.hxx>
 
 #include <Annotation.hxx>
@@ -457,6 +458,87 @@ CPPUNIT_TEST_FIXTURE(SdrPdfImportTest, testNativeReadSnapshotRegionMatchesFullPa
             CPPUNIT_ASSERT(page->GetVisualRevision() != objectRevision);
         }
     }
+}
+
+CPPUNIT_TEST_FIXTURE(SdrPdfImportTest, testMaterializedPageUsesLiveDrawPaint)
+{
+    EnvVarGuard preview("LO_IMPORT_USE_PDFIUM", "1");
+    loadFromFile(u"pdf/pdffast-native-pages.pdf");
+    auto* model = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(model);
+    auto* shell = model->GetDocShell();
+    auto* doc = shell->GetDoc();
+    CPPUNIT_ASSERT(sd::PdfFastDocument::Attach(*doc));
+    auto* fast = doc->GetPdfFastDocument();
+    SdrView view(*doc);
+    comphelper::ScopeGuard forget([&] { fast->ForgetView(view); });
+    ScopedVclPtrInstance<VirtualDevice> output;
+    output->SetOutputSizePixel(Size(800, 600));
+    auto* page = doc->GetSdPage(0, PageKind::Standard);
+    view.ShowSdrPage(page);
+    CPPUNIT_ASSERT(fast->PreparePaint(view, *output));
+    fast->PrepareCurrentPage(view);
+    CPPUNIT_ASSERT(page->GetObjCount() > 1);
+    // Both editable and returned-to-read-only materialized pages must bypass
+    // PDF redirection entirely, at every zoom and on subsequent visits.
+    for (const bool readOnly : { false, true })
+    {
+        shell->SetReadOnlyUI(readOnly);
+        for (const int zoom : { 75, 100, 200, 50 })
+        {
+            MapMode mode(output->GetMapMode());
+            mode.SetScaleX(Fraction(zoom, 100));
+            mode.SetScaleY(Fraction(zoom, 100));
+            output->SetMapMode(mode);
+            CPPUNIT_ASSERT(!fast->PreparePaint(view, *output));
+        }
+    }
+    view.HideSdrPage();
+    view.ShowSdrPage(doc->GetSdPage(1, PageKind::Standard));
+    CPPUNIT_ASSERT(fast->PreparePaint(view, *output));
+    view.HideSdrPage();
+    view.ShowSdrPage(page);
+    CPPUNIT_ASSERT(!fast->PreparePaint(view, *output));
+}
+
+CPPUNIT_TEST_FIXTURE(SdrPdfImportTest, testVisiblePdfThumbnailsArriveWithoutModelChanges)
+{
+    EnvVarGuard preview("LO_IMPORT_USE_PDFIUM", "1");
+    loadFromFile(u"pdf/pdffast-native-pages.pdf");
+    auto* model = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(model);
+    auto* doc = model->GetDocShell()->GetDoc();
+    CPPUNIT_ASSERT(sd::PdfFastDocument::Attach(*doc));
+    auto* fast = doc->GetPdfFastDocument();
+    const auto count = doc->GetSdPageCount(PageKind::Standard);
+    std::vector<sal_uInt64> revisions;
+    for (sal_uInt16 n = 0; n < count; ++n)
+    {
+        auto* page = doc->GetSdPage(n, PageKind::Standard);
+        revisions.push_back(page->GetVisualRevision());
+        Bitmap bitmap;
+        fast->GetPagePreview(*page, Size(160, 200), bitmap);
+    }
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(30);
+    bool ready = false;
+    while (!ready && std::chrono::steady_clock::now() < deadline)
+    {
+        Application::Reschedule();
+        ready = true;
+        for (sal_uInt16 n = 0; n < count; ++n)
+        {
+            Bitmap bitmap;
+            const auto result = fast->GetPagePreview(*doc->GetSdPage(n, PageKind::Standard),
+                                                     Size(160, 200), bitmap);
+            ready &= result == sd::PdfFastDocument::PreviewResult::Ready;
+            if (result == sd::PdfFastDocument::PreviewResult::Ready)
+                CPPUNIT_ASSERT(!bitmap.IsEmpty());
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    }
+    CPPUNIT_ASSERT(ready);
+    for (sal_uInt16 n = 0; n < count; ++n)
+        CPPUNIT_ASSERT_EQUAL(revisions[n], doc->GetSdPage(n, PageKind::Standard)->GetVisualRevision());
 }
 
 CPPUNIT_TEST_FIXTURE(SdrPdfImportTest, testDeferredEditPreservesPageFormat)
