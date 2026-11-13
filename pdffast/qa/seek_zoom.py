@@ -46,6 +46,11 @@ def main():
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--page", type=int, default=400)
     parser.add_argument("--display", default=":94")
+    parser.add_argument("--vcl", default="gtk3")
+    parser.add_argument("--cpus", help="taskset CPU list for this test's office process")
+    parser.add_argument("--stress", action="store_true",
+                        help="seek and zoom immediately, without waiting for raster completion")
+    parser.add_argument("--preview-only", action="store_true")
     args = parser.parse_args()
     args.output = args.output.resolve()
     args.output.mkdir(parents=True, exist_ok=False)
@@ -55,7 +60,8 @@ def main():
         sock.bind(("127.0.0.1", 0))
         port = sock.getsockname()[1]
     env = os.environ.copy()
-    env.update(DISPLAY=args.display, GDK_BACKEND="x11", SAL_USE_VCLPLUGIN="gtk3",
+    env.update(DISPLAY=args.display, GDK_BACKEND="x11", SAL_USE_VCLPLUGIN=args.vcl,
+               QT_QPA_PLATFORM="xcb",
                SAL_LOG="+INFO.pdffast", SAL_DISABLE_OPENCL="1",
                PATH="/usr/local/bin:/usr/bin:/bin")
     env.pop("WAYLAND_DISPLAY", None)
@@ -65,7 +71,11 @@ def main():
     process = None
     watchdog = None
     log = (args.output / "sal.log").open("w")
-    metrics = {"page": args.page, "status": "started", "phases": []}
+    metrics = {"page": args.page, "vcl": args.vcl, "cpus": args.cpus,
+               "status": "started", "phases": []}
+
+    def save_metrics():
+        (args.output / "metrics.json").write_text(json.dumps(metrics, indent=2) + "\n")
 
     def log_text():
         return (args.output / "sal.log").read_text(errors="replace")
@@ -88,6 +98,9 @@ def main():
         raise TimeoutError("sidebar/canvas did not settle")
 
     def phase(name, operation):
+        metrics["active_phase"] = name
+        save_metrics()
+        print(json.dumps({"begin": name}), flush=True)
         start = time.perf_counter()
         operation()
         api_ms = (time.perf_counter() - start) * 1000
@@ -97,18 +110,23 @@ def main():
         record = {"name": name, "api_ms": round(api_ms, 1),
                   "screenshot_stable_ms": round(elapsed, 1)}
         metrics["phases"].append(record)
+        save_metrics()
         print(json.dumps(record), flush=True)
 
     try:
         time.sleep(0.3)
         if display.poll() is not None:
             raise RuntimeError("private display could not start")
-        process = subprocess.Popen([
+        command = [
             str(args.program.resolve() / "soffice"), "--norestore", "--nofirststartwizard",
             "--nologo", "--draw", f'-env:UserInstallation={(args.output / "profile").as_uri()}',
             f"--accept=socket,host=127.0.0.1,port={port};urp;StarOffice.ComponentContext",
             str(sample),
-        ], env=env, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
+        ]
+        if args.cpus:
+            command = ["taskset", "-c", args.cpus] + command
+        process = subprocess.Popen(command, env=env, stdout=log,
+                                   stderr=subprocess.STDOUT, start_new_session=True)
 
         def stop_office():
             try:
@@ -145,11 +163,31 @@ def main():
         settle().save(args.output / "open.png")
         pages = doc.getDrawPages()
         target = pages.getByIndex(args.page - 1)
+
+        def seek_zoom_stress(prefix):
+            # The previous benchmark waited for a settled screenshot after seek,
+            # missing cancellation and UI contention while a page was rendering.
+            for index in (12, pages.getCount() - 3, 31, pages.getCount() - 22,
+                          args.page - 1):
+                page = pages.getByIndex(min(max(index, 0), pages.getCount() - 1))
+
+                def navigate():
+                    controller.setCurrentPage(page)
+                    for zoom in (125, 75, 150, 100, 200, 80):
+                        controller.setPropertyValue("ZoomValue", zoom)
+
+                phase(f"{prefix}-seek-zoom-{index + 1}", navigate)
+
+        if args.stress:
+            seek_zoom_stress("readonly")
         phase("readonly-seek", lambda: controller.setCurrentPage(target))
         for zoom in (100, 150, 75):
             phase(f"readonly-zoom-{zoom}", lambda z=zoom: controller.setPropertyValue("ZoomValue", z))
         phase("readonly-zoom-burst", lambda: [
             controller.setPropertyValue("ZoomValue", z) for z in range(80, 201, 10)])
+        if args.preview_only:
+            metrics["status"] = "passed"
+            return
         dispatch = context.ServiceManager.createInstanceWithContext(
             "com.sun.star.frame.DispatchHelper", context)
         start = time.perf_counter()
@@ -171,6 +209,8 @@ def main():
         phase("edit-seek-next", lambda: controller.setCurrentPage(other))
         wait_for(lambda: other.getCount() != 1)
         phase("edit-seek-back", lambda: controller.setCurrentPage(target))
+        if args.stress:
+            seek_zoom_stress("edit")
         metrics["status"] = "passed"
     except Exception as error:
         metrics.update(status="failed", error=repr(error))
@@ -182,7 +222,7 @@ def main():
     finally:
         if watchdog:
             watchdog.cancel()
-        (args.output / "metrics.json").write_text(json.dumps(metrics, indent=2) + "\n")
+        save_metrics()
         if process:
             try:
                 os.killpg(process.pid, signal.SIGTERM)
