@@ -17,6 +17,7 @@ namespace pdffast
 class ZoomSettle
 {
     using Clock = std::chrono::steady_clock;
+    static constexpr auto PageSettle = std::chrono::milliseconds(120);
     int m_page = -1;
     int m_width = 0;
     int m_height = 0;
@@ -28,7 +29,12 @@ public:
         if (page == m_page && (width != m_width || height != m_height))
             m_until = now + std::chrono::milliseconds(80);
         else if (page != m_page)
-            m_until = {};
+            // A page switch must show its bounded preview before we start
+            // filling the whole viewport with expensive high-resolution tiles.
+            // This is especially important for large vector pages on slower
+            // CPUs: several visible tiles can otherwise monopolize the PDFium
+            // worker while the user is still seeking.
+            m_until = now + PageSettle;
         m_page = page;
         m_width = width;
         m_height = height;

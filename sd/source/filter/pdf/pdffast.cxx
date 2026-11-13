@@ -503,7 +503,11 @@ struct PdfFastDocument::Impl : SfxListener
         }
         for (const auto& entry : viewports)
         {
-            if (entry.second.zoom.pending(now))
+            // Page navigation is preview-first. Do not enqueue all visible
+            // high-resolution tiles until the new page's bounded preview has
+            // arrived; on a complex page those tiles can otherwise delay the
+            // first useful frame by several seconds on slower CPUs.
+            if (entry.second.zoom.pending(now) || !cache.contains(entry.second.preview))
                 continue;
             for (const auto& key : entry.second.visible)
             {
@@ -814,6 +818,7 @@ IMPL_LINK_NOARG(PdfFastDocument::Impl, Deliver, Timer*, void)
     const bool editsPending = processEdits();
     const auto start = Clock::now();
     std::set<int> changed;
+    bool previewDelivered = false;
     for (std::size_t items = 0;
          pdffast::TransferBudget::allows(items, Clock::now() - start); ++items)
     {
@@ -845,6 +850,8 @@ IMPL_LINK_NOARG(PdfFastDocument::Impl, Deliver, Timer*, void)
                     });
                 cache.put(result->tile, std::move(bitmap), cost(result->tile), !visible);
                 firstContent = true;
+                previewDelivered |= std::any_of(viewports.begin(), viewports.end(),
+                    [&](const auto& entry) { return entry.second.preview == result->tile; });
             }
             else
                 failed = true;
@@ -889,7 +896,7 @@ IMPL_LINK_NOARG(PdfFastDocument::Impl, Deliver, Timer*, void)
                 resume = true;
             }
         }
-    if (resume)
+    if (resume || previewDelivered)
         schedule();
     if (!nativeViews.empty())
         scheduleNative();
