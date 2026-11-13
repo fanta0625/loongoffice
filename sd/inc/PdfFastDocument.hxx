@@ -45,6 +45,7 @@ public:
     // explicitly entered Draw's edit mode.
     void SetEditMode(bool);
     bool IsEditMode() const;
+    void NoteScroll();
     enum class EditState { Ready, Preparing, Failed };
     void RequestCurrentPage(SdrView&, const Link<bool, void>& = {});
     EditState GetEditState(const SdrView&) const;

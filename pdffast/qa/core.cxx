@@ -30,6 +30,7 @@ class CoreTest final : public CppUnit::TestFixture
     CPPUNIT_TEST(testDemandReuseAndPriority);
     CPPUNIT_TEST(testRegionBatchAndPreemption);
     CPPUNIT_TEST(testRegionBoundaries);
+    CPPUNIT_TEST(testTileGutters);
     CPPUNIT_TEST(testTransferBudget);
     CPPUNIT_TEST(testCacheSelectiveInvalidation);
     CPPUNIT_TEST(testVisibleCacheProtection);
@@ -43,6 +44,16 @@ class CoreTest final : public CppUnit::TestFixture
     CPPUNIT_TEST_SUITE_END();
 
 public:
+    void testTileGutters()
+    {
+        using pdffast::TileKey;
+        const auto first = pdffast::tileWithGutter({ 0, 1024, 1024, 0, 0, 512, 512 });
+        const auto last = pdffast::tileWithGutter({ 0, 1024, 1024, 512, 512, 512, 512 });
+        CPPUNIT_ASSERT((first == TileKey{ 0, 1024, 1024, 0, 0, 513, 513 }));
+        CPPUNIT_ASSERT((last == TileKey{ 0, 1024, 1024, 511, 511, 513, 513 }));
+        const auto full = TileKey{ 0, 256, 362, 0, 0, 256, 362 };
+        CPPUNIT_ASSERT(pdffast::tileWithGutter(full) == full);
+    }
     void testSharedPagePreview()
     {
         const auto preview = pdffast::pagePreview(399, 21000, 29700);

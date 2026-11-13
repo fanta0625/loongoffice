@@ -35,6 +35,19 @@ struct TileKey
     bool operator<(const TileKey& other) const { return fields() < other.fields(); }
     bool operator==(const TileKey& other) const { return fields() == other.fields(); }
 };
+// Render one extra source pixel at internal tile edges. Adjacent images then
+// overlap with real page pixels even when their transforms round differently.
+inline TileKey tileWithGutter(const TileKey& tile)
+{
+    TileKey result = tile;
+    const int right = std::min(tile.pageWidth, tile.x + tile.width + 1);
+    const int bottom = std::min(tile.pageHeight, tile.y + tile.height + 1);
+    result.x = std::max(0, tile.x - 1);
+    result.y = std::max(0, tile.y - 1);
+    result.width = right - result.x;
+    result.height = bottom - result.y;
+    return result;
+}
 // Compare normalized page areas without rounding to screen pixels. Used only
 // for old-resolution fallback; adjacent tile boundaries do not overlap.
 inline bool fallbackIntersects(const TileKey& old, const TileKey& gap)

@@ -756,6 +756,13 @@ CPPUNIT_TEST_FIXTURE(SdrPdfImportTest, testDeferredEditRequestTracksViewAndReadO
     // separate view on page 2, so cancel that independent request.
     controller->ForgetView(*shell->GetViewShell()->GetDrawView());
     controller->RequestCurrentPage(view);
+    for (int n = 0; n < 8; ++n)
+    {
+        controller->NoteScroll();
+        Application::Reschedule();
+        std::this_thread::sleep_for(std::chrono::milliseconds(60));
+        CPPUNIT_ASSERT(secondOriginal->getSdrPageFromSdrObject() == second);
+    }
     const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(30);
     while (secondOriginal->getSdrPageFromSdrObject() == second
            && std::chrono::steady_clock::now() < deadline)
@@ -769,6 +776,37 @@ CPPUNIT_TEST_FIXTURE(SdrPdfImportTest, testDeferredEditRequestTracksViewAndReadO
     CPPUNIT_ASSERT(firstOriginal->getSdrPageFromSdrObject() == first);
     CPPUNIT_ASSERT(!shell->IsModified());
     CPPUNIT_ASSERT_EQUAL(undoCount, doc->GetSdrUndoManager()->GetUndoActionCount());
+}
+
+CPPUNIT_TEST_FIXTURE(SdrPdfImportTest, testSaveWhileScrollDefersEdit)
+{
+    EnvVarGuard preview("LO_IMPORT_USE_PDFIUM", "1");
+    loadFromFile(u"pdf/pdffast-native-pages.pdf");
+    auto* model = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(model);
+    auto* shell = model->GetDocShell();
+    auto* doc = shell->GetDoc();
+    CPPUNIT_ASSERT(sd::PdfFastDocument::Attach(*doc));
+    auto* controller = doc->GetPdfFastDocument();
+    shell->SetReadOnlyUI(false);
+    controller->ForgetView(*shell->GetViewShell()->GetDrawView());
+    auto* page = doc->GetSdPage(0, PageKind::Standard);
+    rtl::Reference<SdrObject> original = page->GetObj(0);
+    SdrView view(*doc);
+    comphelper::ScopeGuard forget([&] { controller->ForgetView(view); });
+    view.ShowSdrPage(page);
+    controller->RequestCurrentPage(view);
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+    while (std::chrono::steady_clock::now() < deadline)
+    {
+        controller->NoteScroll();
+        Application::Reschedule();
+        std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    }
+    CPPUNIT_ASSERT(original->getSdrPageFromSdrObject() == page);
+    CPPUNIT_ASSERT(controller->PrepareForSave());
+    CPPUNIT_ASSERT(original->getSdrPageFromSdrObject() != page);
+    CPPUNIT_ASSERT(controller->GetEditState(view) == sd::PdfFastDocument::EditState::Ready);
 }
 
 CPPUNIT_TEST_FIXTURE(SdrPdfImportTest, testNativeDeferredPageEditing)

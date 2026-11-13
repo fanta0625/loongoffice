@@ -119,10 +119,10 @@ CPPUNIT_TEST_FIXTURE(RenderTest, testSessionReplaceAndClose)
         session.request({ { 0, replacement } });
         auto result = wait(session, pdffast::Result::Kind::Tile);
         CPPUNIT_ASSERT(result.tile == replacement);
-        CPPUNIT_ASSERT_EQUAL(512, result.pixels.width);
-        CPPUNIT_ASSERT_EQUAL(512, result.pixels.height);
-        CPPUNIT_ASSERT(result.pixels.stride >= 512 * 3);
-        CPPUNIT_ASSERT(result.pixels.data.size() >= std::size_t(result.pixels.stride) * 512);
+        CPPUNIT_ASSERT_EQUAL(513, result.pixels.width);
+        CPPUNIT_ASSERT_EQUAL(513, result.pixels.height);
+        CPPUNIT_ASSERT(result.pixels.stride >= 513 * 3);
+        CPPUNIT_ASSERT(result.pixels.data.size() >= std::size_t(result.pixels.stride) * 513);
         {
             // Check the actual worker's crop/copy/BGR result, not just geometry.
             std::lock_guard guard(session.source()->engineMutex);
@@ -140,10 +140,10 @@ CPPUNIT_TEST_FIXTURE(RenderTest, testSessionReplaceAndClose)
             full->fillRect(0, 0, width, height, 0xffffffff);
             full->renderPageBitmap(document.get(), page.get(), 0, 0, 1024, 1024);
             const int channels = full->getFormat() == vcl::pdf::PDFBitmapType::BGR ? 3 : 4;
-            for (int y = 0; y < 512; ++y)
-                for (int x = 0; x < 512; ++x)
+            for (int y = 0; y < 513; ++y)
+                for (int x = 0; x < 513; ++x)
                     CPPUNIT_ASSERT(std::memcmp(
-                        full->getBuffer() + (y + 512) * full->getStride() + (x + 512) * channels,
+                        full->getBuffer() + (y + 511) * full->getStride() + (x + 511) * channels,
                         result.pixels.data.data() + y * result.pixels.stride + x * 3, 3) == 0);
         }
         session.request({ { 0, { 0, 8192, 8192, 0, 0, 512, 512 } } });

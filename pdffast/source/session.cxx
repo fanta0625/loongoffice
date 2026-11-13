@@ -295,6 +295,7 @@ void Session::run() noexcept
                         cachedPage.reset(document->openPage(request.page).release());
                         cachedPageIndex = request.page;
                     }
+                    area = tileWithGutter(area);
                     int width = area.width, height = area.height;
                     auto bitmap = engine->createBitmap(width, height, 0);
                     if (!cachedPage || !bitmap)
@@ -314,7 +315,7 @@ void Session::run() noexcept
                             result.page = child.page;
                             result.tile = child.tile;
                             result.size = pageSize;
-                            result.pixels = copyPixels(*bitmap, child.tile, area);
+                            result.pixels = copyPixels(*bitmap, tileWithGutter(child.tile), area);
                             results.push_back(std::move(result));
                         }
                     }
@@ -339,7 +340,10 @@ void Session::run() noexcept
                            : elapsed < std::chrono::milliseconds(4) ? 4 : 2;
             SAL_INFO("pdffast", "PDF region children=" << batch.size() << " aborted=" << aborted
                 << " in " << std::chrono::duration_cast<std::chrono::microseconds>(
-                    std::chrono::steady_clock::now() - renderStarted).count() << " us");
+                    std::chrono::steady_clock::now() - renderStarted).count() << " us"
+                << " page=" << batch.front().page << " prefetch=" << batch.front().prefetch
+                << " page_width=" << batch.front().tile.pageWidth
+                << " page_height=" << batch.front().tile.pageHeight);
             for (auto& result : results)
                 if (!publish(std::move(result)))
                     break;

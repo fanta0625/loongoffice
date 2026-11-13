@@ -73,7 +73,8 @@ using pdffast::TileKey;
 using Clock = std::chrono::steady_clock;
 std::size_t cost(const TileKey& key)
 {
-    return std::size_t(key.width) * key.height * 4;
+    const auto padded = pdffast::tileWithGutter(key);
+    return std::size_t(padded.width) * padded.height * 4;
 }
 }
 
@@ -91,10 +92,13 @@ struct PdfFastDocument::Impl
     {
         std::vector<TileKey> visible;
         std::vector<TileKey> speculative;
+        std::vector<TileKey> adjacent;
+        std::vector<TileKey> adjacentSharp;
         TileKey preview;
         Clock::time_point seen;
         pdffast::ZoomSettle zoom;
         bool deferred = false;
+        bool native = false;
     };
     struct PaintState
     {
@@ -144,6 +148,8 @@ struct PdfFastDocument::Impl
     }
     rtl::Reference<SdrGrafObj> running;
     int runningPage = -1;
+    std::optional<pdffast::NativeImport::Result> pendingEditResult;
+    Clock::time_point lastScroll{};
     Timer poll{ "Draw PDF tile delivery" };
     void wake()
     {
@@ -439,6 +445,57 @@ struct PdfFastDocument::Impl
         return staged;
     }
 
+    void collectAdjacent(const SdrPage& current, OutputDevice& output, Viewport& viewport)
+    {
+        const auto number = current.GetPageNum();
+        const int index = (int(number) - 1) / 2;
+        const int count = doc.GetSdPageCount(PageKind::Standard);
+        if (number == 0 || index < 0 || index >= count
+            || doc.GetSdPage(index, PageKind::Standard) != &current)
+            return;
+        const auto window = output.PixelToLogic(
+            tools::Rectangle(Point(), output.GetOutputSizePixel()));
+        for (const int adjacent : { index + 1, index - 1 })
+        {
+            if (adjacent < 0 || adjacent >= count)
+                continue;
+            const auto* neighbor = doc.GetSdPage(adjacent, PageKind::Standard);
+            if (neighbor->GetObjCount() != 1)
+                continue;
+            const auto known = rawPages.find(neighbor->GetObj(0));
+            if (known == rawPages.end() || known->second->prepared
+                || !known->second->original.is())
+                continue;
+            const auto& original = known->second->original;
+            const auto bounds = original->GetLogicRect();
+            if (bounds.IsEmpty() || original->GetRotateAngle() != Degree100(0)
+                || original->GetShearAngle() != Degree100(0))
+                continue;
+            const int page = original->GetGraphic().getPageNumber();
+            viewport.adjacent.push_back(pdffast::pagePreview(
+                page, bounds.GetWidth(), bounds.GetHeight()));
+            const Size pixels = output.LogicToPixel(bounds.GetSize());
+            const int width = std::clamp<tools::Long>(pixels.Width(), 1, 1000000);
+            const int height = std::clamp<tools::Long>(pixels.Height(), 1, 1000000);
+            const double sx = double(width) / bounds.GetWidth();
+            const int left = std::clamp(int((window.Left() - bounds.Left()) * sx), 0, width - 1);
+            const int right = std::clamp(int(std::ceil((window.Right() - bounds.Left()) * sx)),
+                                         left + 1, width);
+            const int firstX = left / 512 * 512;
+            const int firstY = adjacent > index ? 0 : (height - 1) / 512 * 512;
+            const int step = adjacent > index ? 512 : -512;
+            int added = 0;
+            for (int y = firstY; y >= 0 && y < height && added < 8; y += step)
+            {
+                if (std::abs(y - firstY) >= 1024)
+                    break;
+                for (int x = firstX; x < right && added < 8; x += 512, ++added)
+                    viewport.adjacentSharp.push_back({ page, width, height, x, y,
+                        std::min(512, width - x), std::min(512, height - y) });
+            }
+        }
+    }
+
     void schedule()
     {
         std::map<TileKey, std::size_t> visible, previews;
@@ -462,6 +519,8 @@ struct PdfFastDocument::Impl
         for (const auto& entry : viewports)
         {
             const auto& viewport = entry.second;
+            if (viewport.native)
+                continue;
             previews[viewport.preview] = cost(viewport.preview);
             visible[viewport.preview] = cost(viewport.preview);
             add(viewport.preview, false);
@@ -477,6 +536,8 @@ struct PdfFastDocument::Impl
             }
         for (const auto& entry : viewports)
         {
+            if (entry.second.native)
+                continue;
             // Page navigation is preview-first. Do not enqueue all visible
             // high-resolution tiles until the new page's bounded preview has
             // arrived; on a complex page those tiles can otherwise delay the
@@ -497,8 +558,18 @@ struct PdfFastDocument::Impl
                 add(entry.first, true);
         cache.protect(std::move(visible), std::move(previews));
         std::size_t spare = cache.spareForSpeculation();
+        if (!preparing && !running.is() && intents.empty())
+            for (const auto& entry : viewports)
+                for (const auto& key : entry.second.adjacent)
+                    if (cost(key) <= spare && !cache.contains(key))
+                    {
+                        spare -= cost(key);
+                        add(key, true);
+                    }
         for (const auto& entry : viewports)
         {
+            if (entry.second.native)
+                continue;
             if (entry.second.zoom.pending(now) || editPending(entry.second.preview.page))
                 continue;
             for (const auto& key : entry.second.speculative)
@@ -508,6 +579,15 @@ struct PdfFastDocument::Impl
                     add(key, true);
                 }
         }
+        if (!preparing && !running.is() && intents.empty())
+            for (const auto& entry : viewports)
+                if (!entry.second.zoom.pending(now))
+                    for (const auto& key : entry.second.adjacentSharp)
+                        if (cost(key) <= spare && !cache.contains(key))
+                        {
+                            spare -= cost(key);
+                            add(key, true);
+                        }
         session->request(std::move(requests));
         if (!failed)
             wake();
@@ -688,16 +768,48 @@ bool PdfFastDocument::PreparePaint(SdrView& view, OutputDevice& output)
     {
         // Materialized pages belong entirely to Draw. In particular, do not
         // redirect each imported object or invalidate its primitive cache.
-        impl.paintStates.erase(&output);
-        if (impl.viewports.erase(&output))
+        if (!impl.failed && pageView && !pageView->GetPage()->IsMasterPage())
+        {
+            const Impl::PaintState state{ output.GetMapMode(), output.GetOutputSizePixel(),
+                                          pageView->GetPage() };
+            const auto previous = impl.paintStates.find(&output);
+            const auto viewport = impl.viewports.find(&output);
+            if (previous != impl.paintStates.end() && previous->second.mapMode == state.mapMode
+                && previous->second.pixels == state.pixels && previous->second.page == state.page
+                && viewport != impl.viewports.end() && viewport->second.native)
+            {
+                viewport->second.seen = Clock::now();
+                return false;
+            }
+            Impl::Viewport native;
+            native.native = true;
+            native.seen = Clock::now();
+            if (viewport != impl.viewports.end())
+                native.zoom = viewport->second.zoom;
+            const Size pagePixels = output.LogicToPixel(pageView->GetPage()->GetSize());
+            native.zoom.update(pageView->GetPage()->GetPageNum(), pagePixels.Width(),
+                               pagePixels.Height(), native.seen);
+            native.deferred = native.zoom.pending(native.seen);
+            impl.collectAdjacent(*pageView->GetPage(), output, native);
+            impl.paintStates.insert_or_assign(&output, state);
+            impl.viewports.insert_or_assign(&output, std::move(native));
             impl.schedule();
+        }
+        else
+        {
+            impl.paintStates.erase(&output);
+            if (impl.viewports.erase(&output))
+                impl.schedule();
+        }
         return false;
     }
     const auto* page = pageView->GetPage();
     const Impl::PaintState state{ output.GetMapMode(), output.GetOutputSizePixel(), page };
     const auto previous = impl.paintStates.find(&output);
+    const auto viewport = impl.viewports.find(&output);
     if (previous != impl.paintStates.end() && previous->second.mapMode == state.mapMode
-        && previous->second.pixels == state.pixels && previous->second.page == state.page)
+        && previous->second.pixels == state.pixels && previous->second.page == state.page
+        && viewport != impl.viewports.end() && !viewport->second.native)
         return true;
     impl.paintStates.insert_or_assign(&output, state);
     // Draw caches the redirected primitive sequence. A viewport/zoom change
@@ -742,6 +854,8 @@ bool PdfFastDocument::Paint(const sdr::contact::ViewObjectContact& contact, Outp
     Impl::Viewport viewport;
     viewport.preview = pdffast::pagePreview(page, rect.GetWidth(), rect.GetHeight());
     viewport.seen = Clock::now();
+    if (const auto* currentPage = it->original->getSdrPageFromSdrObject())
+        impl.collectAdjacent(*currentPage, output, viewport);
     const double sx = double(width) / rect.GetWidth();
     const double sy = double(height) / rect.GetHeight();
     const int left = std::clamp(int((visible.getMinX() - rect.Left()) * sx), 0, width - 1) / 512 * 512;
@@ -760,7 +874,10 @@ bool PdfFastDocument::Paint(const sdr::contact::ViewObjectContact& contact, Outp
                                             std::min(512, width - x), std::min(512, height - next) });
     const auto previous = impl.viewports.find(&output);
     const bool changed = previous == impl.viewports.end()
-        || previous->second.visible != viewport.visible || !(previous->second.preview == viewport.preview);
+        || previous->second.native || previous->second.visible != viewport.visible
+        || previous->second.adjacent != viewport.adjacent
+        || previous->second.adjacentSharp != viewport.adjacentSharp
+        || !(previous->second.preview == viewport.preview);
     if (previous != impl.viewports.end())
         viewport.zoom = previous->second.zoom;
     viewport.zoom.update(page, width, height, viewport.seen);
@@ -773,13 +890,14 @@ bool PdfFastDocument::Paint(const sdr::contact::ViewObjectContact& contact, Outp
                     drawinglayer::primitive2d::Primitive2DDecompositionVisitor& target) {
         if (const Bitmap* bitmap = impl.cache.get(key))
         {
+            const auto padded = pdffast::tileWithGutter(key);
             const double dx = double(rect.GetWidth()) / key.pageWidth;
             const double dy = double(rect.GetHeight()) / key.pageHeight;
             target.visit(drawinglayer::primitive2d::Primitive2DReference(
                 new drawinglayer::primitive2d::BitmapPrimitive2D(*bitmap,
                     basegfx::utils::createScaleTranslateB2DHomMatrix(
-                        key.width * dx, key.height * dy,
-                        rect.Left() + key.x * dx, rect.Top() + key.y * dy))));
+                        padded.width * dx, padded.height * dy,
+                        rect.Left() + padded.x * dx, rect.Top() + padded.y * dy))));
         }
     };
     std::vector<TileKey> gaps;
@@ -841,6 +959,11 @@ void PdfFastDocument::SetEditMode(bool enabled)
 bool PdfFastDocument::IsEditMode() const
 {
     return m_impl->editMode;
+}
+
+void PdfFastDocument::NoteScroll()
+{
+    m_impl->lastScroll = Clock::now();
 }
 
 void PdfFastDocument::RequestCurrentPage(SdrView& view, const Link<bool, void>& changed)
@@ -924,8 +1047,17 @@ bool PdfFastDocument::Impl::processEdits()
         });
         if (!wanted)
             importer->cancel();
-        if (auto result = importer->takeResult())
+        if (!pendingEditResult)
+            pendingEditResult = importer->takeResult();
+        if (pendingEditResult && wanted && pendingEditResult->success
+            && (Clock::now() - lastScroll < std::chrono::milliseconds(250)
+                || Application::GetLastInputInterval() < 250
+                || Application::AnyInput(VclInputFlags::MOUSE | VclInputFlags::KEYBOARD)))
+            return true;
+        if (pendingEditResult)
         {
+            auto result = std::move(pendingEditResult);
+            pendingEditResult.reset();
             auto original = running;
             running.clear();
             comphelper::ScopeGuard release([&] { importer->release(); });
@@ -1073,7 +1205,10 @@ bool PdfFastDocument::Impl::preparePage(SdrPage& target, SdrView* view,
         if (impl.running.is())
         {
             impl.importer->cancel();
-            impl.importer->wait();
+            if (impl.pendingEditResult)
+                impl.pendingEditResult.reset();
+            else
+                impl.importer->wait();
             impl.importer->release();
             impl.running.clear();
         }
@@ -1103,7 +1238,12 @@ bool PdfFastDocument::Impl::preparePage(SdrPage& target, SdrView* view,
         << " width=" << originalRect.GetWidth() << " height=" << originalRect.GetHeight());
     // Other windows and pages retain their own raster demand during import.
     for (auto viewport = impl.viewports.begin(); viewport != impl.viewports.end();)
-        if (viewport->second.preview.page == it->original->GetGraphic().getPageNumber())
+        if ((!viewport->second.native
+             && viewport->second.preview.page == it->original->GetGraphic().getPageNumber())
+            || std::any_of(viewport->second.adjacent.begin(), viewport->second.adjacent.end(),
+                           [&](const TileKey& key) {
+                               return key.page == it->original->GetGraphic().getPageNumber();
+                           }))
             viewport = impl.viewports.erase(viewport);
         else
             ++viewport;
@@ -1130,7 +1270,8 @@ bool PdfFastDocument::Impl::preparePage(SdrPage& target, SdrView* view,
         std::vector<rtl::Reference<SdrObject>> objects;
         objects.reserve(staged->GetObjCount());
         while (staged->GetObjCount())
-            objects.push_back(staged->NbcRemoveObject(0));
+            objects.push_back(staged->NbcRemoveObject(staged->GetObjCount() - 1));
+        std::reverse(objects.begin(), objects.end());
         bool committed = false;
         comphelper::ScopeGuard rollback([&] {
             if (committed)
