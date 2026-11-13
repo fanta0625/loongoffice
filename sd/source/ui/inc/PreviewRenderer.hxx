@@ -23,16 +23,18 @@
 #include <memory>
 
 #include <svl/lstner.hxx>
+#include <sddllapi.h>
 
 class SdPage;
 class VirtualDevice;
+class SdrPageView;
 
 namespace sd {
 
 class DrawDocShell;
 class DrawView;
 
-class PreviewRenderer final
+class SD_DLLPUBLIC PreviewRenderer final
     : public SfxListener
 {
 public:
@@ -45,6 +47,11 @@ public:
     PreviewRenderer(const bool bPaintFrame = true);
 
     virtual ~PreviewRenderer() override;
+
+    // Render a bounded pixel region at fullPagePixels resolution using Draw's
+    // native pipeline. No full-page surface is allocated for a zoomed tile.
+    Bitmap RenderRegion(const SdPage&, const Size& fullPagePixels,
+                        const tools::Rectangle& pixelRegion, const SdrPageView&);
 
     /** Render a page with the given pixel size.
         Use this version when only the width of the preview is known to the
@@ -113,8 +120,10 @@ private:
     bool Initialize (
         const SdPage* pPage,
         const Size& rPixelSize,
-        const bool bObeyHighContrastMode);
-    void PaintPage (
+        const bool bObeyHighContrastMode,
+        const tools::Rectangle* pRegion = nullptr,
+        const SdrPageView* pSourceView = nullptr);
+    bool PaintPage (
         const SdPage* pPage,
         const bool bDisplayPresentationObjects);
     void PaintSubstitutionText (const OUString& rSubstitutionText);
@@ -128,7 +137,8 @@ private:
             The size of the resulting preview bitmap.  Note that this size
             includes the frame.  The actual preview is smaller accordingly.
      */
-    void SetupOutputSize (const SdPage& rPage, const Size& rPixelSize);
+    void SetupOutputSize (const SdPage& rPage, const Size& rPixelSize,
+                          const tools::Rectangle* pRegion = nullptr);
 
     /** When mpView is empty then create a new view and initialize it.
         Otherwise just initialize it.

@@ -83,6 +83,38 @@ using namespace com::sun::star;
 
 namespace sd {
 
+void DrawViewShell::RequestPdfPage()
+{
+#if HAVE_FEATURE_LOONGOFFICE_PDF_FAST
+    if (mpDrawView)
+        if (auto* fast = GetDoc()->GetPdfFastDocument())
+            fast->RequestCurrentPage(*mpDrawView, LINK(this, DrawViewShell, PdfEditStateChanged));
+#endif
+}
+
+IMPL_LINK(DrawViewShell, PdfEditStateChanged, bool, blocked, void)
+{
+    GetViewFrame()->GetDispatcher()->SetContentReadOnly(blocked);
+    GetViewFrame()->GetBindings().Invalidate(SID_CONTEXT);
+}
+
+OUString DrawViewShell::GetPdfStatusText() const
+{
+#if HAVE_FEATURE_LOONGOFFICE_PDF_FAST
+    if (mpDrawView)
+        if (auto* fast = GetDoc()->GetPdfFastDocument())
+            switch (fast->GetEditState(*mpDrawView))
+            {
+                case PdfFastDocument::EditState::Preparing:
+                    return SdResId(STR_PDF_PREPARING);
+                case PdfFastDocument::EditState::Failed:
+                    return SdResId(STR_PDF_PREPARE_FAILED);
+                default: break;
+            }
+#endif
+    return mpDrawView->GetStatusText();
+}
+
 void DrawViewShell::Activate(bool bIsMDIActivate)
 {
     ViewShell::Activate(bIsMDIActivate);
@@ -1185,10 +1217,6 @@ bool DrawViewShell::SwitchPage(sal_uInt16 nSelectedPage, bool bAllowChangeFocus,
             }
         }
 
-#if HAVE_FEATURE_LOONGOFFICE_PDF_FAST
-        if (!GetDocSh()->IsReadOnly() && GetDoc()->GetPdfFastDocument())
-            GetDoc()->GetPdfFastDocument()->PrepareCurrentPage(*mpDrawView);
-#endif
         Size aVisSizePixel = GetActiveWindow()->GetOutputSizePixel();
         ::tools::Rectangle aVisAreaWin = GetActiveWindow()->PixelToLogic( ::tools::Rectangle( Point(0,0), aVisSizePixel) );
         VisAreaChanged(aVisAreaWin);

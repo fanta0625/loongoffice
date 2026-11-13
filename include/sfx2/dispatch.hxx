@@ -147,6 +147,9 @@ public:
     void                Flush();
     void                Lock( bool bLock );
     bool                IsLocked() const;
+    // Temporarily apply the normal read-only slot policy without changing
+    // document permissions (for example while preparing editable content).
+    void                SetContentReadOnly(bool bReadOnly);
     void                SetSlotFilter( SfxSlotFilterState nEnable = SfxSlotFilterState::DISABLED,
                                        std::span<sal_uInt16 const> pSIDs = std::span<sal_uInt16 const>());
 

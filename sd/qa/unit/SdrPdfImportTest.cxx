@@ -10,12 +10,17 @@
 #include <test/unoapi_test.hxx>
 #include <optional>
 #include <string>
+#include <chrono>
+#include <thread>
 #include <vector>
 #include <config_features.h>
+#include <com/sun/star/drawing/XDrawPageDuplicator.hpp>
 #if HAVE_FEATURE_LOONGOFFICE_PDF_FAST
 #include <PdfFastDocument.hxx>
+#include <PreviewRenderer.hxx>
 #include <drawdoc.hxx>
 #include <svx/svdview.hxx>
+#include <svx/svdpagv.hxx>
 #include <svx/svdundo.hxx>
 #include <svl/undo.hxx>
 #endif
@@ -31,6 +36,11 @@
 #include <vcl/filter/PDFiumLibrary.hxx>
 #include <vcl/pdf/PDFAnnotationSubType.hxx>
 #include <vcl/bitmap.hxx>
+#include <vcl/gfxlink.hxx>
+#include <vcl/filter/PngImageWriter.hxx>
+#include <vcl/svapp.hxx>
+#include <vcl/pdfread.hxx>
+#include <tools/stream.hxx>
 
 #include <Annotation.hxx>
 #include <DrawDocShell.hxx>
@@ -42,6 +52,29 @@ using namespace css;
 
 namespace
 {
+#if HAVE_FEATURE_LOONGOFFICE_PDF_FAST
+void dumpPdfBitmap(const OUString& name, const Bitmap& bitmap)
+{
+    if (const char* directory = getenv("LO_PDFFAST_TEST_DUMP"))
+    {
+        SvFileStream stream(OUString::fromUtf8(directory) + u"/"_ustr + name + u".png"_ustr,
+                            StreamMode::WRITE | StreamMode::TRUNC);
+        vcl::PngImageWriter(stream).write(Graphic(bitmap));
+    }
+}
+
+void assertPdfPixelsEqual(const Bitmap& expected, const Bitmap& actual)
+{
+    CPPUNIT_ASSERT_EQUAL(expected.GetSizePixel(), actual.GetSizePixel());
+    // Cropping can add an opaque alpha plane. Compare represented RGBA pixels.
+    const auto size = expected.GetSizePixel();
+    for (tools::Long y = 0; y < size.Height(); ++y)
+        for (tools::Long x = 0; x < size.Width(); ++x)
+            CPPUNIT_ASSERT_EQUAL(expected.GetPixelColor(x, y), actual.GetPixelColor(x, y));
+}
+
+#endif
+
 class EnvVarGuard
 {
 public:
@@ -301,6 +334,154 @@ CPPUNIT_TEST_FIXTURE(SdrPdfImportTest, testAnnotationsImportExport)
 }
 
 #if HAVE_FEATURE_LOONGOFFICE_PDF_FAST
+CPPUNIT_TEST_FIXTURE(SdrPdfImportTest, testDeferredMetadataSurvivesCloneAndExportPreparation)
+{
+    if (!vcl::pdf::PDFiumLibrary::get())
+        return;
+    const auto url = m_directories.getURLFromSrc(u"/sd/qa/unit/data/PdfWithAnnotation.pdf");
+    std::vector<vcl::PDFGraphicResult> eager;
+    SvFileStream eagerInput(url, StreamMode::READ);
+    CPPUNIT_ASSERT_EQUAL(std::size_t(1), vcl::ImportPDFUnloaded(eagerInput, eager));
+    CPPUNIT_ASSERT(!eager.front().GetAnnotations().empty());
+    std::vector<vcl::PDFGraphicResult> deferred;
+    std::unique_ptr<vcl::PDFMetadataReader> reader;
+    SvFileStream deferredInput(url, StreamMode::READ);
+    CPPUNIT_ASSERT_EQUAL(std::size_t(1), vcl::ImportPDFUnloaded(deferredInput, deferred, &reader));
+    CPPUNIT_ASSERT(reader);
+    CPPUNIT_ASSERT(deferred.front().GetAnnotations().empty());
+    CPPUNIT_ASSERT(deferred.front().GetLinksInfo().empty());
+    CPPUNIT_ASSERT_EQUAL(eager.front().GetSize(), deferred.front().GetSize());
+    CPPUNIT_ASSERT(!reader->ReadPage(-1));
+    CPPUNIT_ASSERT(!reader->ReadPage(1));
+    const auto metadata = reader->ReadPage(0);
+    CPPUNIT_ASSERT(metadata);
+    CPPUNIT_ASSERT_EQUAL(eager.front().GetAnnotations().size(), metadata->GetAnnotations().size());
+    CPPUNIT_ASSERT_EQUAL(eager.front().GetAnnotations().front().maText,
+                         metadata->GetAnnotations().front().maText);
+    CPPUNIT_ASSERT_EQUAL(eager.front().GetLinksInfo().size(), metadata->GetLinksInfo().size());
+
+    EnvVarGuard preview("LO_IMPORT_USE_PDFIUM", "1");
+    loadFromFile(u"PdfWithAnnotation.pdf");
+    auto* model = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(model);
+    auto* shell = model->GetDocShell();
+    auto* doc = shell->GetDoc();
+    auto* page = doc->GetSdPage(0, PageKind::Standard);
+    // Headless import is intentionally eager. Recreate the desktop deferred
+    // boundary to exercise cloning before the metadata idle has run.
+    const auto annotations = page->getAnnotations();
+    shell->SetModified(false);
+    const auto beforeEagerClone = doc->GetSdrUndoManager()->GetUndoActionCount();
+    auto eagerClone = page->CloneSdrPage(*doc);
+    const bool cloneMarksModified = shell->IsModified();
+    const auto cloneUndoDelta = doc->GetSdrUndoManager()->GetUndoActionCount() - beforeEagerClone;
+    eagerClone.clear();
+    for (const auto& annotation : annotations)
+        page->removeAnnotationNoNotify(annotation);
+    page->setLinkAnnotations({});
+    CPPUNIT_ASSERT(sd::PdfFastDocument::Attach(*doc));
+    auto* controller = doc->GetPdfFastDocument();
+    controller->SetMetadataReader(std::move(reader));
+    auto* original = dynamic_cast<SdrGrafObj*>(page->GetObj(0));
+    CPPUNIT_ASSERT(original);
+    const Graphic graphic = original->GetGraphic();
+    original->SetGraphic(Graphic(graphic.GetSharedGfxLink(), 999));
+    CPPUNIT_ASSERT(!controller->EnsureAllMetadata());
+    CPPUNIT_ASSERT(page->getAnnotations().empty());
+    original->SetGraphic(graphic);
+    shell->SetModified(false);
+    const auto undoCount = doc->GetSdrUndoManager()->GetUndoActionCount();
+    auto clone = page->CloneSdrPage(*doc);
+    CPPUNIT_ASSERT(clone.is());
+    CPPUNIT_ASSERT_EQUAL(annotations.size(), page->getAnnotations().size());
+    CPPUNIT_ASSERT_EQUAL(annotations.size(), clone->getAnnotations().size());
+    // Compare with the ordinary eager clone, including native side effects.
+    CPPUNIT_ASSERT_EQUAL(cloneMarksModified, shell->IsModified());
+    CPPUNIT_ASSERT_EQUAL(undoCount + cloneUndoDelta,
+                         doc->GetSdrUndoManager()->GetUndoActionCount());
+    shell->SetModified(false);
+    const auto afterClone = doc->GetSdrUndoManager()->GetUndoActionCount();
+    CPPUNIT_ASSERT(controller->EnsureAllMetadata());
+    CPPUNIT_ASSERT(controller->EnsureAllMetadata());
+    CPPUNIT_ASSERT_EQUAL(annotations.size(), page->getAnnotations().size());
+    CPPUNIT_ASSERT(!shell->IsModified());
+    CPPUNIT_ASSERT_EQUAL(afterClone, doc->GetSdrUndoManager()->GetUndoActionCount());
+}
+
+CPPUNIT_TEST_FIXTURE(SdrPdfImportTest, testNativeReadSnapshotRegionMatchesFullPage)
+{
+    EnvVarGuard nativeImport("LO_IMPORT_USE_PDFIUM", nullptr);
+    loadFromFile(u"pdf/pdffast-native-pages.pdf");
+    auto* model = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(model);
+    auto* doc = model->GetDocShell()->GetDoc();
+    SdrView view(*doc);
+    sd::PreviewRenderer renderer(false);
+    const Size pixels(768, 640);
+    const tools::Rectangle region(Point(137, 91), Size(321, 289));
+    for (sal_uInt16 index = 0; index < 3; ++index)
+    {
+        auto* page = doc->GetSdPage(index, PageKind::Standard);
+        view.ShowSdrPage(page);
+        auto* pageView = view.GetSdrPageView();
+        CPPUNIT_ASSERT(pageView);
+        Bitmap full = renderer.RenderRegion(*page, pixels,
+            tools::Rectangle(Point(), pixels), *pageView);
+        CPPUNIT_ASSERT(!full.IsEmpty());
+        const auto fullChecksum = full.GetChecksum();
+        CPPUNIT_ASSERT(full.Crop(region));
+        const Bitmap tile = renderer.RenderRegion(*page, pixels, region, *pageView);
+        CPPUNIT_ASSERT_EQUAL(region.GetSize(), tile.GetSizePixel());
+        dumpPdfBitmap(u"snapshot-crop"_ustr, full);
+        dumpPdfBitmap(u"snapshot-tile"_ustr, tile);
+        assertPdfPixelsEqual(full, tile);
+        const auto visibleLayers = pageView->GetVisibleLayers();
+        pageView->SetVisibleLayers(SdrLayerIDSet());
+        Bitmap hidden = renderer.RenderRegion(*page, pixels,
+            tools::Rectangle(Point(), pixels), *pageView);
+        CPPUNIT_ASSERT(!hidden.IsEmpty());
+        if (page->GetObjCount())
+            CPPUNIT_ASSERT(fullChecksum != hidden.GetChecksum());
+        CPPUNIT_ASSERT(hidden.Crop(region));
+        assertPdfPixelsEqual(hidden, renderer.RenderRegion(*page, pixels, region, *pageView));
+        pageView->SetVisibleLayers(visibleLayers);
+        CPPUNIT_ASSERT(renderer.RenderRegion(*page, pixels,
+            tools::Rectangle(Point(-1, 0), Size(10, 10)), *pageView).IsEmpty());
+        const auto revision = page->GetVisualRevision();
+        page->ActionChanged();
+        CPPUNIT_ASSERT(page->GetVisualRevision() != revision);
+        if (page->GetObjCount())
+        {
+            const auto objectRevision = page->GetVisualRevision();
+            page->GetObj(0)->ActionChanged();
+            CPPUNIT_ASSERT(page->GetVisualRevision() != objectRevision);
+        }
+    }
+}
+
+CPPUNIT_TEST_FIXTURE(SdrPdfImportTest, testDeferredEditPreservesPageFormat)
+{
+    EnvVarGuard preview("LO_IMPORT_USE_PDFIUM", "1");
+    loadFromFile(u"pdf/pdffast-native-pages.pdf");
+    auto* model = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(model);
+    auto* doc = model->GetDocShell()->GetDoc();
+    CPPUNIT_ASSERT(sd::PdfFastDocument::Attach(*doc));
+    auto* page = doc->GetSdPage(0, PageKind::Standard);
+    const Size size(page->GetSize().Width() + 1000, page->GetSize().Height() + 2000);
+    page->SetSize(size);
+    page->SetBorder(101, 202, 303, 404);
+    SdrView view(*doc);
+    view.ShowSdrPage(page);
+    doc->GetPdfFastDocument()->PrepareCurrentPage(view);
+    CPPUNIT_ASSERT_EQUAL(size, page->GetSize());
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(101), page->GetLeftBorder());
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(202), page->GetUpperBorder());
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(303), page->GetRightBorder());
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(404), page->GetLowerBorder());
+    CPPUNIT_ASSERT(page->GetObjCount() > 1);
+}
+
 CPPUNIT_TEST_FIXTURE(SdrPdfImportTest, testDeferredRenderingMatchesNativeImport)
 {
     EnvVarGuard nativeImport("LO_IMPORT_USE_PDFIUM", nullptr);
@@ -326,6 +507,7 @@ CPPUNIT_TEST_FIXTURE(SdrPdfImportTest, testDeferredRenderingMatchesNativeImport)
             view.ShowSdrPage(page);
             view.MarkAll();
             snapshot.pixels = view.GetMarkedObjBitmap();
+            dumpPdfBitmap(u"native-"_ustr + OUString::number(index), snapshot.pixels);
             view.UnmarkAllObj();
             for (std::size_t object = 0; object < page->GetObjCount(); ++object)
                 snapshot.bounds.push_back(page->GetObj(object)->GetSnapRect());
@@ -348,16 +530,22 @@ CPPUNIT_TEST_FIXTURE(SdrPdfImportTest, testDeferredRenderingMatchesNativeImport)
     {
         auto* page = doc->GetSdPage(index, PageKind::Standard);
         rtl::Reference<SdrObject> original = page->GetObj(0);
+        const Size originalSize = page->GetSize();
         view.ShowSdrPage(page);
         doc->GetPdfFastDocument()->PrepareCurrentPage(view);
         CPPUNIT_ASSERT(original->getSdrPageFromSdrObject() != page);
-        CPPUNIT_ASSERT_EQUAL(expected[index].size, page->GetSize());
+        CPPUNIT_ASSERT_EQUAL(originalSize, page->GetSize());
+        // PDFium rounds page dimensions to 1/100 mm while Poppler truncates.
+        // Keep the target geometry; native object pixels must still match.
+        CPPUNIT_ASSERT(std::abs(expected[index].size.Width() - page->GetSize().Width()) <= 1);
+        CPPUNIT_ASSERT(std::abs(expected[index].size.Height() - page->GetSize().Height()) <= 1);
         CPPUNIT_ASSERT_EQUAL(expected[index].bounds.size(), page->GetObjCount());
         // The temporary import shell has closed. Compare real rendered pixels,
         // including form transforms, shading, text and an embedded image.
         // The blank third page must also replace its original PDF graphic.
         view.MarkAll();
         const Bitmap actual = view.GetMarkedObjBitmap();
+        dumpPdfBitmap(u"deferred-"_ustr + OUString::number(index), actual);
         for (std::size_t object = 0; object < page->GetObjCount(); ++object)
             CPPUNIT_ASSERT_EQUAL(expected[index].bounds[object], page->GetObj(object)->GetSnapRect());
         CPPUNIT_ASSERT_EQUAL(expected[index].pixels.GetSizePixel(), actual.GetSizePixel());
@@ -381,9 +569,9 @@ CPPUNIT_TEST_FIXTURE(SdrPdfImportTest, testFailedNativePageImportKeepsPreview)
     auto* page = doc->GetSdPage(0, PageKind::Standard);
     rtl::Reference<SdrGrafObj> original = dynamic_cast<SdrGrafObj*>(page->GetObj(0));
     CPPUNIT_ASSERT(original.is());
-    Graphic invalid = original->GetGraphic();
-    invalid.setPageNumber(999); // Fail inside the real native filter/helper.
-    original->SetGraphic(invalid);
+    const Graphic valid = original->GetGraphic();
+    // Retain the PDF bytes while selecting a nonexistent source page.
+    original->SetGraphic(Graphic(valid.GetSharedGfxLink(), 999));
     model->GetDocShell()->SetModified(false);
     SdrView view(*doc);
     view.ShowSdrPage(page);
@@ -394,6 +582,127 @@ CPPUNIT_TEST_FIXTURE(SdrPdfImportTest, testFailedNativePageImportKeepsPreview)
     CPPUNIT_ASSERT(original->IsMoveProtect());
     CPPUNIT_ASSERT(original->IsResizeProtect());
     CPPUNIT_ASSERT(!model->GetDocShell()->IsModified());
+    CPPUNIT_ASSERT_EQUAL(undoCount, doc->GetSdrUndoManager()->GetUndoActionCount());
+    original->SetGraphic(valid);
+    model->GetDocShell()->SetModified(false);
+    doc->GetPdfFastDocument()->PrepareCurrentPage(view);
+    CPPUNIT_ASSERT(original->getSdrPageFromSdrObject() != page);
+    CPPUNIT_ASSERT(!model->GetDocShell()->IsModified());
+    CPPUNIT_ASSERT_EQUAL(undoCount, doc->GetSdrUndoManager()->GetUndoActionCount());
+}
+
+CPPUNIT_TEST_FIXTURE(SdrPdfImportTest, testDeferredPageCopyAndCompatibleSave)
+{
+    EnvVarGuard preview("LO_IMPORT_USE_PDFIUM", "1");
+    loadFromFile(u"pdf/pdffast-native-pages.pdf");
+    auto* model = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(model);
+    auto* doc = model->GetDocShell()->GetDoc();
+    CPPUNIT_ASSERT(sd::PdfFastDocument::Attach(*doc));
+    auto* first = doc->GetSdPage(0, PageKind::Standard);
+    const auto count = doc->GetSdPageCount(PageKind::Standard);
+    const uno::Reference<drawing::XDrawPageDuplicator> duplicator(mxComponent, uno::UNO_QUERY_THROW);
+    const uno::Reference<drawing::XDrawPage> source(model->getDrawPages()->getByIndex(0),
+                                                 uno::UNO_QUERY_THROW);
+    const auto duplicate = duplicator->duplicate(source);
+    CPPUNIT_ASSERT(duplicate.is());
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(count + 1), doc->GetSdPageCount(PageKind::Standard));
+    auto* copy = doc->GetSdPage(1, PageKind::Standard);
+    {
+        rtl::Reference<SdrObject> original = copy->GetObj(0);
+        rtl::Reference<SdrObject> firstOriginal = first->GetObj(0);
+        SdrView view(*doc);
+        view.ShowSdrPage(copy);
+        doc->GetPdfFastDocument()->PrepareCurrentPage(view);
+        CPPUNIT_ASSERT(original->getSdrPageFromSdrObject() != copy);
+        CPPUNIT_ASSERT(firstOriginal->getSdrPageFromSdrObject() == first);
+        // Save through the real native ODG path. Untouched PDF pages must also
+        // become editable; reopening must not require the PDF-only controller.
+        view.HideSdrPage();
+        doc->GetPdfFastDocument()->ForgetView(view);
+    } // Destroy the view and retained objects before disposing the old model.
+    saveAndReload(TestFilter::ODG);
+    model = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(model);
+    doc = model->GetDocShell()->GetDoc();
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(count + 1), doc->GetSdPageCount(PageKind::Standard));
+    CPPUNIT_ASSERT(!doc->GetPdfFastDocument());
+    for (sal_uInt16 n = 0; n < doc->GetSdPageCount(PageKind::Standard); ++n)
+        for (size_t object = 0; object < doc->GetSdPage(n, PageKind::Standard)->GetObjCount(); ++object)
+        {
+            const auto* graphic = dynamic_cast<const SdrGrafObj*>(
+                doc->GetSdPage(n, PageKind::Standard)->GetObj(object));
+            // Inspect the source type without decoding graphic contents.
+            const auto link = graphic ? graphic->GetGraphic().GetSharedGfxLink() : nullptr;
+            CPPUNIT_ASSERT(!link || link->GetType() != GfxLinkType::NativePdf);
+        }
+}
+
+CPPUNIT_TEST_FIXTURE(SdrPdfImportTest, testDeferredEditRequestTracksViewAndReadOnly)
+{
+    EnvVarGuard preview("LO_IMPORT_USE_PDFIUM", "1");
+    loadFromFile(u"pdf/pdffast-native-pages.pdf");
+    auto* model = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(model);
+    auto* shell = model->GetDocShell();
+    auto* doc = shell->GetDoc();
+    CPPUNIT_ASSERT(sd::PdfFastDocument::Attach(*doc));
+    auto* controller = doc->GetPdfFastDocument();
+    auto* first = doc->GetSdPage(0, PageKind::Standard);
+    auto* second = doc->GetSdPage(1, PageKind::Standard);
+    rtl::Reference<SdrObject> firstOriginal = first->GetObj(0);
+    rtl::Reference<SdrObject> secondOriginal = second->GetObj(0);
+    SdrView view(*doc);
+    comphelper::ScopeGuard forget([&] { controller->ForgetView(view); });
+    // Opening a PDF and selecting its first page must remain a read-only
+    // preview. The explicit request is ignored until edit mode is entered.
+    shell->SetReadOnlyUI(true);
+    view.ShowSdrPage(first);
+    controller->RequestCurrentPage(view);
+    CPPUNIT_ASSERT(controller->GetEditState(view) == sd::PdfFastDocument::EditState::Ready);
+    CPPUNIT_ASSERT(firstOriginal->getSdrPageFromSdrObject() == first);
+    view.HideSdrPage();
+    shell->SetReadOnlyUI(false);
+    view.ShowSdrPage(first);
+    controller->RequestCurrentPage(view);
+    // The UI entry point must return before conversion, keeping its preview.
+    CPPUNIT_ASSERT(controller->GetEditState(view) == sd::PdfFastDocument::EditState::Preparing);
+    CPPUNIT_ASSERT(view.GetSdrPageView()->IsReadOnly());
+    CPPUNIT_ASSERT(firstOriginal->getSdrPageFromSdrObject() == first);
+    view.HideSdrPage();
+    view.ShowSdrPage(second);
+    controller->RequestCurrentPage(view);
+    shell->SetReadOnlyUI(true);
+    controller->RequestCurrentPage(view);
+    CPPUNIT_ASSERT(controller->GetEditState(view) == sd::PdfFastDocument::EditState::Ready);
+    const auto cancelledUntil = std::chrono::steady_clock::now() + std::chrono::milliseconds(250);
+    while (std::chrono::steady_clock::now() < cancelledUntil)
+    {
+        Application::Reschedule();
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    }
+    CPPUNIT_ASSERT(firstOriginal->getSdrPageFromSdrObject() == first);
+    CPPUNIT_ASSERT(secondOriginal->getSdrPageFromSdrObject() == second);
+
+    shell->SetReadOnlyUI(false);
+    shell->SetModified(false);
+    const auto undoCount = doc->GetSdrUndoManager()->GetUndoActionCount();
+    // ModeChanged also queues the real Draw view's page 1. This test drives a
+    // separate view on page 2, so cancel that independent request.
+    controller->ForgetView(*shell->GetViewShell()->GetDrawView());
+    controller->RequestCurrentPage(view);
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(30);
+    while (secondOriginal->getSdrPageFromSdrObject() == second
+           && std::chrono::steady_clock::now() < deadline)
+    {
+        Application::Reschedule();
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    }
+    CPPUNIT_ASSERT(secondOriginal->getSdrPageFromSdrObject() != second);
+    CPPUNIT_ASSERT(controller->GetEditState(view) == sd::PdfFastDocument::EditState::Ready);
+    CPPUNIT_ASSERT(!view.GetSdrPageView()->IsReadOnly());
+    CPPUNIT_ASSERT(firstOriginal->getSdrPageFromSdrObject() == first);
+    CPPUNIT_ASSERT(!shell->IsModified());
     CPPUNIT_ASSERT_EQUAL(undoCount, doc->GetSdrUndoManager()->GetUndoActionCount());
 }
 

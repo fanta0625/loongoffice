@@ -130,6 +130,7 @@ struct SfxDispatcher_Impl
     std::vector<sal_uInt32> aChildWins;
     bool                 bNoUI;         // UI only from Parent Dispatcher
     bool                 bReadOnly;     // Document is ReadOnly
+    bool                 bContentReadOnly;
     bool                 bQuiet;        // Only use parent dispatcher
 
     SfxSlotFilterState   nFilterEnabling; // 1==filter enabled slots,
@@ -295,6 +296,7 @@ void SfxDispatcher::Construct_Impl()
     xImp->bActive = false;
     xImp->bNoUI = false;
     xImp->bReadOnly = false;
+    xImp->bContentReadOnly = false;
     xImp->bQuiet = false;
     xImp->pInCallAliveFlag = nullptr;
     xImp->nFilterEnabling = SfxSlotFilterState::DISABLED;
@@ -1643,7 +1645,8 @@ bool SfxDispatcher::FindServer_(sal_uInt16 nSlot, SfxSlotServer& rServer)
     }
 
     const bool isViewerAppMode = officecfg::Office::Common::Misc::ViewerAppMode::get();
-    const bool bReadOnlyGlobal = SfxSlotFilterState::ENABLED_READONLY != nSlotEnableMode && xImp->bReadOnly;
+    const bool bReadOnlyGlobal = xImp->bContentReadOnly
+        || (SfxSlotFilterState::ENABLED_READONLY != nSlotEnableMode && xImp->bReadOnly);
     const bool bReadOnlyLokView = !bReadOnlyGlobal && comphelper::LibreOfficeKit::isActive()
                                   && xImp->pFrame && xImp->pFrame->GetViewShell()
                                   && xImp->pFrame->GetViewShell()->IsLokReadOnlyView();
@@ -2066,9 +2069,18 @@ void SfxDispatcher::SetReadOnly_Impl( bool bOn )
     xImp->bReadOnly = bOn;
 }
 
+void SfxDispatcher::SetContentReadOnly(bool bReadOnly)
+{
+    if (xImp->bContentReadOnly == bReadOnly)
+        return;
+    xImp->bContentReadOnly = bReadOnly;
+    if (auto* bindings = GetBindings())
+        bindings->InvalidateAll(true);
+}
+
 bool SfxDispatcher::GetReadOnly_Impl() const
 {
-    return xImp->bReadOnly || SfxViewShell::IsCurrentLokViewReadOnly();
+    return xImp->bReadOnly || xImp->bContentReadOnly || SfxViewShell::IsCurrentLokViewReadOnly();
 }
 
 /** With 'bOn' the Dispatcher is quasi dead and transfers everything to the
@@ -2138,7 +2150,7 @@ bool SfxDispatcher::IsReadOnlyShell_Impl( sal_uInt16 nShell ) const
         if( dynamic_cast< const SfxModule *>( pShell ) != nullptr || dynamic_cast< const SfxApplication *>( pShell ) != nullptr || dynamic_cast< const SfxViewFrame *>( pShell ) !=  nullptr )
             bResult = false;
         else
-            bResult = xImp->bReadOnly;
+            bResult = xImp->bReadOnly || xImp->bContentReadOnly;
     }
 
     if (!bResult && SfxViewShell::IsCurrentLokViewReadOnly())

@@ -35,6 +35,11 @@ namespace com::sun::star {
 
 namespace pdfi
 {
+    // Replay a completed native helper job on the UI thread. The caller owns
+    // both immutable spool files until this function and PDFIProcessor::emit end.
+    bool xpdf_ImportFromRecorded(const OUString& commands, const OUString& binary,
+                                const ContentSinkSharedPtr& sink,
+                                const css::uno::Reference<css::uno::XComponentContext>& context);
     bool xpdf_ImportFromFile( const OUString&                               rURL,
                               const ContentSinkSharedPtr&                        rSink,
                               const css::uno::Reference<

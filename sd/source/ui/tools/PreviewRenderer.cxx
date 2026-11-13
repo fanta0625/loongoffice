@@ -33,6 +33,7 @@
 #include <editeng/editstat.hxx>
 #include <vcl/svapp.hxx>
 #include <comphelper/diagnose_ex.hxx>
+#include <comphelper/scopeguard.hxx>
 #include <svx/sdr/contact/viewobjectcontact.hxx>
 #include <svx/sdr/contact/viewcontact.hxx>
 
@@ -79,6 +80,46 @@ PreviewRenderer::~PreviewRenderer()
 {
     if (mpDocShellOfView != nullptr)
         EndListening (*mpDocShellOfView);
+}
+
+Bitmap PreviewRenderer::RenderRegion(const SdPage& page, const Size& fullPagePixels,
+                                    const tools::Rectangle& region, const SdrPageView& sourceView)
+{
+    if (mbHasFrame || region.IsEmpty() || region.GetWidth() > 1024
+        || region.GetHeight() > 1024 || fullPagePixels.IsEmpty()
+        || page.GetSize().IsEmpty()
+        || !tools::Rectangle(Point(), fullPagePixels).Contains(region))
+        return {};
+    comphelper::ScopeGuard restore([&] {
+        if (mpView)
+            mpView->HideSdrPage();
+        mpPreviewDevice->SetPixelOffset(Size());
+        mpPreviewDevice->EnableMapMode();
+    });
+    try
+    {
+        // Keep rasterizer clipping away from the requested tile boundary.
+        // Otherwise antialiased strokes can differ from a full-page crop.
+        constexpr tools::Long padding = 32;
+        const tools::Rectangle renderRegion(
+            Point(std::max<tools::Long>(0, region.Left() - padding),
+                  std::max<tools::Long>(0, region.Top() - padding)),
+            Point(std::min(fullPagePixels.Width() - 1, region.Right() + padding),
+                  std::min(fullPagePixels.Height() - 1, region.Bottom() + padding)));
+        if (!Initialize(&page, fullPagePixels, false, &renderRegion, &sourceView))
+            return {};
+        if (!PaintPage(&page, true))
+            return {};
+        // GetBitmap uses output coordinates after disabling the map mode.
+        mpPreviewDevice->SetPixelOffset(Size());
+        mpPreviewDevice->EnableMapMode(false);
+        return mpPreviewDevice->GetBitmap(region.TopLeft() - renderRegion.TopLeft(), region.GetSize());
+    }
+    catch (const css::uno::Exception&)
+    {
+        DBG_UNHANDLED_EXCEPTION("sd.tools");
+        return {};
+    }
 }
 
 Image PreviewRenderer::RenderPage (
@@ -198,12 +239,14 @@ Image PreviewRenderer::RenderSubstitution (
 bool PreviewRenderer::Initialize (
     const SdPage* pPage,
     const Size& rPixelSize,
-    const bool bObeyHighContrastMode)
+    const bool bObeyHighContrastMode,
+    const tools::Rectangle* pRegion,
+    const SdrPageView* pSourceView)
 {
     if (!pPage)
         return false;
 
-    SetupOutputSize(*pPage, rPixelSize);
+    SetupOutputSize(*pPage, rPixelSize, pRegion);
     SdDrawDocument& rDocument(static_cast< SdDrawDocument& >(pPage->getSdrModelFromSdrPage()));
     DrawDocShell* pDocShell = rDocument.GetDocSh();
 
@@ -240,6 +283,13 @@ bool PreviewRenderer::Initialize (
     if (pPageView == nullptr)
         return false;
 
+    if (pSourceView)
+    {
+        pPageView->SetVisibleLayers(pSourceView->GetVisibleLayers());
+        pPageView->SetPrintableLayers(pSourceView->GetPrintableLayers());
+        pPageView->SetApplicationDocumentColor(pSourceView->GetApplicationDocumentColor());
+    }
+
     // #i121224# No need to set SetApplicationBackgroundColor (which is the color
     // of the area 'behind' the page (formerly called 'Wiese') since the page previews
     // produced exactly cover the page's area, so it would never be visible. What
@@ -267,7 +317,7 @@ bool PreviewRenderer::Initialize (
     return true;
 }
 
-void PreviewRenderer::PaintPage (
+bool PreviewRenderer::PaintPage (
     const SdPage* pPage,
     const bool bDisplayPresentationObjects)
 {
@@ -285,6 +335,11 @@ void PreviewRenderer::PaintPage (
         pOutliner->SetControlWord(nSavedControlWord & ~EEControlBits::ONLINESPELLING);
     }
 
+    comphelper::ScopeGuard restore([&] {
+        if (pOutliner)
+            pOutliner->SetControlWord(nSavedControlWord);
+    });
+
     // Use a special redirector to prevent PresObj shapes from being painted.
     std::unique_ptr<ViewRedirector> pRedirector;
     if ( ! bDisplayPresentationObjects)
@@ -297,11 +352,9 @@ void PreviewRenderer::PaintPage (
     catch (const css::uno::Exception&)
     {
         DBG_UNHANDLED_EXCEPTION("sd.tools");
+        return false;
     }
-
-    // Restore the previous online spelling and redlining states.
-    if (pOutliner != nullptr)
-        pOutliner->SetControlWord(nSavedControlWord);
+    return true;
 }
 
 void PreviewRenderer::PaintSubstitutionText (const OUString& rSubstitutionText)
@@ -350,8 +403,21 @@ void PreviewRenderer::PaintFrame()
 
 void PreviewRenderer::SetupOutputSize (
     const SdPage& rPage,
-    const Size& rFramePixelSize)
+    const Size& rFramePixelSize,
+    const tools::Rectangle* pRegion)
 {
+    mpPreviewDevice->SetPixelOffset(Size());
+    if (pRegion)
+    {
+        const Size modelSize(rPage.GetSize());
+        MapMode mode(MapUnit::MapPixel);
+        mode.SetScaleX(Fraction(rFramePixelSize.Width(), modelSize.Width()));
+        mode.SetScaleY(Fraction(rFramePixelSize.Height(), modelSize.Height()));
+        mpPreviewDevice->SetMapMode(mode);
+        mpPreviewDevice->SetOutputSizePixel(pRegion->GetSize());
+        mpPreviewDevice->SetPixelOffset(Size(-pRegion->Left(), -pRegion->Top()));
+        return;
+    }
     // First set the map mode to some arbitrary scale that is numerically
     // stable.
     MapMode aMapMode (mpPreviewDevice->GetMapMode());

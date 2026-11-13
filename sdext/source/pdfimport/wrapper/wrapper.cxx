@@ -36,6 +36,7 @@
 #include <comphelper/propertysequence.hxx>
 #include <comphelper/string.hxx>
 #include <com/sun/star/io/XInputStream.hpp>
+#include <com/sun/star/io/IOException.hpp>
 #include <com/sun/star/uno/XComponentContext.hpp>
 #include <com/sun/star/rendering/PathCapType.hpp>
 #include <com/sun/star/rendering/XPolyPolygon2D.hpp>
@@ -300,8 +301,8 @@ void LineParser::readBinaryData( uno::Sequence<sal_Int8>& rBuf )
     while( nFileLen )
     {
         nRes = osl_readFile( m_parser.m_pErr, pBuf, nFileLen, &nBytesRead );
-        if (osl_File_E_None != nRes )
-            break;
+        if (osl_File_E_None != nRes || !nBytesRead)
+            throw io::IOException(u"Incomplete native PDF binary resource"_ustr);
         pBuf += nBytesRead;
         nFileLen -= sal::static_int_cast<sal_Int32>(nBytesRead);
     }
@@ -1038,6 +1039,47 @@ public:
     }
 };
 
+}
+
+bool xpdf_ImportFromRecorded(const OUString& commands, const OUString& binary,
+                           const ContentSinkSharedPtr& sink,
+                           const uno::Reference<uno::XComponentContext>& context)
+{
+    struct Handle
+    {
+        oslFileHandle value = nullptr;
+        ~Handle() { if (value) osl_closeFile(value); }
+    } text, resources;
+    if (!commands.startsWith("file:") || !binary.startsWith("file:")
+        || osl_openFile(commands.pData, &text.value, osl_File_OpenFlag_Read) != osl_File_E_None
+        || osl_openFile(binary.pData, &resources.value, osl_File_OpenFlag_Read) != osl_File_E_None)
+        return false;
+    Parser parser(sink, resources.value, context);
+    Buffering lines(text.value);
+    OStringBuffer line;
+    unsigned pages = 0, ends = 0;
+    try
+    {
+        for (;;)
+        {
+            if (lines.readLine(line) != osl_File_E_None)
+                return false;
+            if (line.isEmpty())
+                break;
+            if (line.toString().startsWith("#"))
+                return false;
+            if (line.toString().startsWith("startPage "))
+                ++pages;
+            if (line.toString() == "endPage")
+                ++ends;
+            parser.parseLine(line);
+        }
+    }
+    catch (const uno::Exception&)
+    {
+        return false;
+    }
+    return pages == 1 && ends == 1;
 }
 
 bool xpdf_ImportFromFile(const OUString& rURL,

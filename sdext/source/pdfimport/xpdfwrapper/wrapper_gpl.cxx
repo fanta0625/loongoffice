@@ -21,6 +21,7 @@
 #include <config_features.h>
 #if HAVE_FEATURE_LOONGOFFICE_PDF_FAST
 #include "../inc/page_selection.hxx"
+#include <charconv>
 #endif
 #ifdef _WIN32
 # include <io.h>
@@ -82,32 +83,44 @@ int main(int argc, char **argv)
     {
         if (argv[k] == TO_STRING_VIEW("-f"))
         {
+            if (k + 1 >= argc)
+                return EXIT_FAILURE;
             outputFile = argv[k+1];
             argc -= 2;
             for (int j = k; j < argc; ++j)
                 argv[j] = argv[j+2];
+            continue;
         }
         else if (argv[k] == TO_STRING_VIEW("-o"))
         {
+            if (k + 1 >= argc)
+                return EXIT_FAILURE;
             options = argv[k+1];
             argc -= 2;
             for (int j = k; j < argc; ++j)
                 argv[j] = argv[j+2];
+            continue;
         }
 
         else if (argv[k] == TO_STRING_VIEW("-opw"))
         {
+            if (k + 1 >= argc)
+                return EXIT_FAILURE;
             ownerPassword = argv[k+1];
             argc -= 2;
             for (int j = k; j < argc; ++j)
                 argv[j] = argv[j+2];
+            continue;
         }
         else if (argv[k] == TO_STRING_VIEW("-upw"))
         {
+            if (k + 1 >= argc)
+                return EXIT_FAILURE;
             userPassword = argv[k+1];
             argc -= 2;
             for (int j = k; j < argc; ++j)
                 argv[j] = argv[j+2];
+            continue;
         }
         ++k;
     }
@@ -147,6 +160,8 @@ int main(int argc, char **argv)
 #else
         g_binary_out = fopen(outputFile,"wb");
 #endif
+    if (!g_binary_out)
+        return EXIT_FAILURE;
 
 #ifdef _WIN32
     // Win actually modifies output for O_TEXT file mode, so need to
@@ -184,6 +199,46 @@ int main(int argc, char **argv)
 
         switch (aInputBuf[0])
         {
+#if HAVE_FEATURE_LOONGOFFICE_PDF_FAST
+            case 'R': // One page from a document-scoped deferred-edit session.
+            {
+                if (options != TO_STRING_VIEW("LoongOfficePdfSession=1") || !outputFile
+                    || !pDocUnique || !pDocUnique->isOk())
+                    return EXIT_FAILURE;
+                int page = 0;
+                const std::string_view request(aInputBuf + 1);
+                const auto parsed = std::from_chars(request.data(), request.data() + request.size(), page);
+                if (parsed.ec != std::errc() || parsed.ptr != request.data() + request.size()
+                    || page < 1 || page > pDocUnique->getNumPages())
+                {
+                    printf("#ERROR:-1:Invalid page\n");
+                    fflush(stdout);
+                    break;
+                }
+                // The parent acknowledges consumption before sending another
+                // R request. Do not retain fonts/images or numbering across jobs.
+                fclose(g_binary_out);
+#ifdef _WIN32
+                g_binary_out = _wfopen(outputFile, L"wb");
+#else
+                g_binary_out = fopen(outputFile, "wb");
+#endif
+                if (!g_binary_out)
+                    return EXIT_FAILURE;
+                {
+                    pdfi::PDFOutDev out(pDocUnique.get());
+                    pdfi::PDFOutDev::setPageNum(1);
+                    pDocUnique->displayPage(&out, page, 7200, 7200, 0, true, true, true);
+                    pDocUnique->processLinks(&out, page);
+                }
+                if (fflush(g_binary_out) || ferror(g_binary_out) || ferror(stdout))
+                    return EXIT_FAILURE;
+                printf("#DONE\n");
+                if (fflush(stdout))
+                    return EXIT_FAILURE;
+                break;
+            }
+#endif
             case 'E': // Exit
                 // We treat this as an error, we normally
                 // expect password input and then processing
@@ -265,7 +320,7 @@ int main(int argc, char **argv)
         }
     } while (!bFinishedInput);
 
-    PDFDoc* pDoc = pDocUnique.release();
+    PDFDoc* pDoc = pDocUnique.get();
     pdfi::PDFOutDev aOutDev(pDoc);
     if (options == TO_STRING_VIEW("SkipImages")) {
             aOutDev.setSkipImages(true);

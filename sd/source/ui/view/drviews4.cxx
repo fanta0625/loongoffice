@@ -903,7 +903,7 @@ void DrawViewShell::ShowMousePosInfo(const ::tools::Rectangle& rRect,
 
     GetStatusBarState(aSet);
 
-    aSet.Put( SfxStringItem( SID_CONTEXT, mpDrawView->GetStatusText() ) );
+    aSet.Put( SfxStringItem( SID_CONTEXT, GetPdfStatusText() ) );
 
     SfxBindings& rBindings = GetViewFrame()->GetBindings();
     rBindings.SetState(aSet);

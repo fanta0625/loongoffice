@@ -145,6 +145,11 @@ void View::ImplClearDrawDropMarker()
 
 View::~View()
 {
+#if HAVE_FEATURE_LOONGOFFICE_PDF_FAST
+    if (auto* doc = dynamic_cast<SdDrawDocument*>(&getSdrModelFromSdrView()))
+        if (auto* fast = doc->GetPdfFastDocument())
+            fast->ForgetView(*this);
+#endif
     maSmartTags.Dispose();
 
     // release content of selection clipboard, if we own the content

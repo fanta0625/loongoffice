@@ -3,12 +3,14 @@
 #include <sal/types.h>
 #include "input.hxx"
 #include "session.hxx"
+#include "nativeimport.hxx"
 #include <unotest/bootstrapfixturebase.hxx>
 #include <cppunit/extensions/HelperMacros.h>
 #include <cppunit/plugin/TestPlugIn.h>
 #include <chrono>
 #include <cstring>
 #include <thread>
+#include <atomic>
 
 namespace
 {
@@ -192,6 +194,80 @@ CPPUNIT_TEST_FIXTURE(RenderTest, testNativeMemorySessionAlongsideDirectEngine)
         session.reset(); // close/cancel while native document and page remain alive
         CPPUNIT_ASSERT_EQUAL(1, document->getPageCount());
     }
+}
+
+CPPUNIT_TEST_FIXTURE(RenderTest, testNativeImportSessionAndSpoolOwnership)
+{
+    SvFileStream stream(m_directories.getURLFromSrc(u"/sd/qa/unit/data/pdf/pdffast-native-pages.pdf"),
+                        StreamMode::READ);
+    BinaryDataContainer bytes(stream, stream.remainingSize());
+    std::atomic<int> notifications{ 0 };
+    int consumed = 0;
+    pdffast::NativeImport importer(bytes.getDataShared(), std::chrono::minutes(2),
+                                  [&] { ++notifications; });
+    auto waitImport = [&] {
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(30);
+        while (std::chrono::steady_clock::now() < deadline)
+        {
+            if (notifications.load() > consumed)
+            {
+                auto result = importer.takeResult();
+                CPPUNIT_ASSERT_MESSAGE("Completion was signalled before result publication", result);
+                ++consumed;
+                return *result;
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        }
+        importer.cancel();
+        CPPUNIT_FAIL("Native import transport did not finish");
+        return pdffast::NativeImport::Result{};
+    };
+    OUString commands, binary;
+    for (int page : { 0, 1, 2, 0 })
+    {
+        CPPUNIT_ASSERT(importer.request(page));
+        CPPUNIT_ASSERT(!importer.request(1));
+        const auto result = waitImport();
+        CPPUNIT_ASSERT_MESSAGE(OUStringToOString(result.error, RTL_TEXTENCODING_UTF8).getStr(),
+                               result.success);
+        CPPUNIT_ASSERT_EQUAL(page, result.page);
+        // The two spool files are reused only after explicit consumption. Their
+        // command stream must contain one complete page, including a blank page.
+        SvFileStream text(result.commands, StreamMode::READ);
+        const OString content = read_uInt8s_ToOString(text, text.remainingSize());
+        CPPUNIT_ASSERT(content.indexOf("setPageNum 1") >= 0);
+        CPPUNIT_ASSERT(content.indexOf("startPage ") >= 0);
+        CPPUNIT_ASSERT(content.indexOf("endPage") >= 0);
+        if (!commands.isEmpty())
+        {
+            CPPUNIT_ASSERT_EQUAL(commands, result.commands);
+            CPPUNIT_ASSERT_EQUAL(binary, result.binary);
+        }
+        commands = result.commands;
+        binary = result.binary;
+        CPPUNIT_ASSERT(!importer.request(0)); // takeResult alone does not release resources.
+        text.Close();
+        importer.release();
+    }
+    CPPUNIT_ASSERT(importer.request(999));
+    CPPUNIT_ASSERT(!waitImport().success);
+    importer.release();
+    CPPUNIT_ASSERT(importer.request(0)); // A failed helper/session can be retried.
+    CPPUNIT_ASSERT(waitImport().success);
+    importer.release();
+    // Zero deadline deterministically exercises timeout without a hung helper.
+    pdffast::NativeImport timed(bytes.getDataShared(), std::chrono::milliseconds(0));
+    for (int n = 0; n < 2; ++n)
+    {
+        CPPUNIT_ASSERT(timed.request(0));
+        const auto expired = timed.wait();
+        CPPUNIT_ASSERT(!expired.success);
+        CPPUNIT_ASSERT_EQUAL(u"PDF import timed out"_ustr, expired.error);
+        timed.release();
+    }
+    // Destruction can interrupt pending source/helper work without UI pumping.
+    pdffast::NativeImport closing(bytes.getDataShared());
+    CPPUNIT_ASSERT(closing.request(0));
 }
 
 CPPUNIT_PLUGIN_IMPLEMENT();

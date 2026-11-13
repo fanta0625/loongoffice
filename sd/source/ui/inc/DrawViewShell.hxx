@@ -463,8 +463,11 @@ private:
 
     /// return true if "Edit Hyperlink" in context menu should be disabled
     bool ShouldDisableEditHyperlink() const;
+    void RequestPdfPage();
+    OUString GetPdfStatusText() const;
 
 private:
+    DECL_LINK(PdfEditStateChanged, bool, void);
     std::unique_ptr<DrawView> mpDrawView;
     SdPage*             mpActualPage;
     ::tools::Rectangle           maMarkRect;

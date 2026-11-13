@@ -52,6 +52,7 @@
 #include <basegfx/polygon/b2dpolygonclipper.hxx>
 
 #include <unordered_map>
+#include <string_view>
 #include <vector>
 
 #include <rtl/ustring.hxx>
@@ -528,6 +529,44 @@ namespace
             CPPUNIT_ASSERT(!pdfi::selectPages("LoongOfficePdfPage=1", 0));
         }
 
+        void testRecordedPageImport()
+        {
+#if HAVE_FEATURE_POPPLER
+            struct Spool
+            {
+                OUString url;
+                explicit Spool(std::string_view contents)
+                {
+                    oslFileHandle handle = nullptr;
+                    CPPUNIT_ASSERT_EQUAL(osl_File_E_None,
+                        osl_createTempFile(nullptr, &handle, &url.pData));
+                    sal_uInt64 written = 0;
+                    const auto error = osl_writeFile(handle, contents.data(), contents.size(), &written);
+                    osl_closeFile(handle);
+                    CPPUNIT_ASSERT_EQUAL(osl_File_E_None, error);
+                    CPPUNIT_ASSERT_EQUAL(sal_uInt64(contents.size()), written);
+                }
+                ~Spool() { osl::File::remove(url); }
+            };
+            auto replay = [&](std::string_view commands, std::string_view resources) {
+                Spool text(commands), binary(resources);
+                auto sink = std::make_shared<TestSink>(false);
+                return pdfi::xpdf_ImportFromRecorded(text.url, binary.url, sink, getComponentContext());
+            };
+            constexpr std::string_view blank = "setPageNum 1\nstartPage 100 100\nendPage\n";
+            CPPUNIT_ASSERT(replay(blank, ""));
+            CPPUNIT_ASSERT(!replay("setPageNum 1\nstartPage 100 100\n", ""));
+            CPPUNIT_ASSERT(!replay("setPageNum 2\nstartPage 100 100\nendPage\n"
+                                  "startPage 100 100\nendPage\n", ""));
+            CPPUNIT_ASSERT(!replay("#DONE\n", ""));
+            // A partial embedded font must fail instead of looping at EOF on
+            // the UI thread. No VCL font decoding is reached in this case.
+            CPPUNIT_ASSERT(!replay("setPageNum 1\nstartPage 100 100\n"
+                                  "updateFont 1 1 4 0 0 12 4 Synthetic\nendPage\n", "ab"));
+            CPPUNIT_ASSERT(replay(blank, ""));
+#endif
+        }
+
         void testNativeSinglePageImport()
         {
 #if HAVE_FEATURE_POPPLER
@@ -995,6 +1034,7 @@ namespace
 #if HAVE_FEATURE_LOONGOFFICE_PDF_FAST
         CPPUNIT_TEST(testNativePageSelection);
         CPPUNIT_TEST(testNativeSinglePageImport);
+        CPPUNIT_TEST(testRecordedPageImport);
 #endif
         CPPUNIT_TEST(testOdfWriterExport);
         CPPUNIT_TEST(testOdfDrawExport);

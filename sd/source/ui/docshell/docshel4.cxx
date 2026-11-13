@@ -58,6 +58,9 @@
 #include <Outliner.hxx>
 #include <sdattr.hrc>
 #include <drawdoc.hxx>
+#if HAVE_FEATURE_LOONGOFFICE_PDF_FAST
+#include <PdfFastDocument.hxx>
+#endif
 #include <ViewShell.hxx>
 #include <sdmod.hxx>
 #include <View.hxx>
@@ -595,6 +598,13 @@ bool DrawDocShell::ConvertFrom( SfxMedium& rMedium )
 bool DrawDocShell::Save()
 {
     mpDoc->StopWorkStartupDelay();
+#if HAVE_FEATURE_LOONGOFFICE_PDF_FAST
+    if (auto* fast = mpDoc->GetPdfFastDocument(); fast && !fast->PrepareForSave())
+    {
+        SetError(ERRCODE_IO_GENERAL);
+        return false;
+    }
+#endif
 
     //TODO/LATER: why this?!
     if( GetCreateMode() == SfxObjectCreateMode::STANDARD )
@@ -613,6 +623,13 @@ bool DrawDocShell::Save()
  */
 bool DrawDocShell::SaveAs( SfxMedium& rMedium )
 {
+#if HAVE_FEATURE_LOONGOFFICE_PDF_FAST
+    if (auto* fast = mpDoc->GetPdfFastDocument(); fast && !fast->PrepareForSave())
+    {
+        SetError(ERRCODE_IO_GENERAL);
+        return false;
+    }
+#endif
     mpDoc->setDocAccTitle(OUString());
     if (SfxViewFrame* pFrame1 = SfxViewFrame::GetFirst(this))
     {

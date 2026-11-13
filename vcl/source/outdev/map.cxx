@@ -1845,6 +1845,8 @@ tools::Long OutputDevice::LogicToLogic( tools::Long nLongSource,
 
 void OutputDevice::SetPixelOffset( const Size& rOffset )
 {
+    // Cached view matrices also include this device-pixel translation.
+    ImplInvalidateViewTransform();
     mnOutOffOrigX  = rOffset.Width();
     mnOutOffOrigY  = rOffset.Height();
 

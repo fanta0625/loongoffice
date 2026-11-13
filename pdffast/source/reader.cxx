@@ -4,6 +4,7 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 #include <sal/config.h>
 #include "reader.hxx"
+#include "viewpolicy.hxx"
 #include "cache.hxx"
 #include "layout.hxx"
 #include "session.hxx"
@@ -1003,18 +1004,7 @@ void ReaderWindow::paint(vcl::RenderContext& context)
                             return fallbackIntersects(key, gap);
                         });
                 });
-                int fallbackWidth = 0, fallbackHeight = 0;
-                double distance = std::numeric_limits<double>::infinity();
-                for (const auto& key : oldKeys)
-                {
-                    const double candidate = std::abs(std::log(double(key.pageWidth) / width));
-                    if (candidate < distance)
-                    {
-                        distance = candidate;
-                        fallbackWidth = key.pageWidth;
-                        fallbackHeight = key.pageHeight;
-                    }
-                }
+                const auto [fallbackWidth, fallbackHeight] = fallbackLevel(oldKeys, width, height);
                 for (const auto& key : oldKeys)
                 {
                     if (key.pageWidth != fallbackWidth || key.pageHeight != fallbackHeight)
