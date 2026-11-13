@@ -55,8 +55,8 @@ public:
 
 // Select one old resolution, never a stack of all cached zoom levels. The
 // caller clips it to missing current-resolution coverage before painting.
-inline std::pair<int, int> fallbackLevel(const std::vector<TileKey>& candidates,
-                                         int width, int height)
+inline std::pair<int, int> fallbackLevel(const std::vector<TileKey>& candidates, int width,
+                                         int height)
 {
     std::pair<int, int> result{};
     double best = std::numeric_limits<double>::infinity();
@@ -67,7 +67,7 @@ inline std::pair<int, int> fallbackLevel(const std::vector<TileKey>& candidates,
         if (key.pageWidth <= 0 || key.pageHeight <= 0)
             continue;
         const double distance = std::abs(std::log(double(key.pageWidth) / width))
-                              + std::abs(std::log(double(key.pageHeight) / height));
+                                + std::abs(std::log(double(key.pageHeight) / height));
         if (distance < best)
         {
             best = distance;

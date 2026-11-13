@@ -48,14 +48,26 @@ constexpr int TileSize = 512;
 constexpr tools::Long ScrollRange = 1000000;
 enum Action : sal_uInt16
 {
-    Open = 100, Export, Close, Previous = 200, Next, GoTo, Fit, ZoomIn, ZoomOut,
-    EditPage = 300, Read, Undo, Redo
+    Open = 100,
+    Export,
+    Close,
+    Previous = 200,
+    Next,
+    GoTo,
+    Fit,
+    ZoomIn,
+    ZoomOut,
+    EditPage = 300,
+    Read,
+    Undo,
+    Redo
 };
 
 class InputDialog final : public weld::GenericDialogController
 {
     std::unique_ptr<weld::Label> m_label;
     std::unique_ptr<weld::Entry> m_entry;
+
 public:
     InputDialog(weld::Window* parent, const OUString& prompt, bool password)
         : GenericDialogController(parent, u"pdffast/ui/input.ui"_ustr, u"InputDialog"_ustr)
@@ -73,12 +85,17 @@ class ReaderWindow;
 class Canvas final : public vcl::Window
 {
     ReaderWindow& m_owner;
+
 public:
     Canvas(ReaderWindow& owner, vcl::Window* parent);
     void Paint(vcl::RenderContext& context, const tools::Rectangle& rect) override;
     void KeyInput(const KeyEvent& event) override;
     void Command(const CommandEvent& event) override;
-    void MouseButtonDown(const MouseEvent& event) override { GrabFocus(); Window::MouseButtonDown(event); }
+    void MouseButtonDown(const MouseEvent& event) override
+    {
+        GrabFocus();
+        Window::MouseButtonDown(event);
+    }
 };
 
 class ReaderWindow final : public WorkWindow
@@ -130,12 +147,18 @@ class ReaderWindow final : public WorkWindow
     OUString pick(bool save);
     bool input(const OUString& prompt, bool password, OUString& value);
     void message(const OUString& value, VclMessageType type = VclMessageType::Error);
-    double maxX() const { return std::max(0.0, m_layout.width() * m_scale - m_canvas->GetOutputSizePixel().Width()); }
+    double maxX() const
+    {
+        return std::max(0.0, m_layout.width() * m_scale - m_canvas->GetOutputSizePixel().Width());
+    }
     double scrollHeight() const
     {
         return m_layout.scrollHeight(m_canvas->GetOutputSizePixel().Height() / m_scale) * m_scale;
     }
-    double maxY() const { return std::max(0.0, scrollHeight() - m_canvas->GetOutputSizePixel().Height()); }
+    double maxY() const
+    {
+        return std::max(0.0, scrollHeight() - m_canvas->GetOutputSizePixel().Height());
+    }
     TileKey preview(int page) const;
     tools::Rectangle pageRect(int page) const;
     std::vector<int> visible() const;
@@ -156,7 +179,8 @@ public:
 };
 
 Canvas::Canvas(ReaderWindow& owner, vcl::Window* parent)
-    : Window(parent, WB_CLIPCHILDREN), m_owner(owner)
+    : Window(parent, WB_CLIPCHILDREN)
+    , m_owner(owner)
 {
     SetBackground(Wallpaper(Color(0x70, 0x70, 0x70)));
 }
@@ -165,7 +189,9 @@ void Canvas::KeyInput(const KeyEvent& event) { m_owner.key(event); }
 void Canvas::Command(const CommandEvent& event) { m_owner.command(event); }
 
 ReaderWindow::ReaderWindow(std::size_t budget, std::chrono::steady_clock::time_point started)
-    : WorkWindow(nullptr, WB_APP | WB_STDWORK), m_cache(budget), m_started(started)
+    : WorkWindow(nullptr, WB_APP | WB_STDWORK)
+    , m_cache(budget)
+    , m_started(started)
 {
     m_canvas = VclPtr<Canvas>::Create(*this, this);
     m_vertical = VclPtr<ScrollBar>::Create(this, WB_VERT);
@@ -260,8 +286,8 @@ void ReaderWindow::Resize()
 
 void ReaderWindow::message(const OUString& value, VclMessageType type)
 {
-    auto dialog = std::unique_ptr<weld::MessageDialog>(Application::CreateMessageDialog(
-        GetFrameWeld(), type, VclButtonsType::Ok, value));
+    auto dialog = std::unique_ptr<weld::MessageDialog>(
+        Application::CreateMessageDialog(GetFrameWeld(), type, VclButtonsType::Ok, value));
     dialog->run();
 }
 
@@ -279,9 +305,9 @@ OUString ReaderWindow::pick(bool save)
     try
     {
         auto picker = css::ui::dialogs::FilePicker::createWithMode(
-            comphelper::getProcessComponentContext(), sal_Int16(save
-            ? css::ui::dialogs::TemplateDescription::FILESAVE_AUTOEXTENSION
-            : css::ui::dialogs::TemplateDescription::FILEOPEN_SIMPLE));
+            comphelper::getProcessComponentContext(),
+            sal_Int16(save ? css::ui::dialogs::TemplateDescription::FILESAVE_AUTOEXTENSION
+                           : css::ui::dialogs::TemplateDescription::FILEOPEN_SIMPLE));
         picker->setTitle(tr(save ? STR_EXPORT : STR_OPEN));
         picker->appendFilter(u"PDF"_ustr, u"*.pdf"_ustr);
         if (save)
@@ -367,8 +393,8 @@ tools::Rectangle ReaderWindow::pageRect(int page) const
     const auto size = m_layout.size(page);
     const tools::Long width = std::ceil(size.width * m_scale);
     const tools::Long height = std::ceil(size.height * m_scale);
-    const double content = std::max(m_layout.width() * m_scale,
-                                   double(m_canvas->GetOutputSizePixel().Width()));
+    const double content
+        = std::max(m_layout.width() * m_scale, double(m_canvas->GetOutputSizePixel().Width()));
     return tools::Rectangle(Point(std::floor((content - width) / 2 - m_scrollX),
                                   std::floor(m_layout.top(page) * m_scale - m_scrollY)),
                             Size(width, height));
@@ -394,8 +420,9 @@ void ReaderWindow::scrollbars()
         bar.SetVisibleSize(shown);
         bar.SetPageSize(shown);
         bar.SetLineSize(std::max<tools::Long>(1, shown / 10));
-        bar.SetThumbPos(total <= viewport ? 0 : std::lround(
-            position / (total - viewport) * (ScrollRange - shown)));
+        bar.SetThumbPos(total <= viewport
+                            ? 0
+                            : std::lround(position / (total - viewport) * (ScrollRange - shown)));
     };
     const auto view = m_canvas->GetOutputSizePixel();
     set(*m_vertical, view.Height(), scrollHeight(), m_scrollY);
@@ -450,8 +477,13 @@ void ReaderWindow::refresh()
         for (int y = top / TileSize * TileSize; y < bottom; y += TileSize)
             for (int x = left / TileSize * TileSize; x < right; x += TileSize)
             {
-                TileKey key{ page, width, height, x, y,
-                             std::min(TileSize, width - x), std::min(TileSize, height - y) };
+                TileKey key{ page,
+                             width,
+                             height,
+                             x,
+                             y,
+                             std::min(TileSize, width - x),
+                             std::min(TileSize, height - y) };
                 const auto padded = tileWithGutter(key);
                 m_visibleTiles.emplace(key, std::size_t(padded.width) * padded.height * 4);
                 if (!m_cache.contains(key))
@@ -462,11 +494,16 @@ void ReaderWindow::refresh()
         const int ahead = m_direction > 0 ? ((bottom + TileSize - 1) / TileSize) * TileSize
                                           : (top / TileSize - 1) * TileSize;
         if (ahead >= 0 && ahead < height)
-            for (int x = left / TileSize * TileSize;
-                 x < right && prefetch.size() < 8; x += TileSize)
+            for (int x = left / TileSize * TileSize; x < right && prefetch.size() < 8;
+                 x += TileSize)
             {
-                TileKey key{ page, width, height, x, ahead,
-                             std::min(TileSize, width - x), std::min(TileSize, height - ahead) };
+                TileKey key{ page,
+                             width,
+                             height,
+                             x,
+                             ahead,
+                             std::min(TileSize, width - x),
+                             std::min(TileSize, height - ahead) };
                 if (!m_cache.contains(key))
                     prefetch.push_back({ page, key });
             }
@@ -493,11 +530,16 @@ void ReaderWindow::refresh()
                 const int y = direction > 0 ? 0 : (height - 1) / TileSize * TileSize;
                 const int left = std::max<tools::Long>(0, -rect.Left());
                 const int right = std::min<tools::Long>(width, view.Width() - rect.Left());
-                for (int x = left / TileSize * TileSize;
-                     x < right && prefetch.size() < 12; x += TileSize)
+                for (int x = left / TileSize * TileSize; x < right && prefetch.size() < 12;
+                     x += TileSize)
                 {
-                    TileKey key{ page, width, height, x, y,
-                                 std::min(TileSize, width - x), std::min(TileSize, height - y) };
+                    TileKey key{ page,
+                                 width,
+                                 height,
+                                 x,
+                                 y,
+                                 std::min(TileSize, width - x),
+                                 std::min(TileSize, height - y) };
                     if (!m_cache.contains(key))
                         prefetch.push_back({ page, key });
                 }
@@ -536,10 +578,12 @@ void ReaderWindow::title()
     if (!m_url.isEmpty())
         text = m_url.copy(m_url.lastIndexOf('/') + 1) + u" — "_ustr + text;
     if (m_ready)
-        text += u" — "_ustr + tr(STR_PAGE_STATUS)
-            .replaceFirst("%1", OUString::number(m_layout.pageAt(m_scrollY / m_scale) + 1))
-            .replaceFirst("%2", OUString::number(m_layout.count()))
-            .replaceFirst("%3", OUString::number(std::lround(m_zoom * 100)));
+        text
+            += u" — "_ustr
+               + tr(STR_PAGE_STATUS)
+                     .replaceFirst("%1", OUString::number(m_layout.pageAt(m_scrollY / m_scale) + 1))
+                     .replaceFirst("%2", OUString::number(m_layout.count()))
+                     .replaceFirst("%3", OUString::number(std::lround(m_zoom * 100)));
     if (m_editor && m_editor->modified())
         text += u" — "_ustr + tr(STR_MODIFIED);
     SetText(text);
@@ -559,8 +603,9 @@ IMPL_LINK_NOARG(ReaderWindow, Poll, Timer*, void)
     const auto transferStarted = std::chrono::steady_clock::now();
     std::size_t transferred = 0;
     bool layoutChanged = false;
-    while (m_session && TransferBudget::allows(transferred,
-               std::chrono::steady_clock::now() - transferStarted))
+    while (
+        m_session
+        && TransferBudget::allows(transferred, std::chrono::steady_clock::now() - transferStarted))
     {
         auto next = m_session->takeResult();
         if (!next)
@@ -588,15 +633,17 @@ IMPL_LINK_NOARG(ReaderWindow, Poll, Timer*, void)
             case Result::Kind::Tile:
             {
                 const auto imageStarted = std::chrono::steady_clock::now();
-                Bitmap bitmap(Size(result.pixels.width, result.pixels.height), vcl::PixelFormat::N24_BPP);
+                Bitmap bitmap(Size(result.pixels.width, result.pixels.height),
+                              vcl::PixelFormat::N24_BPP);
                 bool allocated = false;
                 {
                     BitmapScopedWriteAccess access(bitmap);
                     allocated = bool(access);
                 }
                 const auto allocatedAt = std::chrono::steady_clock::now();
-                if (allocated && ReadRawDIB(bitmap, result.pixels.data.data(), ScanlineFormat::N24BitTcBgr,
-                               result.pixels.height, result.pixels.stride))
+                if (allocated
+                    && ReadRawDIB(bitmap, result.pixels.data.data(), ScanlineFormat::N24BitTcBgr,
+                                  result.pixels.height, result.pixels.stride))
                     m_cache.put(result.tile, std::move(bitmap),
                                 std::size_t(result.pixels.width) * result.pixels.height * 4,
                                 !m_visibleTiles.count(result.tile));
@@ -605,12 +652,16 @@ IMPL_LINK_NOARG(ReaderWindow, Poll, Timer*, void)
                     m_message = u"Cannot allocate the page image"_ustr;
                     m_failedPages.insert(result.page);
                 }
-                SAL_INFO("pdffast", "ui-image page=" << result.page
-                    << " width=" << result.pixels.width << " height=" << result.pixels.height
-                    << " allocation_us=" << std::chrono::duration_cast<std::chrono::microseconds>(
-                        allocatedAt - imageStarted).count()
-                    << " upload_cache_us=" << std::chrono::duration_cast<std::chrono::microseconds>(
-                        std::chrono::steady_clock::now() - allocatedAt).count());
+                SAL_INFO("pdffast",
+                         "ui-image page=" << result.page << " width=" << result.pixels.width
+                                          << " height=" << result.pixels.height << " allocation_us="
+                                          << std::chrono::duration_cast<std::chrono::microseconds>(
+                                                 allocatedAt - imageStarted)
+                                                 .count()
+                                          << " upload_cache_us="
+                                          << std::chrono::duration_cast<std::chrono::microseconds>(
+                                                 std::chrono::steady_clock::now() - allocatedAt)
+                                                 .count());
                 break;
             }
             case Result::Kind::Password:
@@ -646,9 +697,12 @@ IMPL_LINK_NOARG(ReaderWindow, Poll, Timer*, void)
     if (transferred)
     {
         m_canvas->Invalidate();
-        SAL_INFO("pdffast", "UI result batch " << transferred << " items in "
-            << std::chrono::duration_cast<std::chrono::microseconds>(
-                std::chrono::steady_clock::now() - transferStarted).count() << " us");
+        SAL_INFO("pdffast", "UI result batch "
+                                << transferred << " items in "
+                                << std::chrono::duration_cast<std::chrono::microseconds>(
+                                       std::chrono::steady_clock::now() - transferStarted)
+                                       .count()
+                                << " us");
     }
     if (m_session && !m_session->idle())
     {
@@ -683,8 +737,8 @@ void ReaderWindow::go(int page)
     page = std::clamp(page, 0, m_layout.count() - 1);
     // Stay on the destination side of a page boundary after pixel/point
     // floating-point round trips, including fractional DPI and zoom factors.
-    m_scrollY = std::nextafter(m_layout.top(page) * m_scale,
-                             std::numeric_limits<double>::infinity());
+    m_scrollY
+        = std::nextafter(m_layout.top(page) * m_scale, std::numeric_limits<double>::infinity());
     refresh();
 }
 
@@ -747,7 +801,7 @@ void ReaderWindow::editPage()
         {
             if (!m_editorLibrary.is()
                 && !m_editorLibrary.loadRelative(reinterpret_cast<oslGenericFunction>(&InitVCL),
-                                                  SVLIBRARY("pdffastedit")))
+                                                 SVLIBRARY("pdffastedit")))
                 error = tr(STR_EDITOR_MISSING);
             else
             {
@@ -770,9 +824,12 @@ void ReaderWindow::editPage()
             m_editedPages.insert(page);
             m_reading = false;
         }
-        SAL_INFO("pdffast", "prepare edit page " << page << " in "
-            << std::chrono::duration_cast<std::chrono::milliseconds>(
-                std::chrono::steady_clock::now() - editStarted).count() << " ms");
+        SAL_INFO("pdffast", "prepare edit page "
+                                << page << " in "
+                                << std::chrono::duration_cast<std::chrono::milliseconds>(
+                                       std::chrono::steady_clock::now() - editStarted)
+                                       .count()
+                                << " ms");
     }
     catch (const std::exception& exception)
     {
@@ -810,12 +867,13 @@ bool ReaderWindow::exportCopy()
             // The same factory path as first edit, without implicitly converting a page.
             if (!m_editorLibrary.is()
                 && !m_editorLibrary.loadRelative(reinterpret_cast<oslGenericFunction>(&InitVCL),
-                                                  SVLIBRARY("pdffastedit")))
+                                                 SVLIBRARY("pdffastedit")))
             {
                 message(tr(STR_EDITOR_MISSING));
                 return false;
             }
-            auto create = reinterpret_cast<CreateEditor>(m_editorLibrary.getFunctionSymbol("pdffast_create_editor"));
+            auto create = reinterpret_cast<CreateEditor>(
+                m_editorLibrary.getFunctionSymbol("pdffast_create_editor"));
             if (!create)
                 return false;
             EditorHost host{ [this] { title(); }, [this](const CommandEvent& e) { command(e); },
@@ -852,11 +910,23 @@ void ReaderWindow::action(sal_uInt16 id)
         return;
     switch (id)
     {
-        case Open: open(pick(false)); break;
-        case Export: exportCopy(); break;
-        case Action::Close: Close(); break;
-        case Previous: if (m_ready) go(m_layout.pageAt(m_scrollY / m_scale) - 1); break;
-        case Next: if (m_ready) go(m_layout.pageAt(m_scrollY / m_scale) + 1); break;
+        case Open:
+            open(pick(false));
+            break;
+        case Export:
+            exportCopy();
+            break;
+        case Action::Close:
+            Close();
+            break;
+        case Previous:
+            if (m_ready)
+                go(m_layout.pageAt(m_scrollY / m_scale) - 1);
+            break;
+        case Next:
+            if (m_ready)
+                go(m_layout.pageAt(m_scrollY / m_scale) + 1);
+            break;
         case GoTo:
         {
             OUString value;
@@ -871,15 +941,29 @@ void ReaderWindow::action(sal_uInt16 id)
         case Fit:
             if (m_ready)
                 zoom((m_canvas->GetOutputSizePixel().Width() - 2 * Layout::Gap)
-                     / m_layout.size(m_layout.pageAt(m_scrollY / m_scale)).width
-                     * 72.0 / m_canvas->GetOutDev()->GetDPIX());
+                     / m_layout.size(m_layout.pageAt(m_scrollY / m_scale)).width * 72.0
+                     / m_canvas->GetOutDev()->GetDPIX());
             break;
-        case ZoomIn: zoom(m_zoom * 1.25); break;
-        case ZoomOut: zoom(m_zoom / 1.25); break;
-        case EditPage: editPage(); break;
-        case Read: readMode(); break;
-        case Undo: if (m_editor) m_editor->undo(false); break;
-        case Redo: if (m_editor) m_editor->undo(true); break;
+        case ZoomIn:
+            zoom(m_zoom * 1.25);
+            break;
+        case ZoomOut:
+            zoom(m_zoom / 1.25);
+            break;
+        case EditPage:
+            editPage();
+            break;
+        case Read:
+            readMode();
+            break;
+        case Undo:
+            if (m_editor)
+                m_editor->undo(false);
+            break;
+        case Redo:
+            if (m_editor)
+                m_editor->undo(true);
+            break;
     }
 }
 
@@ -890,30 +974,65 @@ void ReaderWindow::key(const KeyEvent& event)
     {
         switch (key.GetCode())
         {
-            case KEY_O: action(Open); return;
-            case KEY_S: action(Export); return;
-            case KEY_G: action(GoTo); return;
-            case KEY_ADD: action(ZoomIn); return;
-            case KEY_SUBTRACT: action(ZoomOut); return;
-            case KEY_Z: action(key.IsShift() ? Redo : Undo); return;
-            case KEY_Y: action(Redo); return;
+            case KEY_O:
+                action(Open);
+                return;
+            case KEY_S:
+                action(Export);
+                return;
+            case KEY_G:
+                action(GoTo);
+                return;
+            case KEY_ADD:
+                action(ZoomIn);
+                return;
+            case KEY_SUBTRACT:
+                action(ZoomOut);
+                return;
+            case KEY_Z:
+                action(key.IsShift() ? Redo : Undo);
+                return;
+            case KEY_Y:
+                action(Redo);
+                return;
         }
     }
     if (!m_ready || m_busy)
         return;
     switch (key.GetCode())
     {
-        case KEY_F2: action(EditPage); return;
-        case KEY_ESCAPE: action(Read); return;
-        case KEY_HOME: go(0); return;
-        case KEY_END: go(m_layout.count() - 1); return;
-        case KEY_PAGEUP: m_scrollY -= m_canvas->GetOutputSizePixel().Height() * 0.9; break;
-        case KEY_PAGEDOWN: m_scrollY += m_canvas->GetOutputSizePixel().Height() * 0.9; break;
-        case KEY_UP: m_scrollY -= 40; break;
-        case KEY_DOWN: m_scrollY += 40; break;
-        case KEY_LEFT: m_scrollX -= 40; break;
-        case KEY_RIGHT: m_scrollX += 40; break;
-        default: return;
+        case KEY_F2:
+            action(EditPage);
+            return;
+        case KEY_ESCAPE:
+            action(Read);
+            return;
+        case KEY_HOME:
+            go(0);
+            return;
+        case KEY_END:
+            go(m_layout.count() - 1);
+            return;
+        case KEY_PAGEUP:
+            m_scrollY -= m_canvas->GetOutputSizePixel().Height() * 0.9;
+            break;
+        case KEY_PAGEDOWN:
+            m_scrollY += m_canvas->GetOutputSizePixel().Height() * 0.9;
+            break;
+        case KEY_UP:
+            m_scrollY -= 40;
+            break;
+        case KEY_DOWN:
+            m_scrollY += 40;
+            break;
+        case KEY_LEFT:
+            m_scrollX -= 40;
+            break;
+        case KEY_RIGHT:
+            m_scrollX += 40;
+            break;
+        default:
+            return;
     }
     refresh();
 }
@@ -927,7 +1046,8 @@ void ReaderWindow::command(const CommandEvent& event)
         zoom(wheel.GetDelta() > 0 ? m_zoom * 1.1 : m_zoom / 1.1);
     else
     {
-        const double delta = wheel.IsDeltaPixel() ? -wheel.GetDelta() : -wheel.GetDelta() / 120.0 * 120;
+        const double delta
+            = wheel.IsDeltaPixel() ? -wheel.GetDelta() : -wheel.GetDelta() / 120.0 * 120;
         if (wheel.IsHorz() || wheel.IsShift())
             m_scrollX += delta;
         else
@@ -972,8 +1092,13 @@ void ReaderWindow::paint(vcl::RenderContext& context)
             for (int y = top / TileSize * TileSize; y < bottom; y += TileSize)
                 for (int x = left / TileSize * TileSize; x < right; x += TileSize)
                 {
-                    TileKey key{ page, width, height, x, y,
-                                 std::min(TileSize, width - x), std::min(TileSize, height - y) };
+                    TileKey key{ page,
+                                 width,
+                                 height,
+                                 x,
+                                 y,
+                                 std::min(TileSize, width - x),
+                                 std::min(TileSize, height - y) };
                     current.push_back(key);
                     if (!m_cache.contains(key))
                     {
@@ -1002,11 +1127,11 @@ void ReaderWindow::paint(vcl::RenderContext& context)
                 }
                 const auto oldKeys = m_cache.keys([&](const TileKey& key) {
                     return key.page == page && key.pageWidth != width && key.pageWidth > 256
-                        && std::any_of(missing.begin(), missing.end(), [&](const TileKey& gap) {
-                            return fallbackIntersects(key, gap);
-                        });
+                           && std::any_of(missing.begin(), missing.end(), [&](const TileKey& gap) {
+                                  return fallbackIntersects(key, gap);
+                              });
                 });
-                const auto [fallbackWidth, fallbackHeight] = fallbackLevel(oldKeys, width, height);
+                const auto[fallbackWidth, fallbackHeight] = fallbackLevel(oldKeys, width, height);
                 for (const auto& key : oldKeys)
                 {
                     if (key.pageWidth != fallbackWidth || key.pageHeight != fallbackHeight)
@@ -1014,8 +1139,10 @@ void ReaderWindow::paint(vcl::RenderContext& context)
                     const auto padded = tileWithGutter(key);
                     const Point at(std::floor(double(padded.x) * width / key.pageWidth),
                                    std::floor(double(padded.y) * height / key.pageHeight));
-                    const Size size(std::ceil(double(padded.x + padded.width) * width / key.pageWidth) - at.X(),
-                                    std::ceil(double(padded.y + padded.height) * height / key.pageHeight) - at.Y());
+                    const Size size(
+                        std::ceil(double(padded.x + padded.width) * width / key.pageWidth) - at.X(),
+                        std::ceil(double(padded.y + padded.height) * height / key.pageHeight)
+                            - at.Y());
                     if (const auto* bitmap = m_cache.get(key))
                     {
                         context.DrawBitmap(rect.TopLeft() + at, size, *bitmap);
@@ -1035,7 +1162,8 @@ void ReaderWindow::paint(vcl::RenderContext& context)
             {
                 m_firstPaint = true;
                 const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-                    std::chrono::steady_clock::now() - m_started).count();
+                                    std::chrono::steady_clock::now() - m_started)
+                                    .count();
                 SAL_INFO("pdffast", "first PDF pixels painted after " << ms << " ms");
             }
         }
@@ -1045,7 +1173,7 @@ void ReaderWindow::paint(vcl::RenderContext& context)
 }
 
 VclPtr<WorkWindow> createReader(const OUString& url, std::size_t budget,
-                               std::chrono::steady_clock::time_point started)
+                                std::chrono::steady_clock::time_point started)
 {
     auto reader = VclPtr<ReaderWindow>::Create(budget, started);
     if (!url.isEmpty())

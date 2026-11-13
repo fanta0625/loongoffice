@@ -40,7 +40,14 @@ struct Pixels
 
 struct Result
 {
-    enum class Kind { Opened, Page, Tile, Password, Error };
+    enum class Kind
+    {
+        Opened,
+        Page,
+        Tile,
+        Password,
+        Error
+    };
     Kind kind = Kind::Error;
     bool requested = false;
     int pageCount = 0;

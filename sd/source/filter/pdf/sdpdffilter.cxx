@@ -135,8 +135,8 @@ void SdPdfFilter::ApplyPageMetadata(SdPage& page, const vcl::PDFGraphicResult& r
             {
                 aInfo.meType = sdr::annotation::AnnotationType::Ink;
 
-                auto* pMarker = static_cast<vcl::pdf::PDFAnnotationMarkerInk*>(
-                    rPDFAnnotation.mpMarker.get());
+                auto* pMarker
+                    = static_cast<vcl::pdf::PDFAnnotationMarkerInk*>(rPDFAnnotation.mpMarker.get());
 
                 aInfo.maPolygons = pMarker->maStrokes;
 
@@ -293,10 +293,12 @@ bool SdPdfFilter::Import()
 #endif
     const bool imported = xStream && ImportPDF(*xStream, mrDocument, defer ? &metadata : nullptr);
 #if HAVE_FEATURE_LOONGOFFICE_PDF_FAST
-    SAL_INFO("pdffast", "native-import success=" << imported
-        << " pages=" << mrDocument.GetSdPageCount(PageKind::Standard)
-        << " total_us=" << std::chrono::duration_cast<std::chrono::microseconds>(
-            std::chrono::steady_clock::now() - started).count());
+    SAL_INFO("pdffast", "native-import success="
+                            << imported << " pages="
+                            << mrDocument.GetSdPageCount(PageKind::Standard) << " total_us="
+                            << std::chrono::duration_cast<std::chrono::microseconds>(
+                                   std::chrono::steady_clock::now() - started)
+                                   .count());
     if (imported && defer)
     {
         if (!sd::PdfFastDocument::Attach(mrDocument))

@@ -10,5 +10,5 @@
 namespace pdffast
 {
 VclPtr<WorkWindow> createReader(const OUString& url, std::size_t cacheBudget,
-                               std::chrono::steady_clock::time_point started);
+                                std::chrono::steady_clock::time_point started);
 }

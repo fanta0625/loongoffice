@@ -31,9 +31,14 @@ class PdfApplication final : public Application
     OUString m_url;
     std::size_t m_budget;
     std::chrono::steady_clock::time_point m_started;
+
 public:
     PdfApplication(OUString url, std::size_t budget, std::chrono::steady_clock::time_point started)
-        : m_url(std::move(url)), m_budget(budget), m_started(started) {}
+        : m_url(std::move(url))
+        , m_budget(budget)
+        , m_started(started)
+    {
+    }
     int Main() override
     {
         auto window = pdffast::createReader(m_url, m_budget, m_started);
@@ -124,9 +129,9 @@ SAL_IMPLEMENT_MAIN()
                 throw std::runtime_error("Cannot locate the PDF reader installation");
             fundamental = executable.copy(0, executable.lastIndexOf('/') + 1)
 #ifdef MACOSX
-                + u"../Resources/"_ustr
+                          + u"../Resources/"_ustr
 #endif
-                + SAL_CONFIGFILE("fundamental");
+                          + SAL_CONFIGFILE("fundamental");
             rtl::Bootstrap::set(u"URE_BOOTSTRAP"_ustr, rtl::Bootstrap::encode(fundamental));
         }
         // This executable can coexist with Office. Never share its writable
@@ -144,8 +149,8 @@ SAL_IMPLEMENT_MAIN()
             throw std::runtime_error("Cannot create the reader configuration directory");
         rtl::Bootstrap::set(u"UserInstallation"_ustr, profile);
         auto context = cppu::defaultBootstrap_InitialComponentContext();
-        css::uno::Reference<css::lang::XMultiServiceFactory> manager(
-            context->getServiceManager(), css::uno::UNO_QUERY_THROW);
+        css::uno::Reference<css::lang::XMultiServiceFactory> manager(context->getServiceManager(),
+                                                                     css::uno::UNO_QUERY_THROW);
         comphelper::setProcessServiceFactory(manager);
         LanguageTag::setConfiguredSystemLanguage(MsLangId::getSystemLanguage());
         Application::SetAppName(u"LoongOffice PDF Fast"_ustr);

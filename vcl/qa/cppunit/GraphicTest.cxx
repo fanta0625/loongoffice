@@ -991,8 +991,8 @@ CPPUNIT_TEST_FIXTURE(GraphicTest, testUnloadedPdfSwapDoesNotRasterize)
         SvFileStream aStream(aURL, StreamMode::READ);
         std::vector<vcl::PDFGraphicResult> aPages;
         std::unique_ptr<vcl::PDFMetadataReader> pMetadata;
-        CPPUNIT_ASSERT(vcl::ImportPDFUnloaded(aStream, aPages,
-                                            bDeferred ? &pMetadata : nullptr) > 1);
+        CPPUNIT_ASSERT(vcl::ImportPDFUnloaded(aStream, aPages, bDeferred ? &pMetadata : nullptr)
+                       > 1);
         for (size_t nPage = 0; nPage < aPages.size(); ++nPage)
         {
             Graphic aGraphic = aPages[nPage].GetGraphic();
@@ -1007,7 +1007,8 @@ CPPUNIT_TEST_FIXTURE(GraphicTest, testUnloadedPdfSwapDoesNotRasterize)
                 CPPUNIT_ASSERT(pVector->getSizeBytes().first == VectorGraphicData::State::UNPARSED);
                 CPPUNIT_ASSERT(aGraphic.ImplGetImpGraphic()->swapOut());
                 CPPUNIT_ASSERT_MESSAGE("Cache eviction must not rasterize a PDF page on the UI",
-                    pVector->getSizeBytes().first == VectorGraphicData::State::UNPARSED);
+                                       pVector->getSizeBytes().first
+                                           == VectorGraphicData::State::UNPARSED);
                 CPPUNIT_ASSERT(!aGraphic.isAvailable());
                 CPPUNIT_ASSERT_EQUAL(aPages[nPage].GetSize(), aGraphic.GetPrefSize());
                 CPPUNIT_ASSERT(MapMode(MapUnit::Map100thMM) == aGraphic.GetPrefMapMode());

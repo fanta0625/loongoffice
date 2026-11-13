@@ -43,8 +43,12 @@ inline void materializeSource(Source& source)
             m_position = std::min(position, m_input.size());
             return m_position;
         }
+
     public:
-        explicit Stream(Input& input) : m_input(input) {}
+        explicit Stream(Input& input)
+            : m_input(input)
+        {
+        }
     } stream(*source.input);
     BinaryDataContainer bytes(stream, source.input->size());
     source.input->validate();

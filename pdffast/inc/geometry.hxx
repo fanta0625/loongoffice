@@ -52,13 +52,15 @@ inline TileKey tileWithGutter(const TileKey& tile)
 // for old-resolution fallback; adjacent tile boundaries do not overlap.
 inline bool fallbackIntersects(const TileKey& old, const TileKey& gap)
 {
-    if (old.page != gap.page || old.pageWidth <= 0 || old.pageHeight <= 0
-        || gap.pageWidth <= 0 || gap.pageHeight <= 0)
+    if (old.page != gap.page || old.pageWidth <= 0 || old.pageHeight <= 0 || gap.pageWidth <= 0
+        || gap.pageHeight <= 0)
         return false;
     return std::int64_t(old.x) * gap.pageWidth < std::int64_t(gap.x + gap.width) * old.pageWidth
-        && std::int64_t(gap.x) * old.pageWidth < std::int64_t(old.x + old.width) * gap.pageWidth
-        && std::int64_t(old.y) * gap.pageHeight < std::int64_t(gap.y + gap.height) * old.pageHeight
-        && std::int64_t(gap.y) * old.pageHeight < std::int64_t(old.y + old.height) * gap.pageHeight;
+           && std::int64_t(gap.x) * old.pageWidth < std::int64_t(old.x + old.width) * gap.pageWidth
+           && std::int64_t(old.y) * gap.pageHeight
+                  < std::int64_t(gap.y + gap.height) * old.pageHeight
+           && std::int64_t(gap.y) * old.pageHeight
+                  < std::int64_t(old.y + old.height) * gap.pageHeight;
 }
 
 struct Request
@@ -71,10 +73,7 @@ struct Request
     {
         return std::tie(page, tile) < std::tie(other.page, other.tile);
     }
-    bool operator==(const Request& other) const
-    {
-        return page == other.page && tile == other.tile;
-    }
+    bool operator==(const Request& other) const { return page == other.page && tile == other.tile; }
 };
 
 // Merge only adjacent rectangles with no holes. Preserve child tile identities
@@ -91,14 +90,12 @@ inline std::optional<TileKey> mergeRegion(const TileKey& a, const TileKey& b)
     area.y = std::min(a.y, b.y);
     area.width = std::max(a.x + a.width, b.x + b.width) - area.x;
     area.height = std::max(a.y + a.height, b.y + b.height) - area.y;
-    const bool adjacent = (a.y == b.y && a.height == b.height
-                           && (a.x + a.width == b.x || b.x + b.width == a.x))
-                       || (a.x == b.x && a.width == b.width
-                           && (a.y + a.height == b.y || b.y + b.height == a.y));
+    const bool adjacent
+        = (a.y == b.y && a.height == b.height && (a.x + a.width == b.x || b.x + b.width == a.x))
+          || (a.x == b.x && a.width == b.width && (a.y + a.height == b.y || b.y + b.height == a.y));
     if (!adjacent || area.width > 2048 || area.height > 1024
         || std::int64_t(area.width) * area.height > 1024 * 1024)
         return {};
     return area;
 }
-
 }

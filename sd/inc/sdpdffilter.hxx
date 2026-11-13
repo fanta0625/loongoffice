@@ -23,7 +23,10 @@
 
 class SfxMedium;
 class SdPage;
-namespace vcl { class PDFGraphicResult; }
+namespace vcl
+{
+class PDFGraphicResult;
+}
 namespace sd
 {
 class DrawDocShell;

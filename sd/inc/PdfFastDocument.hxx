@@ -15,9 +15,18 @@ class OutputDevice;
 class SdrPage;
 class Size;
 class Bitmap;
-namespace sdr::contact { class ViewObjectContact; }
-namespace vcl { class PDFMetadataReader; }
-namespace drawinglayer::primitive2d { class Primitive2DDecompositionVisitor; }
+namespace sdr::contact
+{
+class ViewObjectContact;
+}
+namespace vcl
+{
+class PDFMetadataReader;
+}
+namespace drawinglayer::primitive2d
+{
+class Primitive2DDecompositionVisitor;
+}
 
 namespace sd
 {
@@ -46,12 +55,22 @@ public:
     void SetEditMode(bool);
     bool IsEditMode() const;
     void NoteScroll();
-    enum class EditState { Ready, Preparing, Failed };
+    enum class EditState
+    {
+        Ready,
+        Preparing,
+        Failed
+    };
     void RequestCurrentPage(SdrView&, const Link<bool, void>& = {});
     EditState GetEditState(const SdrView&) const;
     void ForgetView(const SdrView&);
     bool PrepareForSave();
-    enum class PreviewResult { NotHandled, Pending, Ready };
+    enum class PreviewResult
+    {
+        NotHandled,
+        Pending,
+        Ready
+    };
     PreviewResult GetPagePreview(const SdrPage&, const Size&, Bitmap&, bool visible = true);
 };
 }

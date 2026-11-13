@@ -52,7 +52,10 @@ Size logicalSize(PageSize size)
 class PageView final : public SdrView
 {
 public:
-    PageView(SdrModel& model, OutputDevice* device) : SdrView(model, device) {}
+    PageView(SdrModel& model, OutputDevice* device)
+        : SdrView(model, device)
+    {
+    }
     void transformed() { TheresNewMapMode(); }
 };
 
@@ -65,8 +68,10 @@ using SnapshotCache = Cache<SnapshotKey, Bitmap>;
 class ModelListener final : public SfxListener
 {
     std::function<void()> m_changed;
+
 public:
-    ModelListener(SdrModel& model, std::function<void()> changed) : m_changed(std::move(changed))
+    ModelListener(SdrModel& model, std::function<void()> changed)
+        : m_changed(std::move(changed))
     {
         StartListening(model);
     }
@@ -98,9 +103,8 @@ class PageWindow final : public vcl::Window
     void invalidateSnapshot()
     {
         ++m_revision; // Conservative content epoch, not a count of user edits.
-        m_snapshots.eraseIf([&](const SnapshotKey& key) {
-            return std::get<0>(key) == m_sourcePage;
-        });
+        m_snapshots.eraseIf(
+            [&](const SnapshotKey& key) { return std::get<0>(key) == m_sourcePage; });
     }
     void notify()
     {
@@ -121,14 +125,16 @@ class PageWindow final : public vcl::Window
     {
         if (m_fullPixels.Width() <= 0 || m_fullPixels.Height() <= 0)
             return false;
-        const double factor = std::min(1.0, 2048.0 / std::max(m_fullPixels.Width(), m_fullPixels.Height()));
+        const double factor
+            = std::min(1.0, 2048.0 / std::max(m_fullPixels.Width(), m_fullPixels.Height()));
         const Size pixels(std::max<tools::Long>(1, std::lround(m_fullPixels.Width() * factor)),
                           std::max<tools::Long>(1, std::lround(m_fullPixels.Height() * factor)));
         const SnapshotKey key{ m_sourcePage, m_revision, pixels.Width(), pixels.Height() };
         if (!m_snapshots.contains(key) && m_zoomSettling)
         {
             const auto previous = m_snapshots.keys([&](const SnapshotKey& candidate) {
-                return std::get<0>(candidate) == m_sourcePage && std::get<1>(candidate) == m_revision;
+                return std::get<0>(candidate) == m_sourcePage
+                       && std::get<1>(candidate) == m_revision;
             });
             if (!previous.empty())
                 if (const auto* bitmap = m_snapshots.get(previous.front()))
@@ -162,7 +168,8 @@ class PageWindow final : public vcl::Window
                 if (!access)
                     return false;
             }
-            m_snapshots.put(key, std::move(bitmap), std::size_t(pixels.Width()) * pixels.Height() * 4);
+            m_snapshots.put(key, std::move(bitmap),
+                            std::size_t(pixels.Width()) * pixels.Height() * 4);
         }
         if (const auto* bitmap = m_snapshots.get(key))
         {
@@ -175,8 +182,11 @@ class PageWindow final : public vcl::Window
 public:
     PageWindow(vcl::Window* parent, PageSize size, const EditorHost& host, int sourcePage,
                SnapshotCache& snapshots, const std::shared_ptr<Source>& source)
-        : Window(parent, WB_CLIPCHILDREN), m_host(host), m_sourcePage(sourcePage)
-        , m_snapshots(snapshots), m_source(source)
+        : Window(parent, WB_CLIPCHILDREN)
+        , m_host(host)
+        , m_sourcePage(sourcePage)
+        , m_snapshots(snapshots)
+        , m_source(source)
         , m_model(std::make_unique<SdrModel>(nullptr, nullptr, true))
     {
         SetBackground(Wallpaper(COL_WHITE));
@@ -379,8 +389,9 @@ public:
             undo(key.GetCode() == KEY_Y || key.IsShift());
             return;
         }
-        if (key.IsMod1() && (key.GetCode() == KEY_O || key.GetCode() == KEY_S
-                            || key.GetCode() == KEY_ADD || key.GetCode() == KEY_SUBTRACT))
+        if (key.IsMod1()
+            && (key.GetCode() == KEY_O || key.GetCode() == KEY_S || key.GetCode() == KEY_ADD
+                || key.GetCode() == KEY_SUBTRACT))
         {
             forwardKey(event);
             return;
@@ -418,7 +429,9 @@ class NativeEditor final : public Editor
 
 public:
     NativeEditor(vcl::Window* parent, const std::shared_ptr<Source>& source, const EditorHost& host)
-        : m_parent(parent), m_source(source), m_host(host)
+        : m_parent(parent)
+        , m_source(source)
+        , m_host(host)
     {
         std::lock_guard guard(source->engineMutex);
         materializeSource(*source);
@@ -426,7 +439,7 @@ public:
     }
     ~NativeEditor() override
     {
-        for (auto& [page, window] : m_pages)
+        for (auto & [ page, window ] : m_pages)
             window.disposeAndClear();
     }
     bool prepare(int page, PageSize size, OUString& error) override
@@ -445,7 +458,8 @@ public:
                 if (m_host.changed)
                     m_host.changed();
             };
-            candidate = VclPtr<PageWindow>::Create(m_parent, size, host, page, m_snapshots, m_source);
+            candidate
+                = VclPtr<PageWindow>::Create(m_parent, size, host, page, m_snapshots, m_source);
             candidate->import(Graphic(m_graphics, page));
             m_pages.emplace(page, candidate);
             return true;
@@ -464,7 +478,7 @@ public:
     bool contains(int page) const override { return m_pages.find(page) != m_pages.end(); }
     void readOnly(bool enabled, bool zoomSettling) override
     {
-        for (auto& [page, window] : m_pages)
+        for (auto & [ page, window ] : m_pages)
             window->readOnly(enabled, zoomSettling);
     }
     void place(int page, const tools::Rectangle& rect, bool visible) override
@@ -478,7 +492,8 @@ public:
             it->second->Hide();
             return;
         }
-        const auto clipped = rect.GetIntersection(tools::Rectangle(Point(), m_parent->GetOutputSizePixel()));
+        const auto clipped
+            = rect.GetIntersection(tools::Rectangle(Point(), m_parent->GetOutputSizePixel()));
         if (clipped.IsEmpty())
         {
             it->second->finish();
@@ -498,12 +513,12 @@ public:
     }
     void finish() override
     {
-        for (auto& [page, window] : m_pages)
+        for (auto & [ page, window ] : m_pages)
             window->finish();
     }
     bool modified() const override
     {
-        for (const auto& [page, window] : m_pages)
+        for (const auto & [ page, window ] : m_pages)
             if (window->modified())
                 return true;
         return false;
@@ -524,7 +539,8 @@ bool NativeEditor::exportCopy(const OUString& url, OUString& error)
         std::lock_guard guard(m_source->engineMutex);
         auto engine = vcl::pdf::PDFiumLibrary::get();
         auto document = engine ? engine->openDocument(m_source->bytes.getData(),
-                                                      m_source->bytes.getSize(), OString()) : nullptr;
+                                                      m_source->bytes.getSize(), OString())
+                               : nullptr;
         if (!document)
             throw std::runtime_error("Cannot open the source PDF for export");
         utl::TempFileNamed temp;
@@ -544,8 +560,8 @@ bool NativeEditor::exportCopy(const OUString& url, OUString& error)
                 const Size size = logicalSize({ points.getWidth(), points.getHeight() });
                 device->SetMapMode(MapMode(MapUnit::Map100thMM));
                 const Size pixels = device->LogicToPixel(size);
-                if (pixels.Width() <= 0 || pixels.Height() <= 0
-                    || pixels.Width() > 32768 || pixels.Height() > 32768
+                if (pixels.Width() <= 0 || pixels.Height() <= 0 || pixels.Width() > 32768
+                    || pixels.Height() > 32768
                     || std::uint64_t(pixels.Width()) * pixels.Height() > 64 * 1024 * 1024
                     || !device->SetOutputSizePixel(pixels))
                     throw std::runtime_error("The page is too large for PDF export");
@@ -587,8 +603,10 @@ bool NativeEditor::exportCopy(const OUString& url, OUString& error)
         // Exclusive create: never truncate the input or any existing destination,
         // including aliases/symlinks. A failed export never replaces an old file.
         osl::File output(url);
-        if (output.open(osl_File_OpenFlag_Write | osl_File_OpenFlag_Create) != osl::FileBase::E_None)
-            throw std::runtime_error("Choose a new filename; an existing file will not be overwritten");
+        if (output.open(osl_File_OpenFlag_Write | osl_File_OpenFlag_Create)
+            != osl::FileBase::E_None)
+            throw std::runtime_error(
+                "Choose a new filename; an existing file will not be overwritten");
         bool completed = false;
         comphelper::ScopeGuard removeIncomplete([&] {
             if (!completed)
@@ -608,7 +626,8 @@ bool NativeEditor::exportCopy(const OUString& url, OUString& error)
                 if (!read)
                     break;
                 sal_uInt64 written = 0;
-                ok = output.write(buffer, read, written) == osl::FileBase::E_None && written == read;
+                ok = output.write(buffer, read, written) == osl::FileBase::E_None
+                     && written == read;
             }
             ok = ok && !input.GetError() && output.sync() == osl::FileBase::E_None;
         }
@@ -634,7 +653,7 @@ bool NativeEditor::exportCopy(const OUString& url, OUString& error)
 
 extern "C" SAL_DLLPUBLIC_EXPORT pdffast::Editor*
 pdffast_create_editor(vcl::Window* parent, const std::shared_ptr<pdffast::Source>& source,
-                     const pdffast::EditorHost& host)
+                      const pdffast::EditorHost& host)
 {
     return new pdffast::NativeEditor(parent, source, host);
 }

@@ -11,7 +11,10 @@
 
 class CommandEvent;
 class KeyEvent;
-namespace vcl { class Window; }
+namespace vcl
+{
+class Window;
+}
 
 namespace pdffast
 {
