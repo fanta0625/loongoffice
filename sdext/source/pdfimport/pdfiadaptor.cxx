@@ -19,6 +19,7 @@
 
 
 #include "pdfiadaptor.hxx"
+#include <config_features.h>
 #include "filterdet.hxx"
 #include <saxemitter.hxx>
 #include <odfemitter.hxx>
@@ -272,6 +273,7 @@ sal_Bool SAL_CALL PDFIRawAdaptor::importer( const uno::Sequence< beans::Property
     OUString aURL;
     OUString aPwd;
     OUString aFilterOptions;
+    OUString aCommands, aBinary;
     for( const beans::PropertyValue& rAttrib : rSourceData )
     {
         SAL_INFO("sdext.pdfimport", "importer Attrib: " << rAttrib.Name );
@@ -287,17 +289,35 @@ sal_Bool SAL_CALL PDFIRawAdaptor::importer( const uno::Sequence< beans::Property
             rAttrib.Value >>= aPwd;
         else if ( rAttrib.Name == "FilterOptions" )
             rAttrib.Value >>= aFilterOptions;
+#if HAVE_FEATURE_LOONGOFFICE_PDF_FAST
+        else if (rAttrib.Name == "LoongOfficePdfCommands")
+            rAttrib.Value >>= aCommands;
+        else if (rAttrib.Name == "LoongOfficePdfBinary")
+            rAttrib.Value >>= aBinary;
+#endif
     }
-    if( !xInput.is() )
+    if (!xInput.is() && aCommands.isEmpty())
         return false;
 
     XmlEmitterSharedPtr pEmitter = createSaxEmitter(rHdl);
-    const bool bSuccess = parse(xInput, xInteractionHandler,
-                                aPwd, xStatus, pEmitter, aURL, aFilterOptions);
+    bool bSuccess;
+    if (!aCommands.isEmpty())
+    {
+        auto sink = std::make_shared<PDFIProcessor>(xStatus, m_xContext);
+        bSuccess = xpdf_ImportFromRecorded(aCommands, aBinary, sink, m_xContext);
+        if (bSuccess)
+            sink->emit(*pEmitter, *m_pVisitorFactory);
+    }
+    else
+        bSuccess = parse(xInput, xInteractionHandler,
+                         aPwd, xStatus, pEmitter, aURL, aFilterOptions);
 
     // tell input stream that it is no longer needed
-    xInput->closeInput();
-    xInput.clear();
+    if (xInput.is())
+    {
+        xInput->closeInput();
+        xInput.clear();
+    }
 
     return bSuccess;
 }

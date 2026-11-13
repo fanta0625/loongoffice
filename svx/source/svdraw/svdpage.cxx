@@ -1893,6 +1893,7 @@ void SdrPage::dumpAsXml(xmlTextWriterPtr pWriter) const
 // DrawContact support: Methods for handling Page changes
 void SdrPage::ActionChanged()
 {
+    BumpVisualRevision();
     // Do necessary ViewContact actions
     GetViewContact().ActionChanged();
 

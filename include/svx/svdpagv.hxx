@@ -66,6 +66,7 @@ private:
     SdrLayerIDSet    m_aLayerPrn;    // Set of printable Layers
 
     SdrObjList*  m_pCurrentList;     // Current List, usually the Page
+    bool mbContentReadOnly = false;
     SdrObject*   m_pCurrentGroup;    // Current Group; nullptr means none
 
     SdrHelpLineList m_aHelpLines; // Helper lines and points
@@ -84,6 +85,7 @@ private:
 
 public:
     sal_uInt32 PageWindowCount() const { return maPageWindows.size(); }
+    void SetContentReadOnly(bool readOnly) { mbContentReadOnly = readOnly; }
     SdrPageWindow* FindPageWindow( const SdrPaintWindow& rPaintWindow ) const;
     SdrPageWindow* FindPageWindow( const OutputDevice& rOutDev ) const;
     SdrPageWindow* GetPageWindow(sal_uInt32 nIndex) const;

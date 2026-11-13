@@ -479,4 +479,7 @@
 #define STR_A11Y_PRESENTER_PREVIEW                      NC_("STR_A11Y_PRESENTER_PREVIEW", "Current Slide Info")
 #define STR_A11Y_PRESENTER_NOTES                        NC_("STR_A11Y_PRESENTER_NOTES", "Presenter Notes")
 
+#define STR_PDF_PREPARING                            NC_("STR_PDF_PREPARING", "Preparing this PDF page for editing…")
+#define STR_PDF_PREPARE_FAILED                       NC_("STR_PDF_PREPARE_FAILED", "This PDF page could not be prepared. Reopen the page to retry.")
+
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

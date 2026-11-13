@@ -38,6 +38,11 @@
 #include <glob.hxx>
 #include <strings.hrc>
 #include <drawdoc.hxx>
+#include <config_features.h>
+#if HAVE_FEATURE_LOONGOFFICE_PDF_FAST
+#include <PdfFastDocument.hxx>
+#include <com/sun/star/uno/RuntimeException.hpp>
+#endif
 #include <stlpool.hxx>
 #include <pglink.hxx>
 
@@ -399,6 +404,13 @@ void SdPage::lateInit(const SdPage& rSrcPage)
 
 rtl::Reference<SdrPage> SdPage::CloneSdrPage(SdrModel& rTargetModel) const
 {
+#if HAVE_FEATURE_LOONGOFFICE_PDF_FAST
+    // Clipboard, duplication and cross-document copies all pass through here.
+    // Deferred annotations must be present before lateInit copies the page.
+    if (auto* fast = static_cast<SdDrawDocument&>(getSdrModelFromSdrPage()).GetPdfFastDocument())
+        if (!fast->EnsureMetadata(*const_cast<SdPage*>(this)))
+            throw uno::RuntimeException(u"Unable to read PDF page metadata"_ustr);
+#endif
     SdDrawDocument& rSdDrawDocument(static_cast< SdDrawDocument& >(rTargetModel));
     rtl::Reference<SdPage> pClonedSdPage(
         new SdPage(

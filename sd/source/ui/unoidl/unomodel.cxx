@@ -81,6 +81,10 @@
 #include <notifydocumentevent.hxx>
 #include <tpaction.hxx>
 #include <unomodel.hxx>
+#include <config_features.h>
+#if HAVE_FEATURE_LOONGOFFICE_PDF_FAST
+#include <PdfFastDocument.hxx>
+#endif
 #include <sdhtmlfilter.hxx>
 #include "unopool.hxx"
 #include <sfx2/lokhelper.hxx>
@@ -3067,6 +3071,12 @@ sal_Int32 SAL_CALL SdXImpressDocument::getRendererCount( const uno::Any& rSelect
     if( nullptr == mpDoc )
         throw lang::DisposedException();
 
+#if HAVE_FEATURE_LOONGOFFICE_PDF_FAST
+    if (auto* fast = mpDoc->GetPdfFastDocument())
+        if (!fast->EnsureAllMetadata())
+            throw uno::RuntimeException(u"Unable to read PDF page metadata"_ustr);
+#endif
+
     if (mpDocShell)
     {
         uno::Reference< frame::XModel > xModel;
@@ -3095,6 +3105,12 @@ uno::Sequence< beans::PropertyValue > SAL_CALL SdXImpressDocument::getRenderer( 
 
     if( nullptr == mpDoc )
         throw lang::DisposedException();
+
+#if HAVE_FEATURE_LOONGOFFICE_PDF_FAST
+    if (auto* fast = mpDoc->GetPdfFastDocument())
+        if (!fast->EnsureAllMetadata())
+            throw uno::RuntimeException(u"Unable to read PDF page metadata"_ustr);
+#endif
 
     bool bExportNotesPages = false;
     for( const auto& rOption : rxOptions )
@@ -3474,6 +3490,12 @@ void SAL_CALL SdXImpressDocument::render( sal_Int32 nRenderer, const uno::Any& r
 
     if( nullptr == mpDoc )
         throw lang::DisposedException();
+
+#if HAVE_FEATURE_LOONGOFFICE_PDF_FAST
+    if (auto* fast = mpDoc->GetPdfFastDocument())
+        if (!fast->EnsureAllMetadata())
+            throw uno::RuntimeException(u"Unable to read PDF page metadata"_ustr);
+#endif
 
     if (!mpDocShell)
         return;

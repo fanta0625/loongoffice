@@ -163,6 +163,15 @@ DrawViewShell::~DrawViewShell()
 
 void DrawViewShell::ImplDestroy()
 {
+#if HAVE_FEATURE_LOONGOFFICE_PDF_FAST
+    if (auto* controller = GetDoc()->GetPdfFastDocument())
+    {
+        if (mpDrawView)
+            controller->ForgetView(*mpDrawView);
+        if (GetViewFrame())
+            GetViewFrame()->GetDispatcher()->SetContentReadOnly(false);
+    }
+#endif
     destroyXSlideShowInstance();
 
     SdModule::get()->GetColorConfig().RemoveListener(this);
@@ -775,8 +784,9 @@ void DrawViewShell::Notify (SfxBroadcaster&, const SfxHint& rHint)
         return;
 
 #if HAVE_FEATURE_LOONGOFFICE_PDF_FAST
-    if (!GetDocSh()->IsReadOnly() && mpDrawView && GetDoc()->GetPdfFastDocument())
-        GetDoc()->GetPdfFastDocument()->PrepareCurrentPage(*mpDrawView);
+    if (auto* fast = GetDoc()->GetPdfFastDocument())
+        fast->SetEditMode(!GetDocSh()->IsReadOnlyUI());
+    RequestPdfPage();
 #endif
 
     // Change to selection when turning on read-only mode.

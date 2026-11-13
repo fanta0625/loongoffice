@@ -9,5 +9,6 @@ $(eval $(call gb_StaticLibrary_use_api,pdffastcore,offapi udkapi))
 $(eval $(call gb_StaticLibrary_add_exception_objects,pdffastcore,\
     pdffast/source/session \
     pdffast/source/input \
+    pdffast/source/nativeimport \
 ))
 # vim: set noet sw=4 ts=4:

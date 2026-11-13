@@ -265,6 +265,8 @@ sdr::contact::ViewContact& SdrObject::GetViewContact() const
 // DrawContact support: Methods for handling Object changes
 void SdrObject::ActionChanged() const
 {
+    if (auto* page = getSdrPageFromSdrObject())
+        page->BumpVisualRevision();
     // Do necessary ViewContact actions
     GetViewContact().ActionChanged();
 }

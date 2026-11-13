@@ -19,6 +19,7 @@
 
 #include <vcl/filter/PDFiumLibrary.hxx>
 #include <sal/log.hxx>
+#include <cmath>
 
 using namespace com::sun::star;
 
@@ -364,8 +365,40 @@ findLinks(const std::unique_ptr<vcl::pdf::PDFiumPage>& pPage,
 
 } // end anonymous namespace
 
-size_t ImportPDFUnloaded(SvStream& rStream, std::vector<PDFGraphicResult>& rGraphics)
+struct PDFMetadataReader::Impl
 {
+    std::shared_ptr<GfxLink> source;
+    std::unique_ptr<pdf::PDFiumDocument> document;
+};
+
+PDFMetadataReader::PDFMetadataReader(std::unique_ptr<Impl> impl) : m_impl(std::move(impl)) {}
+PDFMetadataReader::~PDFMetadataReader() = default;
+
+std::optional<PDFGraphicResult> PDFMetadataReader::ReadPage(int index)
+{
+    if (index < 0 || index >= m_impl->document->getPageCount())
+        return std::nullopt;
+    const auto size = m_impl->document->getPageSize(index);
+    auto page = m_impl->document->openPage(index);
+    if (!page)
+        return std::nullopt;
+    return PDFGraphicResult(Graphic(m_impl->source, index),
+        Size(std::round(convertPointToMm100(size.getWidth())),
+             std::round(convertPointToMm100(size.getHeight()))),
+        findAnnotations(page, size), findLinks(page, m_impl->document, size));
+}
+
+size_t ImportPDFUnloaded(SvStream& stream, std::vector<PDFGraphicResult>& graphics)
+{
+    return ImportPDFUnloaded(stream, graphics, nullptr);
+}
+
+size_t ImportPDFUnloaded(SvStream& rStream, std::vector<PDFGraphicResult>& rGraphics,
+                        std::unique_ptr<PDFMetadataReader>* deferred)
+{
+    const auto initialSize = rGraphics.size();
+    if (deferred)
+        deferred->reset();
     bool bEncrypted;
 
     // Save the original PDF stream for later use.
@@ -396,8 +429,17 @@ size_t ImportPDFUnloaded(SvStream& rStream, std::vector<PDFGraphicResult>& rGrap
     for (int nPageIndex = 0; nPageIndex < nPageCount; ++nPageIndex)
     {
         basegfx::B2DSize aPageSize = pPdfDocument->getPageSize(nPageIndex);
-        if (aPageSize.getWidth() <= 0.0 || aPageSize.getHeight() <= 0.0)
+        if (!std::isfinite(aPageSize.getWidth()) || !std::isfinite(aPageSize.getHeight())
+            || aPageSize.getWidth() <= 0.0 || aPageSize.getHeight() <= 0.0)
+        {
+            if (deferred)
+            {
+                // Draw page indices must stay aligned with the frozen PDF.
+                rGraphics.erase(rGraphics.begin() + initialSize, rGraphics.end());
+                return 0;
+            }
             continue;
+        }
 
         // Returned unit is points
 
@@ -408,6 +450,14 @@ size_t ImportPDFUnloaded(SvStream& rStream, std::vector<PDFGraphicResult>& rGrap
         // We swap out this Graphic as soon as possible, and a later swap in
         // actually renders the correct Bitmap on demand.
         Graphic aGraphic(pGfxLink, nPageIndex);
+
+        if (deferred)
+        {
+            rGraphics.emplace_back(std::move(aGraphic), Size(nPageWidth, nPageHeight),
+                std::vector<PDFGraphicAnnotation>(),
+                std::vector<std::pair<basegfx::B2DRectangle, OUString>>());
+            continue;
+        }
 
         auto pPage = pPdfDocument->openPage(nPageIndex);
         if (!pPage)
@@ -426,6 +476,13 @@ size_t ImportPDFUnloaded(SvStream& rStream, std::vector<PDFGraphicResult>& rGrap
                                aPDFGraphicAnnotations, aPDFLinksInfo);
     }
 
+    if (deferred)
+    {
+        auto impl = std::make_unique<PDFMetadataReader::Impl>();
+        impl->source = std::move(pGfxLink);
+        impl->document = std::move(pPdfDocument);
+        deferred->reset(new PDFMetadataReader(std::move(impl)));
+    }
     return rGraphics.size();
 }
 

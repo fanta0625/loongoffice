@@ -22,6 +22,8 @@
 #include "sdfilter.hxx"
 
 class SfxMedium;
+class SdPage;
+namespace vcl { class PDFGraphicResult; }
 namespace sd
 {
 class DrawDocShell;
@@ -36,6 +38,7 @@ public:
 
     bool Import();
     bool Export() override;
+    static void ApplyPageMetadata(SdPage&, const vcl::PDFGraphicResult&);
 };
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

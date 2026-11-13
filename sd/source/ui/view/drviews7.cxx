@@ -687,7 +687,7 @@ void DrawViewShell::GetMenuState( SfxItemSet &rSet )
     }
 
     if( SfxItemState::DEFAULT == rSet.GetItemState( SID_CONTEXT ) )
-        rSet.Put( SfxStringItem( SID_CONTEXT, mpDrawView->GetStatusText() ) );
+        rSet.Put( SfxStringItem( SID_CONTEXT, GetPdfStatusText() ) );
 
     // clipboard (paste)
     if( SfxItemState::DEFAULT == rSet.GetItemState( SID_PASTE ) ||

@@ -20,6 +20,11 @@
 #include "SlsQueueProcessor.hxx"
 #include "SlsRequestQueue.hxx"
 #include "SlsBitmapCache.hxx"
+#include <config_features.h>
+#if HAVE_FEATURE_LOONGOFFICE_PDF_FAST
+#include <PdfFastDocument.hxx>
+#include <drawdoc.hxx>
+#endif
 
 #include <sdpage.hxx>
 #include <comphelper/profilezone.hxx>
@@ -135,8 +140,24 @@ void QueueProcessor::ProcessOneRequest (
             const SdPage* pSdPage = dynamic_cast<const SdPage*>(mpCacheContext->GetPage(aKey));
             if (pSdPage != nullptr)
             {
-                const Bitmap aPreview (
-                    maBitmapFactory.CreateBitmap(*pSdPage, maPreviewSize, mbDoSuperSampling));
+                Bitmap aPreview;
+#if HAVE_FEATURE_LOONGOFFICE_PDF_FAST
+                auto* doc = dynamic_cast<SdDrawDocument*>(&pSdPage->getSdrModelFromSdrPage());
+                auto* fast = doc ? doc->GetPdfFastDocument() : nullptr;
+                const auto result = fast
+                    ? fast->GetPagePreview(*pSdPage, maPreviewSize, aPreview)
+                    : PdfFastDocument::PreviewResult::NotHandled;
+                if (result == PdfFastDocument::PreviewResult::Pending)
+                {
+                    // Keep the existing preview while the shared raster worker
+                    // runs. RequestQueue owns page lifetime tracking; its timer
+                    // retries without a blocking render or a cached empty image.
+                    mrQueue.AddRequest(aKey, ePriorityClass);
+                    return;
+                }
+                if (result == PdfFastDocument::PreviewResult::NotHandled)
+#endif
+                    aPreview = maBitmapFactory.CreateBitmap(*pSdPage, maPreviewSize, mbDoSuperSampling);
                 mpCache->SetBitmap (pSdPage, aPreview, ePriorityClass!=NOT_VISIBLE);
 
                 // Initiate a repaint of the new preview.

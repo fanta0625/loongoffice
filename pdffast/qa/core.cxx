@@ -8,6 +8,7 @@
 #include "cache.hxx"
 #include "demand.hxx"
 #include "transfer.hxx"
+#include "viewpolicy.hxx"
 #include <cppunit/TestFixture.h>
 #include <cppunit/extensions/HelperMacros.h>
 #include <cppunit/plugin/TestPlugIn.h>
@@ -36,9 +37,47 @@ class CoreTest final : public CppUnit::TestFixture
     CPPUNIT_TEST(testFallbackCoverage);
     CPPUNIT_TEST(testCacheEviction);
     CPPUNIT_TEST(testReplacementAndOversizedEntry);
+    CPPUNIT_TEST(testZoomSettle);
+    CPPUNIT_TEST(testFallbackLevel);
     CPPUNIT_TEST_SUITE_END();
 
 public:
+    void testZoomSettle()
+    {
+        using namespace std::chrono;
+        const steady_clock::time_point start{};
+        pdffast::ZoomSettle zoom;
+        zoom.update(0, 600, 800, start);
+        CPPUNIT_ASSERT(!zoom.pending(start));
+        zoom.update(0, 900, 1200, start + milliseconds(10));
+        CPPUNIT_ASSERT(zoom.pending(start + milliseconds(89)));
+        // A preview delivery/scroll at the same scale must not extend settling.
+        zoom.update(0, 900, 1200, start + milliseconds(60));
+        CPPUNIT_ASSERT(!zoom.pending(start + milliseconds(90)));
+        zoom.update(0, 1200, 1600, start + milliseconds(100));
+        zoom.update(0, 1500, 2000, start + milliseconds(150));
+        CPPUNIT_ASSERT(zoom.pending(start + milliseconds(229)));
+        CPPUNIT_ASSERT(!zoom.pending(start + milliseconds(230)));
+        zoom.update(1, 600, 800, start + milliseconds(160));
+        CPPUNIT_ASSERT(!zoom.pending(start + milliseconds(160)));
+    }
+    void testFallbackLevel()
+    {
+        using pdffast::TileKey;
+        const std::vector<TileKey> levels{
+            { 0, 300, 400, 0, 0, 300, 400 },
+            { 0, 1200, 1600, 0, 0, 512, 512 },
+            { 0, 1800, 2400, 0, 0, 512, 512 },
+            { 0, 0, 0, 0, 0, 1, 1 }
+        };
+        CPPUNIT_ASSERT((pdffast::fallbackLevel(levels, 1000, 1333)
+                        == std::pair<int, int>(1200, 1600)));
+        CPPUNIT_ASSERT((pdffast::fallbackLevel(levels, 1700, 2267)
+                        == std::pair<int, int>(1800, 2400)));
+        CPPUNIT_ASSERT((pdffast::fallbackLevel({}, 1000, 1000) == std::pair<int, int>()));
+        CPPUNIT_ASSERT((pdffast::fallbackLevel(levels, 0, 1000) == std::pair<int, int>()));
+    }
+
     void testLayoutAgainstLinearReference()
     {
         // Out-of-order sizes, repeated changes and page lookup against an

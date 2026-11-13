@@ -399,6 +399,7 @@ private:
     sdr::PageUserVector                                             maPageUsers;
 
     std::unique_ptr<sdr::contact::ViewContact> mpViewContact;
+    sal_uInt64 mnVisualRevision = 0;
 
 public:
     void AddPageUser(sdr::PageUser& rNewUser);
@@ -416,6 +417,8 @@ public:
 
     // #110094# DrawContact support: Methods for handling Page changes
     void ActionChanged();
+    sal_uInt64 GetVisualRevision() const { return mnVisualRevision; }
+    void BumpVisualRevision() { ++mnVisualRevision; }
 
 private:
     // the SdrModel this page was created with, unchanged during SdrPage lifetime
