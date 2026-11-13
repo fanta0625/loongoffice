@@ -1,5 +1,7 @@
 # PDF 原生 Draw 优化实现记录
 
+本文保留早期版本的实现和验证记录；其中 134 项测试、区域快照和未提交状态均为当时口径。当前验证见 [REFACTORING.md](REFACTORING.md)。
+
 跳页／缩略图与编辑态绘制的最新回归修复、测试命令及实测范围见 [SEEK_ZOOM_REGRESSION.md](SEEK_ZOOM_REGRESSION.md)。
 
 基线：`feat/pdf-fast-26.2.6`，`f78aaa0f613fe1d76bff6f9e3b0d5ef2716d9543`。

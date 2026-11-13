@@ -2,7 +2,7 @@
 
 跳页／缩略图与编辑态绘制的最新回归修复、测试命令及实测范围见 [SEEK_ZOOM_REGRESSION.md](SEEK_ZOOM_REGRESSION.md)。
 
-状态：2026-11-13，基于 `f78aaa0f613f` 的工作区实现。已完成 WSL2 / Debian 13 的 Linux release 集成构建，五项 CppUnit 共 134 个测试及 3 个 Python 测试通过；GUI 性能采集条件与覆盖范围见验证记录。完整范围与性能边界见 [OPTIMIZATION_IMPLEMENTATION.md](OPTIMIZATION_IMPLEMENTATION.md)。产品入口是原生 Draw，独立阅读器用于后端对照。
+本文件描述原生 Draw 接入。历史构建、GUI 性能采集条件与覆盖范围见验证记录；当前原生改动清理及独立 VCL 修复见 [REFACTORING.md](REFACTORING.md)。产品入口是原生 Draw，独立阅读器用于后端对照。
 
 ## 打开与只读预览
 

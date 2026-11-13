@@ -82,46 +82,6 @@ PreviewRenderer::~PreviewRenderer()
         EndListening (*mpDocShellOfView);
 }
 
-Bitmap PreviewRenderer::RenderRegion(const SdPage& page, const Size& fullPagePixels,
-                                    const tools::Rectangle& region, const SdrPageView& sourceView)
-{
-    if (mbHasFrame || region.IsEmpty() || region.GetWidth() > 1024
-        || region.GetHeight() > 1024 || fullPagePixels.IsEmpty()
-        || page.GetSize().IsEmpty()
-        || !tools::Rectangle(Point(), fullPagePixels).Contains(region))
-        return {};
-    comphelper::ScopeGuard restore([&] {
-        if (mpView)
-            mpView->HideSdrPage();
-        mpPreviewDevice->SetPixelOffset(Size());
-        mpPreviewDevice->EnableMapMode();
-    });
-    try
-    {
-        // Keep rasterizer clipping away from the requested tile boundary.
-        // Otherwise antialiased strokes can differ from a full-page crop.
-        constexpr tools::Long padding = 32;
-        const tools::Rectangle renderRegion(
-            Point(std::max<tools::Long>(0, region.Left() - padding),
-                  std::max<tools::Long>(0, region.Top() - padding)),
-            Point(std::min(fullPagePixels.Width() - 1, region.Right() + padding),
-                  std::min(fullPagePixels.Height() - 1, region.Bottom() + padding)));
-        if (!Initialize(&page, fullPagePixels, false, &renderRegion, &sourceView))
-            return {};
-        if (!PaintPage(&page, true))
-            return {};
-        // GetBitmap uses output coordinates after disabling the map mode.
-        mpPreviewDevice->SetPixelOffset(Size());
-        mpPreviewDevice->EnableMapMode(false);
-        return mpPreviewDevice->GetBitmap(region.TopLeft() - renderRegion.TopLeft(), region.GetSize());
-    }
-    catch (const css::uno::Exception&)
-    {
-        DBG_UNHANDLED_EXCEPTION("sd.tools");
-        return {};
-    }
-}
-
 Image PreviewRenderer::RenderPage (
     const SdPage* pPage,
     const sal_Int32 nWidth)
@@ -239,14 +199,12 @@ Image PreviewRenderer::RenderSubstitution (
 bool PreviewRenderer::Initialize (
     const SdPage* pPage,
     const Size& rPixelSize,
-    const bool bObeyHighContrastMode,
-    const tools::Rectangle* pRegion,
-    const SdrPageView* pSourceView)
+    const bool bObeyHighContrastMode)
 {
     if (!pPage)
         return false;
 
-    SetupOutputSize(*pPage, rPixelSize, pRegion);
+    SetupOutputSize(*pPage, rPixelSize);
     SdDrawDocument& rDocument(static_cast< SdDrawDocument& >(pPage->getSdrModelFromSdrPage()));
     DrawDocShell* pDocShell = rDocument.GetDocSh();
 
@@ -283,13 +241,6 @@ bool PreviewRenderer::Initialize (
     if (pPageView == nullptr)
         return false;
 
-    if (pSourceView)
-    {
-        pPageView->SetVisibleLayers(pSourceView->GetVisibleLayers());
-        pPageView->SetPrintableLayers(pSourceView->GetPrintableLayers());
-        pPageView->SetApplicationDocumentColor(pSourceView->GetApplicationDocumentColor());
-    }
-
     // #i121224# No need to set SetApplicationBackgroundColor (which is the color
     // of the area 'behind' the page (formerly called 'Wiese') since the page previews
     // produced exactly cover the page's area, so it would never be visible. What
@@ -317,7 +268,7 @@ bool PreviewRenderer::Initialize (
     return true;
 }
 
-bool PreviewRenderer::PaintPage (
+void PreviewRenderer::PaintPage (
     const SdPage* pPage,
     const bool bDisplayPresentationObjects)
 {
@@ -352,9 +303,7 @@ bool PreviewRenderer::PaintPage (
     catch (const css::uno::Exception&)
     {
         DBG_UNHANDLED_EXCEPTION("sd.tools");
-        return false;
     }
-    return true;
 }
 
 void PreviewRenderer::PaintSubstitutionText (const OUString& rSubstitutionText)
@@ -403,21 +352,8 @@ void PreviewRenderer::PaintFrame()
 
 void PreviewRenderer::SetupOutputSize (
     const SdPage& rPage,
-    const Size& rFramePixelSize,
-    const tools::Rectangle* pRegion)
+    const Size& rFramePixelSize)
 {
-    mpPreviewDevice->SetPixelOffset(Size());
-    if (pRegion)
-    {
-        const Size modelSize(rPage.GetSize());
-        MapMode mode(MapUnit::MapPixel);
-        mode.SetScaleX(Fraction(rFramePixelSize.Width(), modelSize.Width()));
-        mode.SetScaleY(Fraction(rFramePixelSize.Height(), modelSize.Height()));
-        mpPreviewDevice->SetMapMode(mode);
-        mpPreviewDevice->SetOutputSizePixel(pRegion->GetSize());
-        mpPreviewDevice->SetPixelOffset(Size(-pRegion->Left(), -pRegion->Top()));
-        return;
-    }
     // First set the map mode to some arbitrary scale that is numerically
     // stable.
     MapMode aMapMode (mpPreviewDevice->GetMapMode());

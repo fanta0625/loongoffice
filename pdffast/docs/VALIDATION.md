@@ -1,13 +1,15 @@
 # 真实渲染验证与成本测量
 
+本文保留 2026-11-13 较早版本的验证记录，下面的 134 项及区域快照数据仅适用于当时版本。当前架构收敛后的验证结果见 [REFACTORING.md](REFACTORING.md)。
+
 状态（2026-11-13，日本时间）：已在 Debian 13 / WSL2 的 ext4 工作区完成启用 PDF Fast 的 Linux x86_64 release 构建，使用 GCC 14.2、GTK3、仓库内置 PDFium 与 Poppler。最终完整 make 成功；五项 gbuild CppUnit 目标共 134 个测试通过：pdffast_core 16、pdffast_render 5、sd_pdf_import_test 10、sdext_pdfimport 16、vcl_graphic_test 87；日志汇总脚本 3 个 Python 测试通过。此前 Windows 独立核心测试不能替代这次实际集成验证。实现范围与性能边界见 [本轮实现说明](OPTIMIZATION_IMPLEMENTATION.md)。
 
-本轮编辑沿用默认 Draw Poppler/XML 导入链。三页回归样本覆盖文本、矢量路径、渐变、Form 变换、图片和空白页；默认整份导入与延迟单页导入的对象边界、绘制位图校验及跨页撤销测试已通过。另验证保留目标页尺寸／边距、失败保留预览、异步准备门控、延迟批注克隆／保存屏障、只读原生区域快照及 ODG 保存重开。区域快照与整页裁剪按 RGBA 逐像素比较，避免 RGB／带不透明 alpha 的位图格式影响校验。
+本轮编辑沿用默认 Draw Poppler/XML 导入链。三页回归样本覆盖文本、矢量路径、渐变、Form 变换、图片和空白页；默认整份导入与延迟单页导入的对象边界、绘制位图校验及跨页撤销测试已通过。另验证保留目标页尺寸／边距、失败保留预览、异步准备门控、延迟批注克隆／保存屏障及 ODG 保存重开。区域快照方案及其专用测试后来已移除；这些历史测试数字不代表当前测试数量。
 
 实际编译与运行还修正了 helper 相邻命令行选项被跳过、FilterFactory 服务创建及跨库类型／导出问题；临时 Draw 导入文档改用原生数据模型初始化，避免新建文档默认字距改变导入文本。区域快照修正像素偏移后的变换缓存失效，并在绘制边界增加 32 px 裁剪余量。
 GUI 重复测试还发现后台单页解析成功后，依赖预览定时器领取结果会出现停顿。现在传输线程在发布结果后主动投递 UI 事件；关闭文档时先 join 生产者再移除尚未执行的事件。传输集成测试增加通知必须晚于结果发布的断言，修改后的完整构建与 134 项 CppUnit、3 项 Python 检查再次通过。定时器仍承担防抖和预览调度，但不再是编辑结果进入 UI 的唯一通道。
 
-诊断更新：启用 PDF Fast 时，sd、svxcore 和 pdffastcore 显式保留 INFO 日志，release 构建也能使用 `SAL_LOG=+INFO.pdffast`；无需全局开启 `--enable-sal-log`。视口更新后的瓦片重新调度已经通过三类样本的基本打开／缩放 GUI 检查；快速连续缩放和滚动呈现仍需更专门的追踪。新日志 `native-edit-import backend=poppler` 明确记录默认导入器调用结果、输出页数和耗时。
+诊断更新：启用 PDF Fast 时，sd 和 pdffastcore 显式保留 INFO 日志，release 构建也能使用 `SAL_LOG=+INFO.pdffast`；无需全局开启 `--enable-sal-log`。svxcore 的旧诊断日志和相关构建开关已经移除。视口更新后的瓦片重新调度已经通过三类样本的基本打开／缩放 GUI 检查；快速连续缩放和滚动呈现仍需更专门的追踪。新日志 `native-edit-import backend=poppler` 明确记录默认导入器调用结果、输出页数和耗时。
 
 ## 原生 Draw 验证入口
 
@@ -27,12 +29,12 @@ GUI 验收顺序：
 
 1. 打开多页 PDF，确认原生 Draw 窗口和只读 InfoBar；缩放、拖动滚动条、快速换页，观察先预览后高清。高 DPI、缓存不足时不能留下持续白洞。
 2. 点 InfoBar“编辑”，确认只准备当前页。准备中应显示状态，并按原生只读命令规则阻止内容修改；快速切页／返回只读应撤回旧请求。修改文本／移动对象，切换另一页首次准备，再返回并撤销／重做，修改与历史必须保留。用故障或非法页验证失败保留预览，重访能重试，关闭视图不残留命令门控。
-3. 切回只读，已编辑页先原生绘制，再使用原生快照；继续缩放、换页、修改／撤销／重做、改变图层和界面样式，确认不显示旧内容。高对比度和页外对象应正确回退。准备尚未完成时修改页面格式，最终尺寸／边距／背景不得被导入页覆盖。
+3. 切回只读，已编辑页继续使用原生 Draw 绘制；继续缩放、换页、修改／撤销／重做、改变图层和界面样式，确认不显示旧内容。高对比度和页外对象应正确显示。准备尚未完成时修改页面格式，最终尺寸／边距／背景不得被导入页覆盖。
 4. 不等待后台批注补齐就复制页面、打印或导出，确认批注与链接完整且不重复；读取失败应阻止依赖完整内容的操作。另存 ODG 后重开并进入编辑，用独立查看器核对导出 PDF 的编辑页、未访问页、批注／链接、旋转和透明内容。普通 ODG 保存会转换剩余页，应单独测量耗时。
 5. 有后台任务时 Ctrl+O、关窗口、关闭文档、退出；多个视图及多份 PDF 重复。检查无挂起／崩溃，必要时用已有 ASan 构建。真实只读文件仍遵循原生权限流程。
 6. 打开 ODG、ODP、SVG 等非 PDF，确认不进入新分支；关闭编译开关构建时确认无额外只读行为。无界面转换与 LibreOfficeKit 单独回归。
 
-`native-import total_us` 包含原生文件读取与全部页面建立；桌面快速入口不再包含延后执行的批注／链接导入，也不含 Office 启动与后续首屏呈现。`native-metadata total_us` 按页记录元数据读取和应用，包含 annotations／links 计数；`native-read-snapshot total_us` 记录单个原生只读快照区域生成，包含 width／height。二者计时都不能作为实际呈现延迟。`native-ui-image allocation_us/upload_cache_us` 与现有汇总脚本兼容。`native-edit-transport total_us` 在后台记录源快照（首次）、helper 打开（首次／故障重建）、单页解析及命令写出；`native-edit-import backend=poppler total_us` 现在仅记录主线程回放及 XML 导入；`native-edit-prepare total_us` 包含后者及暂存、样式固化和对象迁移，两者不能相加。`native-source-snapshot bytes` 与 `native-edit-session opened` 用于检查同一文档连续编辑是否复用了源及 helper；故障／取消可以重新打开 helper。汇总脚本输出 native_stages、native_source_snapshots_bytes、native_helper_opens；多个文档共用日志时计数会合并。区域渲染继续使用已有 worker 日志。原生入口使用导入的内存源，不产生随机 FileInput 的 input-summary，缺少这条记录不等于文件 I/O 为零。
+`native-import total_us` 包含原生文件读取与全部页面建立；桌面快速入口不再包含延后执行的批注／链接导入，也不含 Office 启动与后续首屏呈现。`native-metadata total_us` 按页记录元数据读取和应用，包含 annotations／links 计数，不能作为实际呈现延迟。旧版 `native-read-snapshot` 日志仅用于分析历史记录，当前路径不会生成它。`native-ui-image allocation_us/upload_cache_us` 与现有汇总脚本兼容。`native-edit-transport total_us` 在后台记录源快照（首次）、helper 打开（首次／故障重建）、单页解析及命令写出；`native-edit-import backend=poppler total_us` 现在仅记录主线程回放及 XML 导入；`native-edit-prepare total_us` 包含后者及暂存、样式固化和对象迁移，两者不能相加。`native-source-snapshot bytes` 与 `native-edit-session opened` 用于检查同一文档连续编辑是否复用了源及 helper；故障／取消可以重新打开 helper。汇总脚本输出 native_stages、native_source_snapshots_bytes、native_helper_opens；多个文档共用日志时计数会合并。区域渲染继续使用已有 worker 日志。原生入口使用导入的内存源，不产生随机 FileInput 的 input-summary，缺少这条记录不等于文件 I/O 为零。
 
 出现编辑失真时，保留只读／编辑两种状态的对照和问题 PDF（可以是仍能复现的单页裁剪版本）。日志筛选：
 
@@ -40,7 +42,7 @@ GUI 验收顺序：
 grep -E 'native-(import|attach|viewport|ui-image|edit-|metadata|read-snapshot)|PDF region' native-pdf.log
 ```
 
-`native-edit-fonts`、`native-edit-objects`、`native-edit-unsupported` 来自 PDFium 图形打散器，当前产品按页编辑不再经过该路径。新路径应出现 `native-edit-import backend=poppler success=1 pages=1`。`native-edit-begin` 保留 PDF 页号与目标矩形；`native-edit-prepare success` 只表示原图被对象替换，不表示视觉等价。不能仅凭有对象或 CppUnit 通过认定问题文档转换正确。
+旧版 PDFium 图形打散器诊断日志已移除。当前路径应出现 `native-edit-import backend=poppler success=1 pages=1`。`native-edit-begin` 保留 PDF 页号与目标矩形；`native-edit-prepare success` 只表示原图被对象替换，不表示视觉等价。不能仅凭有对象或 CppUnit 通过认定问题文档转换正确。
 
 ## 集成目标
 
@@ -63,7 +65,7 @@ grep -E 'native-(import|attach|viewport|ui-image|edit-|metadata|read-snapshot)|P
 
 - `pdffast_render`：持续 helper 多页复用、空白页、资源租约、非法页后恢复、活动时关闭及零期限超时后重试。零期限用于确定性覆盖超时分支，不替代真实挂起进程的系统级注入。
 - `sdext_pdfimport`：录制命令的空白页、缺失 endPage、多页、非法控制标记与截断二进制资源，失败后重新导入。
-- `sd_pdf_import_test`：异步编辑 Preparing／Ready 状态及页面门控、返回只读取消、转换失败保留预览；延迟批注在页面克隆和完整性准备前恢复、重复执行幂等且不改变撤销／修改标记；原生区域快照与整页裁剪像素、图层隐藏和越界拒绝；转换保留目标页面尺寸及边距；普通 ODG 保存重开。
+- `sd_pdf_import_test`：异步编辑 Preparing／Ready 状态及每视图页面门控、返回只读取消、转换失败保留预览；延迟批注在页面克隆和完整性准备前恢复、重复执行幂等且不改变撤销／修改标记；转换保留目标页面尺寸及边距；普通 ODG 保存重开。
 
 元数据测试使用既有含批注 PDF，不能替代非空链接、全部批注类型或故障矩阵。区域像素测试不能替代窗口局部重绘、多个视图及样式变化的 GUI 验收。本次已完整构建 xpdfimport、sd、sdext、svx、sfx2、vcl 及相关测试，包含新增导出接口的跨库链接。
 

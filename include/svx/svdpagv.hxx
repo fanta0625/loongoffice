@@ -19,6 +19,7 @@
 
 #pragma once
 
+#include <config_features.h>
 #include <com/sun/star/awt/XControlContainer.hpp>
 #include <rtl/ref.hxx>
 #include <rtl/ustring.hxx>
@@ -66,7 +67,9 @@ private:
     SdrLayerIDSet    m_aLayerPrn;    // Set of printable Layers
 
     SdrObjList*  m_pCurrentList;     // Current List, usually the Page
+#if HAVE_FEATURE_LOONGOFFICE_PDF_FAST
     bool mbContentReadOnly = false;
+#endif
     SdrObject*   m_pCurrentGroup;    // Current Group; nullptr means none
 
     SdrHelpLineList m_aHelpLines; // Helper lines and points
@@ -85,7 +88,9 @@ private:
 
 public:
     sal_uInt32 PageWindowCount() const { return maPageWindows.size(); }
+#if HAVE_FEATURE_LOONGOFFICE_PDF_FAST
     void SetContentReadOnly(bool readOnly) { mbContentReadOnly = readOnly; }
+#endif
     SdrPageWindow* FindPageWindow( const SdrPaintWindow& rPaintWindow ) const;
     SdrPageWindow* FindPageWindow( const OutputDevice& rOutDev ) const;
     SdrPageWindow* GetPageWindow(sal_uInt32 nIndex) const;

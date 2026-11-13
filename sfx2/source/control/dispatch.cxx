@@ -130,7 +130,9 @@ struct SfxDispatcher_Impl
     std::vector<sal_uInt32> aChildWins;
     bool                 bNoUI;         // UI only from Parent Dispatcher
     bool                 bReadOnly;     // Document is ReadOnly
+#if HAVE_FEATURE_LOONGOFFICE_PDF_FAST
     bool                 bContentReadOnly;
+#endif
     bool                 bQuiet;        // Only use parent dispatcher
 
     SfxSlotFilterState   nFilterEnabling; // 1==filter enabled slots,
@@ -296,7 +298,9 @@ void SfxDispatcher::Construct_Impl()
     xImp->bActive = false;
     xImp->bNoUI = false;
     xImp->bReadOnly = false;
+#if HAVE_FEATURE_LOONGOFFICE_PDF_FAST
     xImp->bContentReadOnly = false;
+#endif
     xImp->bQuiet = false;
     xImp->pInCallAliveFlag = nullptr;
     xImp->nFilterEnabling = SfxSlotFilterState::DISABLED;
@@ -1645,8 +1649,11 @@ bool SfxDispatcher::FindServer_(sal_uInt16 nSlot, SfxSlotServer& rServer)
     }
 
     const bool isViewerAppMode = officecfg::Office::Common::Misc::ViewerAppMode::get();
-    const bool bReadOnlyGlobal = xImp->bContentReadOnly
-        || (SfxSlotFilterState::ENABLED_READONLY != nSlotEnableMode && xImp->bReadOnly);
+    const bool bReadOnlyGlobal =
+#if HAVE_FEATURE_LOONGOFFICE_PDF_FAST
+        xImp->bContentReadOnly ||
+#endif
+        (SfxSlotFilterState::ENABLED_READONLY != nSlotEnableMode && xImp->bReadOnly);
     const bool bReadOnlyLokView = !bReadOnlyGlobal && comphelper::LibreOfficeKit::isActive()
                                   && xImp->pFrame && xImp->pFrame->GetViewShell()
                                   && xImp->pFrame->GetViewShell()->IsLokReadOnlyView();
@@ -2069,6 +2076,7 @@ void SfxDispatcher::SetReadOnly_Impl( bool bOn )
     xImp->bReadOnly = bOn;
 }
 
+#if HAVE_FEATURE_LOONGOFFICE_PDF_FAST
 void SfxDispatcher::SetContentReadOnly(bool bReadOnly)
 {
     if (xImp->bContentReadOnly == bReadOnly)
@@ -2077,10 +2085,15 @@ void SfxDispatcher::SetContentReadOnly(bool bReadOnly)
     if (auto* bindings = GetBindings())
         bindings->InvalidateAll(true);
 }
+#endif
 
 bool SfxDispatcher::GetReadOnly_Impl() const
 {
-    return xImp->bReadOnly || xImp->bContentReadOnly || SfxViewShell::IsCurrentLokViewReadOnly();
+    return xImp->bReadOnly ||
+#if HAVE_FEATURE_LOONGOFFICE_PDF_FAST
+        xImp->bContentReadOnly ||
+#endif
+        SfxViewShell::IsCurrentLokViewReadOnly();
 }
 
 /** With 'bOn' the Dispatcher is quasi dead and transfers everything to the
@@ -2150,7 +2163,11 @@ bool SfxDispatcher::IsReadOnlyShell_Impl( sal_uInt16 nShell ) const
         if( dynamic_cast< const SfxModule *>( pShell ) != nullptr || dynamic_cast< const SfxApplication *>( pShell ) != nullptr || dynamic_cast< const SfxViewFrame *>( pShell ) !=  nullptr )
             bResult = false;
         else
-            bResult = xImp->bReadOnly || xImp->bContentReadOnly;
+            bResult = xImp->bReadOnly
+#if HAVE_FEATURE_LOONGOFFICE_PDF_FAST
+                || xImp->bContentReadOnly
+#endif
+                ;
     }
 
     if (!bResult && SfxViewShell::IsCurrentLokViewReadOnly())

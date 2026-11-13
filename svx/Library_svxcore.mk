@@ -498,8 +498,4 @@ $(eval $(call gb_SdiTarget_set_include,svx/sdi/svxslots,\
     -I$(SRCDIR)/sfx2/sdi \
 ))
 
-ifeq ($(ENABLE_LOONGOFFICE_PDF_FAST),TRUE)
-$(eval $(call gb_Library_add_defs,svxcore,-DSAL_LOG_INFO))
-endif
-
 # vim: set noet sw=4 ts=4:
