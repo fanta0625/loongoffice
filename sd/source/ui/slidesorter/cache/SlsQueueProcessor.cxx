@@ -91,10 +91,39 @@ void QueueProcessor::ProcessRequests()
 {
     assert(mpCacheContext);
 
+#if HAVE_FEATURE_LOONGOFFICE_PDF_FAST
+    if (!mrQueue.IsEmpty())
+        if (const auto keys = mpCacheContext->GetEntryList(true))
+        {
+            // Seed all visible PDF previews before retrying the queue head.
+            // The old head-only retry serialized them behind one slow page.
+            std::size_t count = 0;
+            for (const auto key : *keys)
+            {
+                if (++count > 32)
+                    break;
+                const auto* page = mpCacheContext->GetPage(key);
+                if (page && mpCache && mpCache->BitmapIsUpToDate(page))
+                    continue;
+                auto* doc = page ? dynamic_cast<SdDrawDocument*>(&page->getSdrModelFromSdrPage())
+                                 : nullptr;
+                if (auto* fast = doc ? doc->GetPdfFastDocument() : nullptr)
+                {
+                    Bitmap preview;
+                    fast->GetPagePreview(*page, maPreviewSize, preview, true);
+                }
+            }
+        }
+#endif
+    const bool bIdle = mpCacheContext->IsIdle();
+
     // Never process more than one request at a time in order to prevent the
     // lock up of the edit view.
     if ( ! mrQueue.IsEmpty()
-        &&  mpCacheContext->IsIdle())
+#if !HAVE_FEATURE_LOONGOFFICE_PDF_FAST
+        && bIdle
+#endif
+        )
     {
         CacheKey aKey = nullptr;
         RequestPriorityClass ePriorityClass (NOT_VISIBLE);
@@ -111,7 +140,7 @@ void QueueProcessor::ProcessRequests()
         }
 
         if (aKey != nullptr)
-            ProcessOneRequest(aKey, ePriorityClass);
+            ProcessOneRequest(aKey, ePriorityClass, bIdle);
     }
 
     // Schedule the processing of the next element(s).
@@ -128,7 +157,8 @@ void QueueProcessor::ProcessRequests()
 
 void QueueProcessor::ProcessOneRequest (
     CacheKey aKey,
-    const RequestPriorityClass ePriorityClass)
+    const RequestPriorityClass ePriorityClass,
+    bool bAllowSynchronous)
 {
     try
     {
@@ -145,7 +175,8 @@ void QueueProcessor::ProcessOneRequest (
                 auto* doc = dynamic_cast<SdDrawDocument*>(&pSdPage->getSdrModelFromSdrPage());
                 auto* fast = doc ? doc->GetPdfFastDocument() : nullptr;
                 const auto result = fast
-                    ? fast->GetPagePreview(*pSdPage, maPreviewSize, aPreview)
+                    ? fast->GetPagePreview(*pSdPage, maPreviewSize, aPreview,
+                                          mpCacheContext->IsVisible(aKey))
                     : PdfFastDocument::PreviewResult::NotHandled;
                 if (result == PdfFastDocument::PreviewResult::Pending)
                 {
@@ -157,7 +188,16 @@ void QueueProcessor::ProcessOneRequest (
                 }
                 if (result == PdfFastDocument::PreviewResult::NotHandled)
 #endif
+                {
+                    // Async requests/cache hits are safe during input. Live
+                    // Draw thumbnail rendering retains its original idle gate.
+                    if (!bAllowSynchronous)
+                    {
+                        mrQueue.AddRequest(aKey, ePriorityClass);
+                        return;
+                    }
                     aPreview = maBitmapFactory.CreateBitmap(*pSdPage, maPreviewSize, mbDoSuperSampling);
+                }
                 mpCache->SetBitmap (pSdPage, aPreview, ePriorityClass!=NOT_VISIBLE);
 
                 // Initiate a repaint of the new preview.

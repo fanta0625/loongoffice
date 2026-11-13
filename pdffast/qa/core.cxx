@@ -39,9 +39,26 @@ class CoreTest final : public CppUnit::TestFixture
     CPPUNIT_TEST(testReplacementAndOversizedEntry);
     CPPUNIT_TEST(testZoomSettle);
     CPPUNIT_TEST(testFallbackLevel);
+    CPPUNIT_TEST(testSharedPagePreview);
     CPPUNIT_TEST_SUITE_END();
 
 public:
+    void testSharedPagePreview()
+    {
+        const auto preview = pdffast::pagePreview(399, 21000, 29700);
+        CPPUNIT_ASSERT_EQUAL(399, preview.page);
+        CPPUNIT_ASSERT_EQUAL(256, preview.width);
+        CPPUNIT_ASSERT(preview.height <= 512);
+        CPPUNIT_ASSERT_EQUAL(preview.pageWidth, preview.width);
+        CPPUNIT_ASSERT_EQUAL(preview.pageHeight, preview.height);
+        // Aspect-preserving page geometry changes keep the shared cache key.
+        CPPUNIT_ASSERT(preview == pdffast::pagePreview(399, 42000, 59400));
+        CPPUNIT_ASSERT(!(preview == pdffast::pagePreview(400, 21000, 29700)));
+        const auto tall = pdffast::pagePreview(0, 100, 10000);
+        CPPUNIT_ASSERT_EQUAL(512, tall.height);
+        CPPUNIT_ASSERT(tall.width > 0 && tall.width <= 256);
+    }
+
     void testZoomSettle()
     {
         using namespace std::chrono;

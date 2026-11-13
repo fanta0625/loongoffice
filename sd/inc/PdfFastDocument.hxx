@@ -35,7 +35,8 @@ public:
     void SetMetadataReader(std::unique_ptr<vcl::PDFMetadataReader>);
     bool EnsureMetadata(SdrPage&);
     bool EnsureAllMetadata();
-    void PreparePaint(SdrView&, OutputDevice&);
+    // False for materialized pages: keep the original Draw redirector untouched.
+    bool PreparePaint(SdrView&, OutputDevice&);
     bool Paint(const sdr::contact::ViewObjectContact&, OutputDevice&,
                drawinglayer::primitive2d::Primitive2DDecompositionVisitor&);
     void PrepareCurrentPage(SdrView&);
@@ -50,6 +51,6 @@ public:
     void ForgetView(const SdrView&);
     bool PrepareForSave();
     enum class PreviewResult { NotHandled, Pending, Ready };
-    PreviewResult GetPagePreview(const SdrPage&, const Size&, Bitmap&);
+    PreviewResult GetPagePreview(const SdrPage&, const Size&, Bitmap&, bool visible = true);
 };
 }
