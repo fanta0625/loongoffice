@@ -48,7 +48,8 @@ public:
         const steady_clock::time_point start{};
         pdffast::ZoomSettle zoom;
         zoom.update(0, 600, 800, start);
-        CPPUNIT_ASSERT(!zoom.pending(start));
+        CPPUNIT_ASSERT(zoom.pending(start));
+        CPPUNIT_ASSERT(!zoom.pending(start + milliseconds(120)));
         zoom.update(0, 900, 1200, start + milliseconds(10));
         CPPUNIT_ASSERT(zoom.pending(start + milliseconds(89)));
         // A preview delivery/scroll at the same scale must not extend settling.
@@ -59,7 +60,8 @@ public:
         CPPUNIT_ASSERT(zoom.pending(start + milliseconds(229)));
         CPPUNIT_ASSERT(!zoom.pending(start + milliseconds(230)));
         zoom.update(1, 600, 800, start + milliseconds(160));
-        CPPUNIT_ASSERT(!zoom.pending(start + milliseconds(160)));
+        CPPUNIT_ASSERT(zoom.pending(start + milliseconds(160)));
+        CPPUNIT_ASSERT(!zoom.pending(start + milliseconds(280)));
     }
     void testFallbackLevel()
     {
