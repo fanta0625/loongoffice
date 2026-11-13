@@ -92,6 +92,7 @@ ImpGraphic::ImpGraphic(const ImpGraphic& rImpGraphic)
     , maCachedBitmap(rImpGraphic.maCachedBitmap)
     , maMetaFile(rImpGraphic.maMetaFile)
     , mpBitmapContainer(rImpGraphic.mpBitmapContainer)
+    , maExPrefSize(rImpGraphic.maExPrefSize)
     , maSwapInfo(rImpGraphic.maSwapInfo)
     , mpSwapFile(rImpGraphic.mpSwapFile)
     , mpGfxLink(rImpGraphic.mpGfxLink)
@@ -118,6 +119,7 @@ ImpGraphic::ImpGraphic(ImpGraphic&& rImpGraphic) noexcept
     , maCachedBitmap(std::move(rImpGraphic.maCachedBitmap))
     , maMetaFile(std::move(rImpGraphic.maMetaFile))
     , mpBitmapContainer(std::move(rImpGraphic.mpBitmapContainer))
+    , maExPrefSize(rImpGraphic.maExPrefSize)
     , maSwapInfo(std::move(rImpGraphic.maSwapInfo))
     , mpAnimationContainer(std::move(rImpGraphic.mpAnimationContainer))
     , mpSwapFile(std::move(rImpGraphic.mpSwapFile))
@@ -207,6 +209,7 @@ ImpGraphic& ImpGraphic::operator=(const ImpGraphic& rImpGraphic)
         updateCurrentSizeInBytes(mnSizeBytes);
 
         maSwapInfo = rImpGraphic.maSwapInfo;
+        maExPrefSize = rImpGraphic.maExPrefSize;
         mbDummyContext = rImpGraphic.mbDummyContext;
         maGraphicExternalLink = rImpGraphic.maGraphicExternalLink;
 
@@ -249,6 +252,7 @@ ImpGraphic& ImpGraphic::operator=(ImpGraphic&& rImpGraphic)
     meType = rImpGraphic.meType;
     mnSizeBytes = rImpGraphic.mnSizeBytes;
     maSwapInfo = std::move(rImpGraphic.maSwapInfo);
+    maExPrefSize = rImpGraphic.maExPrefSize;
     mbDummyContext = rImpGraphic.mbDummyContext;
     maCachedBitmap = std::move(rImpGraphic.maCachedBitmap);
     mpAnimationContainer = std::move(rImpGraphic.mpAnimationContainer);
@@ -879,6 +883,14 @@ void ImpGraphic::setValuesForPrefSize(const Size& rPrefSize)
 
 void ImpGraphic::setPrefSize(const Size& rPrefSize)
 {
+    if (isSwappedOut() && mpGfxLink && mpGfxLink->GetType() == GfxLinkType::NativePdf
+        && maSwapInfo.maPrefMapMode == MapMode(MapUnit::Map100thMM))
+    {
+        // Native PDF pages can arrive with known geometry and no decoded image.
+        // Save it without swapping in; restoreFromSwapInfo() keeps it on load.
+        maSwapInfo.maPrefSize = rPrefSize;
+        return;
+    }
     ensureAvailable();
     setValuesForPrefSize(rPrefSize);
 }
@@ -977,6 +989,13 @@ void ImpGraphic::setValuesForPrefMapMod(const MapMode& rPrefMapMode)
 
 void ImpGraphic::setPrefMapMode(const MapMode& rPrefMapMode)
 {
+    if (isSwappedOut() && mpGfxLink && mpGfxLink->GetType() == GfxLinkType::NativePdf
+        && rPrefMapMode == MapMode(MapUnit::Map100thMM))
+    {
+        // This is the native unit of the lazy PDF vector graphic as well.
+        maSwapInfo.maPrefMapMode = rPrefMapMode;
+        return;
+    }
     ensureAvailable();
     setValuesForPrefMapMod(rPrefMapMode);
 }
