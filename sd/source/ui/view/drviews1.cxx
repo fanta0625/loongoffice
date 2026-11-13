@@ -94,8 +94,12 @@ void DrawViewShell::RequestPdfPage()
 
 IMPL_LINK(DrawViewShell, PdfEditStateChanged, bool, blocked, void)
 {
+#if HAVE_FEATURE_LOONGOFFICE_PDF_FAST
     GetViewFrame()->GetDispatcher()->SetContentReadOnly(blocked);
     GetViewFrame()->GetBindings().Invalidate(SID_CONTEXT);
+#else
+    (void)blocked;
+#endif
 }
 
 OUString DrawViewShell::GetPdfStatusText() const

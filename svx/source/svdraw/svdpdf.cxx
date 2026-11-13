@@ -18,8 +18,6 @@
  */
 
 #include <svdpdf.hxx>
-#include <config_features.h>
-#include <chrono>
 
 #include <tools/UnitConversion.hxx>
 #include <vcl/canvastools.hxx>
@@ -131,10 +129,6 @@ ImpSdrPdfImport::ImpSdrPdfImport(SdrModel& rModel, SdrLayerID nLay, const tools:
     const std::shared_ptr<GfxLink> xGrfLink = rGraphic.GetSharedGfxLink();
     if (xGrfLink)
         mxImportedFonts = xGrfLink->getImportedFonts();
-#if HAVE_FEATURE_LOONGOFFICE_PDF_FAST
-    const auto fontsStarted = std::chrono::steady_clock::now();
-    const bool reusedFonts = bool(mxImportedFonts);
-#endif
     if (!mxImportedFonts)
     {
         mxImportedFonts
@@ -142,11 +136,6 @@ ImpSdrPdfImport::ImpSdrPdfImport(SdrModel& rModel, SdrLayerID nLay, const tools:
         if (xGrfLink)
             xGrfLink->setImportedFonts(mxImportedFonts);
     }
-#if HAVE_FEATURE_LOONGOFFICE_PDF_FAST
-    SAL_INFO("pdffast", "native-edit-fonts pages=" << mnPageCount << " reused=" << reusedFonts
-        << " total_us=" << std::chrono::duration_cast<std::chrono::microseconds>(
-            std::chrono::steady_clock::now() - fontsStarted).count());
-#endif
 
     // Same as SdModule
     mpVD = VclPtr<VirtualDevice>::Create();
@@ -397,9 +386,6 @@ ImportedFontMap ImpSdrPdfImport::CollectFonts(std::u16string_view sPrefix,
 void ImpSdrPdfImport::DoObjects(SvdProgressInfo* pProgrInfo, sal_uInt32* pActionsToReport,
                                 int nPageIndex)
 {
-#if HAVE_FEATURE_LOONGOFFICE_PDF_FAST
-    const auto objectsStarted = std::chrono::steady_clock::now();
-#endif
     const int nPageCount = mpPdfDocument->getPageCount();
     if (!(nPageCount > 0 && nPageIndex >= 0 && nPageIndex < nPageCount))
         return;
@@ -437,12 +423,6 @@ void ImpSdrPdfImport::DoObjects(SvdProgressInfo* pProgrInfo, sal_uInt32* pAction
             }
         }
     }
-#if HAVE_FEATURE_LOONGOFFICE_PDF_FAST
-    SAL_INFO("pdffast", "native-edit-objects page=" << nPageIndex
-        << " source_top_level=" << nPageObjectCount << " converted=" << maTmpList.size()
-        << " total_us=" << std::chrono::duration_cast<std::chrono::microseconds>(
-            std::chrono::steady_clock::now() - objectsStarted).count());
-#endif
 }
 
 void ImpSdrPdfImport::SetupPageScale(const double dPageWidth, const double dPageHeight)
@@ -816,18 +796,11 @@ void ImpSdrPdfImport::ImportPdfObject(
             break;
         case vcl::pdf::PDFPageObjectType::Shading:
             SAL_WARN("sd.filter", "Got page object SHADING: " << nPageObjectIndex);
-#if HAVE_FEATURE_LOONGOFFICE_PDF_FAST
-            SAL_INFO("pdffast", "native-edit-unsupported type=shading object=" << nPageObjectIndex);
-#endif
             break;
         case vcl::pdf::PDFPageObjectType::Form:
             ImportForm(pPageObject, pPage, pTextPage, nPageObjectIndex);
             break;
         default:
-#if HAVE_FEATURE_LOONGOFFICE_PDF_FAST
-            SAL_INFO("pdffast", "native-edit-unsupported type=" << static_cast<int>(ePageObjectType)
-                << " object=" << nPageObjectIndex);
-#endif
             SAL_WARN("sd.filter", "Unknown PDF page object #" << nPageObjectIndex << " of type: "
                                                               << static_cast<int>(ePageObjectType));
             break;
@@ -845,9 +818,6 @@ void ImpSdrPdfImport::ImportForm(std::unique_ptr<vcl::pdf::PDFiumPageObject> con
     maCurrentMatrix = pPageObject->getMatrix();
 
     const int nCount = pPageObject->getFormObjectCount();
-#if HAVE_FEATURE_LOONGOFFICE_PDF_FAST
-    SAL_INFO("pdffast", "native-edit-form children=" << nCount);
-#endif
     for (int nIndex = 0; nIndex < nCount; ++nIndex)
     {
         auto pFormObject = pPageObject->getFormObject(nIndex);

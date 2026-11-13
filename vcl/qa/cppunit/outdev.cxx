@@ -127,6 +127,28 @@ CPPUNIT_TEST_FIXTURE(VclOutdevTest, testVirtualDevice)
 #endif
 }
 
+CPPUNIT_TEST_FIXTURE(VclOutdevTest, testPixelOffsetInvalidatesViewTransforms)
+{
+    ScopedVclPtrInstance<VirtualDevice> pVDev;
+    pVDev->SetMapMode(MapMode(MapUnit::MapPixel));
+    pVDev->EnableMapMode();
+    // Populate both caches before changing the offset.
+    pVDev->GetViewTransformation();
+    pVDev->GetInverseViewTransformation();
+    pVDev->SetPixelOffset(Size(23, -17));
+    const auto aForward = pVDev->GetViewTransformation();
+    const auto aInverse = pVDev->GetInverseViewTransformation();
+    CPPUNIT_ASSERT_DOUBLES_EQUAL(23.0, aForward.get(0, 2), 1e-9);
+    CPPUNIT_ASSERT_DOUBLES_EQUAL(-17.0, aForward.get(1, 2), 1e-9);
+    CPPUNIT_ASSERT_DOUBLES_EQUAL(0.0,
+        aForward.get(0, 0) * aInverse.get(0, 2) + aForward.get(0, 2), 1e-9);
+    CPPUNIT_ASSERT_DOUBLES_EQUAL(0.0,
+        aForward.get(1, 1) * aInverse.get(1, 2) + aForward.get(1, 2), 1e-9);
+    pVDev->SetPixelOffset(Size());
+    CPPUNIT_ASSERT_DOUBLES_EQUAL(0.0, pVDev->GetViewTransformation().get(0, 2), 1e-9);
+    CPPUNIT_ASSERT_DOUBLES_EQUAL(0.0, pVDev->GetInverseViewTransformation().get(1, 2), 1e-9);
+}
+
 CPPUNIT_TEST_FIXTURE(VclOutdevTest, testUseAfterDispose)
 {
     // Create a virtual device, enable map mode then dispose it.

@@ -22,6 +22,7 @@
 #include <memory>
 #include <span>
 #include <sal/config.h>
+#include <config_features.h>
 #include <rtl/ref.hxx>
 #include <sfx2/dllapi.h>
 #include <sfx2/toolbarids.hxx>
@@ -147,9 +148,10 @@ public:
     void                Flush();
     void                Lock( bool bLock );
     bool                IsLocked() const;
-    // Temporarily apply the normal read-only slot policy without changing
-    // document permissions (for example while preparing editable content).
+#if HAVE_FEATURE_LOONGOFFICE_PDF_FAST
+    // Temporarily apply the read-only slot policy while preparing PDF content.
     void                SetContentReadOnly(bool bReadOnly);
+#endif
     void                SetSlotFilter( SfxSlotFilterState nEnable = SfxSlotFilterState::DISABLED,
                                        std::span<sal_uInt16 const> pSIDs = std::span<sal_uInt16 const>());
 

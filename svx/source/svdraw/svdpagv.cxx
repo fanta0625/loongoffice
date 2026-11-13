@@ -159,7 +159,11 @@ void SdrPageView::ModelHasChanged()
 
 bool SdrPageView::IsReadOnly() const
 {
-    return (mbContentReadOnly || nullptr == GetPage() || GetView().GetModel().IsReadOnly() || GetPage()->IsReadOnly() || GetObjList()->IsReadOnly());
+    return (
+#if HAVE_FEATURE_LOONGOFFICE_PDF_FAST
+        mbContentReadOnly ||
+#endif
+        nullptr == GetPage() || GetView().GetModel().IsReadOnly() || GetPage()->IsReadOnly() || GetObjList()->IsReadOnly());
 }
 
 void SdrPageView::Show()

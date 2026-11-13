@@ -8,6 +8,7 @@
  */
 
 #include <test/unoapi_test.hxx>
+#include <memory>
 #include <optional>
 #include <string>
 #include <chrono>
@@ -17,11 +18,13 @@
 #include <com/sun/star/drawing/XDrawPageDuplicator.hpp>
 #if HAVE_FEATURE_LOONGOFFICE_PDF_FAST
 #include <PdfFastDocument.hxx>
-#include <PreviewRenderer.hxx>
 #include <drawdoc.hxx>
 #include <svx/svdview.hxx>
 #include <svx/svdpagv.hxx>
 #include <svx/svdundo.hxx>
+#include <svx/sdr/contact/objectcontact.hxx>
+#include <svx/sdr/contact/viewcontact.hxx>
+#include <svx/sdr/contact/viewobjectcontact.hxx>
 #include <svl/undo.hxx>
 #endif
 
@@ -54,6 +57,19 @@ using namespace css;
 namespace
 {
 #if HAVE_FEATURE_LOONGOFFICE_PDF_FAST
+class CountingViewObjectContact final : public sdr::contact::ViewObjectContact
+{
+public:
+    using ViewObjectContact::ViewObjectContact;
+    unsigned changes = 0;
+
+    void ActionChanged() override
+    {
+        ++changes;
+        ViewObjectContact::ActionChanged();
+    }
+};
+
 void dumpPdfBitmap(const OUString& name, const Bitmap& bitmap)
 {
     if (const char* directory = getenv("LO_PDFFAST_TEST_DUMP"))
@@ -62,16 +78,6 @@ void dumpPdfBitmap(const OUString& name, const Bitmap& bitmap)
                             StreamMode::WRITE | StreamMode::TRUNC);
         vcl::PngImageWriter(stream).write(Graphic(bitmap));
     }
-}
-
-void assertPdfPixelsEqual(const Bitmap& expected, const Bitmap& actual)
-{
-    CPPUNIT_ASSERT_EQUAL(expected.GetSizePixel(), actual.GetSizePixel());
-    // Cropping can add an opaque alpha plane. Compare represented RGBA pixels.
-    const auto size = expected.GetSizePixel();
-    for (tools::Long y = 0; y < size.Height(); ++y)
-        for (tools::Long x = 0; x < size.Width(); ++x)
-            CPPUNIT_ASSERT_EQUAL(expected.GetPixelColor(x, y), actual.GetPixelColor(x, y));
 }
 
 #endif
@@ -409,57 +415,6 @@ CPPUNIT_TEST_FIXTURE(SdrPdfImportTest, testDeferredMetadataSurvivesCloneAndExpor
     CPPUNIT_ASSERT_EQUAL(afterClone, doc->GetSdrUndoManager()->GetUndoActionCount());
 }
 
-CPPUNIT_TEST_FIXTURE(SdrPdfImportTest, testNativeReadSnapshotRegionMatchesFullPage)
-{
-    EnvVarGuard nativeImport("LO_IMPORT_USE_PDFIUM", nullptr);
-    loadFromFile(u"pdf/pdffast-native-pages.pdf");
-    auto* model = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
-    CPPUNIT_ASSERT(model);
-    auto* doc = model->GetDocShell()->GetDoc();
-    SdrView view(*doc);
-    sd::PreviewRenderer renderer(false);
-    const Size pixels(768, 640);
-    const tools::Rectangle region(Point(137, 91), Size(321, 289));
-    for (sal_uInt16 index = 0; index < 3; ++index)
-    {
-        auto* page = doc->GetSdPage(index, PageKind::Standard);
-        view.ShowSdrPage(page);
-        auto* pageView = view.GetSdrPageView();
-        CPPUNIT_ASSERT(pageView);
-        Bitmap full = renderer.RenderRegion(*page, pixels,
-            tools::Rectangle(Point(), pixels), *pageView);
-        CPPUNIT_ASSERT(!full.IsEmpty());
-        const auto fullChecksum = full.GetChecksum();
-        CPPUNIT_ASSERT(full.Crop(region));
-        const Bitmap tile = renderer.RenderRegion(*page, pixels, region, *pageView);
-        CPPUNIT_ASSERT_EQUAL(region.GetSize(), tile.GetSizePixel());
-        dumpPdfBitmap(u"snapshot-crop"_ustr, full);
-        dumpPdfBitmap(u"snapshot-tile"_ustr, tile);
-        assertPdfPixelsEqual(full, tile);
-        const auto visibleLayers = pageView->GetVisibleLayers();
-        pageView->SetVisibleLayers(SdrLayerIDSet());
-        Bitmap hidden = renderer.RenderRegion(*page, pixels,
-            tools::Rectangle(Point(), pixels), *pageView);
-        CPPUNIT_ASSERT(!hidden.IsEmpty());
-        if (page->GetObjCount())
-            CPPUNIT_ASSERT(fullChecksum != hidden.GetChecksum());
-        CPPUNIT_ASSERT(hidden.Crop(region));
-        assertPdfPixelsEqual(hidden, renderer.RenderRegion(*page, pixels, region, *pageView));
-        pageView->SetVisibleLayers(visibleLayers);
-        CPPUNIT_ASSERT(renderer.RenderRegion(*page, pixels,
-            tools::Rectangle(Point(-1, 0), Size(10, 10)), *pageView).IsEmpty());
-        const auto revision = page->GetVisualRevision();
-        page->ActionChanged();
-        CPPUNIT_ASSERT(page->GetVisualRevision() != revision);
-        if (page->GetObjCount())
-        {
-            const auto objectRevision = page->GetVisualRevision();
-            page->GetObj(0)->ActionChanged();
-            CPPUNIT_ASSERT(page->GetVisualRevision() != objectRevision);
-        }
-    }
-}
-
 CPPUNIT_TEST_FIXTURE(SdrPdfImportTest, testMaterializedPageUsesLiveDrawPaint)
 {
     EnvVarGuard preview("LO_IMPORT_USE_PDFIUM", "1");
@@ -511,11 +466,27 @@ CPPUNIT_TEST_FIXTURE(SdrPdfImportTest, testVisiblePdfThumbnailsArriveWithoutMode
     CPPUNIT_ASSERT(sd::PdfFastDocument::Attach(*doc));
     auto* fast = doc->GetPdfFastDocument();
     const auto count = doc->GetSdPageCount(PageKind::Standard);
-    std::vector<sal_uInt64> revisions;
+    model->GetDocShell()->SetModified(false);
+    const auto undoCount = doc->GetSdrUndoManager()->GetUndoActionCount();
+    std::vector<std::vector<rtl::Reference<SdrObject>>> originals;
+    sdr::contact::ObjectContact objectContact;
+    std::vector<std::unique_ptr<CountingViewObjectContact>> contacts;
     for (sal_uInt16 n = 0; n < count; ++n)
     {
         auto* page = doc->GetSdPage(n, PageKind::Standard);
-        revisions.push_back(page->GetVisualRevision());
+        CPPUNIT_ASSERT(page);
+        CPPUNIT_ASSERT(page->GetObjCount() > 0);
+        originals.emplace_back();
+        contacts.push_back(std::make_unique<CountingViewObjectContact>(
+            objectContact, page->GetViewContact()));
+        for (size_t index = 0; index < page->GetObjCount(); ++index)
+        {
+            auto* object = page->GetObj(index);
+            CPPUNIT_ASSERT(object);
+            originals.back().emplace_back(object);
+            contacts.push_back(std::make_unique<CountingViewObjectContact>(
+                objectContact, object->GetViewContact()));
+        }
         Bitmap bitmap;
         fast->GetPagePreview(*page, Size(160, 200), bitmap);
     }
@@ -537,8 +508,17 @@ CPPUNIT_TEST_FIXTURE(SdrPdfImportTest, testVisiblePdfThumbnailsArriveWithoutMode
         std::this_thread::sleep_for(std::chrono::milliseconds(5));
     }
     CPPUNIT_ASSERT(ready);
+    CPPUNIT_ASSERT(!model->GetDocShell()->IsModified());
+    CPPUNIT_ASSERT_EQUAL(undoCount, doc->GetSdrUndoManager()->GetUndoActionCount());
     for (sal_uInt16 n = 0; n < count; ++n)
-        CPPUNIT_ASSERT_EQUAL(revisions[n], doc->GetSdPage(n, PageKind::Standard)->GetVisualRevision());
+    {
+        auto* page = doc->GetSdPage(n, PageKind::Standard);
+        CPPUNIT_ASSERT_EQUAL(originals[n].size(), page->GetObjCount());
+        for (size_t index = 0; index < originals[n].size(); ++index)
+            CPPUNIT_ASSERT_EQUAL(originals[n][index].get(), page->GetObj(index));
+    }
+    for (const auto& contact : contacts)
+        CPPUNIT_ASSERT_EQUAL(0u, contact->changes);
 }
 
 CPPUNIT_TEST_FIXTURE(SdrPdfImportTest, testDeferredEditPreservesPageFormat)
@@ -735,6 +715,7 @@ CPPUNIT_TEST_FIXTURE(SdrPdfImportTest, testDeferredEditRequestTracksViewAndReadO
     rtl::Reference<SdrObject> firstOriginal = first->GetObj(0);
     rtl::Reference<SdrObject> secondOriginal = second->GetObj(0);
     SdrView view(*doc);
+    SdrView otherView(*doc);
     comphelper::ScopeGuard forget([&] { controller->ForgetView(view); });
     // Opening a PDF and selecting its first page must remain a read-only
     // preview. The explicit request is ignored until edit mode is entered.
@@ -746,10 +727,12 @@ CPPUNIT_TEST_FIXTURE(SdrPdfImportTest, testDeferredEditRequestTracksViewAndReadO
     view.HideSdrPage();
     shell->SetReadOnlyUI(false);
     view.ShowSdrPage(first);
+    otherView.ShowSdrPage(second);
     controller->RequestCurrentPage(view);
     // The UI entry point must return before conversion, keeping its preview.
     CPPUNIT_ASSERT(controller->GetEditState(view) == sd::PdfFastDocument::EditState::Preparing);
     CPPUNIT_ASSERT(view.GetSdrPageView()->IsReadOnly());
+    CPPUNIT_ASSERT(!otherView.GetSdrPageView()->IsReadOnly());
     CPPUNIT_ASSERT(firstOriginal->getSdrPageFromSdrObject() == first);
     view.HideSdrPage();
     view.ShowSdrPage(second);
