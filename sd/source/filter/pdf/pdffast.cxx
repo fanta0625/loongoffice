@@ -201,6 +201,14 @@ struct PdfFastDocument::Impl : SfxListener
     bool preparing = false;
     bool editMode = false;
 
+    bool editPending(int page) const
+    {
+        return std::any_of(intents.begin(), intents.end(), [&](const auto& intent) {
+            return intent.second.original.is()
+                && intent.second.original->GetGraphic().getPageNumber() == page;
+        });
+    }
+
     void setEditMode(bool enabled)
     {
         if (editMode == enabled)
@@ -507,7 +515,8 @@ struct PdfFastDocument::Impl : SfxListener
             // high-resolution tiles until the new page's bounded preview has
             // arrived; on a complex page those tiles can otherwise delay the
             // first useful frame by several seconds on slower CPUs.
-            if (entry.second.zoom.pending(now) || !cache.contains(entry.second.preview))
+            if (entry.second.zoom.pending(now) || !cache.contains(entry.second.preview)
+                || editPending(entry.second.preview.page))
                 continue;
             for (const auto& key : entry.second.visible)
             {
@@ -588,10 +597,13 @@ bool PdfFastDocument::Impl::prepareNative(SdrView& view, OutputDevice& output)
 {
     auto* pageView = view.GetSdrPageView();
     auto* page = pageView ? dynamic_cast<SdPage*>(pageView->GetPage()) : nullptr;
-    // Editing, nonstandard rendering modes and objects outside the page retain
-    // Draw's live object rendering, including handles and out-of-page content.
+    // The imported page uses Draw's native raster pipeline once it is ready.
+    // Interactive editing still uses live objects so handles, text carets and
+    // out-of-page content remain exact.
     auto* raw = page ? findPage(*page) : nullptr;
-    const bool eligible = doc.GetDocSh() && doc.GetDocSh()->IsReadOnly() && page
+    const bool interactive = view.IsTextEdit() || view.IsAction()
+        || view.GetMarkedObjectList().GetMarkCount() != 0;
+    const bool eligible = doc.GetDocSh() && page && !interactive
         && !page->IsMasterPage() && page->GetPageKind() == PageKind::Standard
         && page->GetObjCount() && !page->GetSize().IsEmpty()
         && (!raw || raw->prepared) && output.GetDrawMode() == DrawModeFlags::Default
@@ -681,7 +693,8 @@ bool PdfFastDocument::Impl::paintNative(SdrObject& object, OutputDevice& output,
         return false;
     auto& viewport = found->second;
     // The redirector visits the visible native objects in order. One composite
-    // replaces them for this window repaint; editing always uses live objects.
+    // replaces them for this window repaint. Interactive editing is excluded
+    // by prepareNative(), so selection handles and carets remain live.
     if (viewport.emitted)
         return true;
     viewport.emitted = true;
@@ -744,8 +757,7 @@ IMPL_LINK_NOARG(PdfFastDocument::Impl, RenderNative, Timer*, void)
     for (auto& [device, viewport] : nativeViews)
     {
         const auto owner = devices.find(device);
-        if (viewport.failed || !nativeCurrent(viewport) || owner == devices.end()
-            || !doc.GetDocSh() || !doc.GetDocSh()->IsReadOnly())
+        if (viewport.failed || !nativeCurrent(viewport) || owner == devices.end())
             continue;
         const auto* pageView = owner->second->GetSdrPageView();
         if (!pageView || pageView->GetPage() != viewport.page.get()
@@ -1142,6 +1154,9 @@ void PdfFastDocument::RequestCurrentPage(SdrView& view, const Link<bool, void>& 
     entry->failed = false; // An explicit revisit/edit action is a retry.
     impl.setGate(view, EditState::Preparing);
     impl.intents[&view] = { entry->original, Clock::now() + std::chrono::milliseconds(120) };
+    // Remove stale high-resolution PDF work immediately. The conversion
+    // helper and the native Draw renderer must not compete with old tiles.
+    impl.schedule();
     impl.poll.Start();
 }
 
@@ -1228,6 +1243,9 @@ bool PdfFastDocument::Impl::processEdits()
                 }
                 else
                     ++it;
+            // A failed conversion may continue displaying the read-only PDF;
+            // rebuild demand after removing the edit intent.
+            schedule();
         }
     }
     if (!running.is())
