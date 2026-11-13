@@ -18,6 +18,7 @@ class Demand
     std::set<Request> m_needed;
     std::deque<Request> m_pending;
     std::vector<Request> m_running;
+
 public:
     void update(const std::vector<Request>& requests, const std::set<Request>& ready)
     {
@@ -58,15 +59,15 @@ public:
     }
     bool hasForeground() const
     {
-        return std::any_of(m_pending.begin(), m_pending.end(), [](const Request& r) {
-            return !r.prefetch;
-        });
+        return std::any_of(m_pending.begin(), m_pending.end(),
+                           [](const Request& r) { return !r.prefetch; });
     }
     void finish(bool retry = false)
     {
         if (retry)
             for (const auto& request : m_running)
-                if (needs(request) && std::find(m_pending.begin(), m_pending.end(), request) == m_pending.end())
+                if (needs(request)
+                    && std::find(m_pending.begin(), m_pending.end(), request) == m_pending.end())
                     m_pending.push_back(request);
         m_running.clear();
     }

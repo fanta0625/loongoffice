@@ -53,13 +53,15 @@ Pixels copyPixels(vcl::pdf::PDFiumBitmap& bitmap, const TileKey& key, const Tile
 }
 }
 
-Session::Session(const OUString& url) : m_source(std::make_shared<Source>())
+Session::Session(const OUString& url)
+    : m_source(std::make_shared<Source>())
 {
     m_source->url = url;
     m_worker = std::thread([this] { run(); });
 }
 
-Session::Session(const BinaryDataContainer& bytes) : m_source(std::make_shared<Source>())
+Session::Session(const BinaryDataContainer& bytes)
+    : m_source(std::make_shared<Source>())
 {
     m_source->bytes = bytes;
     m_memory = bytes.getDataShared();
@@ -134,7 +136,8 @@ bool Session::publish(Result result)
 {
     std::unique_lock guard(m_mutex);
     m_wake.wait(guard, [&] {
-        return *m_source->stop || (result.requested && !m_demand.needs({ result.page, result.tile }))
+        return *m_source->stop
+               || (result.requested && !m_demand.needs({ result.page, result.tile }))
                || m_resultBytes + result.pixels.data.size() <= ResultBudget;
     });
     if (*m_source->stop)
@@ -163,19 +166,22 @@ void Session::run() noexcept
         }();
         if (!engine)
             throw std::runtime_error("PDFium is unavailable");
-        auto destroyDocument = [source = m_source](vcl::pdf::PDFiumDocument* value) {
+        auto destroyDocument = [source = m_source](vcl::pdf::PDFiumDocument * value)
+        {
             std::lock_guard guard(source->engineMutex);
             delete value;
         };
-        std::unique_ptr<vcl::pdf::PDFiumDocument, decltype(destroyDocument)> document(nullptr,
-                                                                                   destroyDocument);
-        auto destroyPage = [source = m_source](vcl::pdf::PDFiumPage* value) {
+        std::unique_ptr<vcl::pdf::PDFiumDocument, decltype(destroyDocument)> document(
+            nullptr, destroyDocument);
+        auto destroyPage = [source = m_source](vcl::pdf::PDFiumPage * value)
+        {
             std::lock_guard guard(source->engineMutex);
             delete value;
         };
         // One reusable page handle bounds residency and avoids reopening a page
         // for each tile. Declared after document so destruction order is safe.
-        std::unique_ptr<vcl::pdf::PDFiumPage, decltype(destroyPage)> cachedPage(nullptr, destroyPage);
+        std::unique_ptr<vcl::pdf::PDFiumPage, decltype(destroyPage)> cachedPage(nullptr,
+                                                                                destroyPage);
         int cachedPageIndex = -1;
         OString password;
         int count = 0;
@@ -188,9 +194,12 @@ void Session::run() noexcept
                 {
                     std::lock_guard guard(m_source->engineMutex);
                     document.reset(m_source->input
-                        ? engine->openDocument(m_source->input, password).release()
-                        : engine->openDocument(m_memory->data(),
-                              static_cast<int>(m_memory->size()), password).release());
+                                       ? engine->openDocument(m_source->input, password).release()
+                                       : engine
+                                             ->openDocument(m_memory->data(),
+                                                            static_cast<int>(m_memory->size()),
+                                                            password)
+                                             .release());
                     if (!document)
                     {
                         if (engine->getLastErrorCode() != vcl::pdf::PDFErrorType::Password)
@@ -200,7 +209,8 @@ void Session::run() noexcept
                     else
                     {
                         count = document->getPageCount();
-                        const auto first = count > 0 ? document->getPageSize(0) : basegfx::B2DSize();
+                        const auto first
+                            = count > 0 ? document->getPageSize(0) : basegfx::B2DSize();
                         opened.size = { first.getWidth(), first.getHeight() };
                         if (count <= 0 || count > 1000000 || !opened.size.valid())
                             throw std::runtime_error("Invalid PDF page count or first page size");
@@ -238,8 +248,8 @@ void Session::run() noexcept
                     return true;
                 std::lock_guard guard(m_mutex);
                 return !std::any_of(batch.begin(), batch.end(), [&](const Request& r) {
-                           return m_demand.needs(r);
-                       }) || (batch.front().prefetch && m_demand.hasForeground());
+                    return m_demand.needs(r);
+                }) || (batch.front().prefetch && m_demand.hasForeground());
             };
             const auto renderStarted = std::chrono::steady_clock::now();
             std::vector<Result> results;
@@ -277,10 +287,10 @@ void Session::run() noexcept
                     {
                         const auto& key = batch[i].tile;
                         if (key.page != request.page || key.pageWidth <= 0 || key.pageHeight <= 0
-                            || key.pageWidth > 1000000 || key.pageHeight > 1000000
-                            || key.x < 0 || key.y < 0 || key.width <= 0 || key.height <= 0
-                            || key.width > 1024 || key.height > 1024
-                            || key.x > key.pageWidth - key.width || key.y > key.pageHeight - key.height)
+                            || key.pageWidth > 1000000 || key.pageHeight > 1000000 || key.x < 0
+                            || key.y < 0 || key.width <= 0 || key.height <= 0 || key.width > 1024
+                            || key.height > 1024 || key.x > key.pageWidth - key.width
+                            || key.y > key.pageHeight - key.height)
                             throw std::runtime_error("Invalid PDF tile geometry");
                         if (i)
                         {
@@ -302,7 +312,8 @@ void Session::run() noexcept
                         throw std::runtime_error("Cannot render PDF page");
                     bitmap->fillRect(0, 0, width, height, 0xffffffff);
                     aborted = !bitmap->renderPageBitmapCancelable(document.get(), cachedPage.get(),
-                        -area.x, -area.y, area.pageWidth, area.pageHeight, cancelled);
+                                                                  -area.x, -area.y, area.pageWidth,
+                                                                  area.pageHeight, cancelled);
                     if (!aborted)
                     {
                         if (m_source->input)
@@ -336,14 +347,19 @@ void Session::run() noexcept
             }
             const auto elapsed = std::chrono::steady_clock::now() - renderStarted;
             if (!batch.front().metadata())
-                batchLimit = aborted || elapsed > std::chrono::milliseconds(12) ? 1
-                           : elapsed < std::chrono::milliseconds(4) ? 4 : 2;
-            SAL_INFO("pdffast", "PDF region children=" << batch.size() << " aborted=" << aborted
-                << " in " << std::chrono::duration_cast<std::chrono::microseconds>(
-                    std::chrono::steady_clock::now() - renderStarted).count() << " us"
-                << " page=" << batch.front().page << " prefetch=" << batch.front().prefetch
-                << " page_width=" << batch.front().tile.pageWidth
-                << " page_height=" << batch.front().tile.pageHeight);
+                batchLimit = aborted || elapsed > std::chrono::milliseconds(12)
+                                 ? 1
+                                 : elapsed < std::chrono::milliseconds(4) ? 4 : 2;
+            SAL_INFO("pdffast", "PDF region children="
+                                    << batch.size() << " aborted=" << aborted << " in "
+                                    << std::chrono::duration_cast<std::chrono::microseconds>(
+                                           std::chrono::steady_clock::now() - renderStarted)
+                                           .count()
+                                    << " us"
+                                    << " page=" << batch.front().page
+                                    << " prefetch=" << batch.front().prefetch
+                                    << " page_width=" << batch.front().tile.pageWidth
+                                    << " page_height=" << batch.front().tile.pageHeight);
             for (auto& result : results)
                 if (!publish(std::move(result)))
                     break;

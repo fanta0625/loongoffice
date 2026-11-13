@@ -67,8 +67,12 @@ class Lines
     oslFileHandle m_handle;
     std::array<char, 65536> m_buffer;
     sal_uInt64 m_pos = 0, m_end = 0;
+
 public:
-    explicit Lines(oslFileHandle handle) : m_handle(handle) {}
+    explicit Lines(oslFileHandle handle)
+        : m_handle(handle)
+    {
+    }
     std::string next()
     {
         std::string line;
@@ -78,7 +82,8 @@ public:
             {
                 m_pos = 0;
                 if (osl_readFile(m_handle, m_buffer.data(), m_buffer.size(), &m_end)
-                        != osl_File_E_None || !m_end)
+                        != osl_File_E_None
+                    || !m_end)
                     throw std::runtime_error("PDF import helper closed its command stream");
             }
             const char c = m_buffer[m_pos++];
@@ -116,9 +121,13 @@ struct NativeImport::Impl
 
     Impl(std::shared_ptr<const std::vector<sal_uInt8>> bytes, std::chrono::milliseconds limit,
          std::function<void()> notify)
-        : source(std::move(bytes)), timeout(std::max(limit, std::chrono::milliseconds(0)))
+        : source(std::move(bytes))
+        , timeout(std::max(limit, std::chrono::milliseconds(0)))
         , ready(std::move(notify))
-        , watchdog([this] { watch(); }), worker([this] { run(); }) {}
+        , watchdog([this] { watch(); })
+        , worker([this] { run(); })
+    {
+    }
     ~Impl()
     {
         {
@@ -223,17 +232,18 @@ struct NativeImport::Impl
             throw std::runtime_error("Invalid PDF import spool path");
         OUString executable(u"$BRAND_BASE_DIR/" LIBO_BIN_FOLDER "/xpdfimport"_ustr);
         rtl::Bootstrap::expandMacros(executable);
-        OUString fileOption(u"-f"_ustr), option(u"-o"_ustr), session(u"LoongOfficePdfSession=1"_ustr);
-        rtl_uString* args[] = { sourcePath.pData, fileOption.pData, binaryPath.pData,
-                              option.pData, session.pData };
+        OUString fileOption(u"-f"_ustr), option(u"-o"_ustr),
+            session(u"LoongOfficePdfSession=1"_ustr);
+        rtl_uString* args[]
+            = { sourcePath.pData, fileOption.pData, binaryPath.pData, option.pData, session.pData };
         {
             std::scoped_lock lock(mutex);
             if (stopping || cancelled)
                 throw std::runtime_error("PDF import cancelled");
             const auto security = osl_getCurrentSecurity();
-            const auto error = osl_executeProcess_WithRedirectedIO(executable.pData, args, 5,
-                osl_Process_SEARCHPATH | osl_Process_HIDDEN, security, nullptr, nullptr, 0,
-                &process, &input, &output, &errors);
+            const auto error = osl_executeProcess_WithRedirectedIO(
+                executable.pData, args, 5, osl_Process_SEARCHPATH | osl_Process_HIDDEN, security,
+                nullptr, nullptr, 0, &process, &input, &output, &errors);
             osl_freeSecurityHandle(security);
             if (error != osl_Process_E_None || !input || !output || !errors)
                 throw std::runtime_error("Cannot start PDF import helper");
@@ -244,7 +254,9 @@ struct NativeImport::Impl
             std::array<char, 4096> buffer;
             sal_uInt64 count = 0;
             while (osl_readFile(errors, buffer.data(), buffer.size(), &count) == osl_File_E_None
-                   && count) {}
+                   && count)
+            {
+            }
         });
         lines = std::make_unique<Lines>(output);
         write(input, "P\nO\n", 4);
@@ -313,12 +325,14 @@ struct NativeImport::Impl
                 // which was terminated just as its result was being published.
                 closeHelper();
                 value.success = false;
-                value.error = wasTimedOut ? u"PDF import timed out"_ustr : u"PDF import cancelled"_ustr;
+                value.error
+                    = wasTimedOut ? u"PDF import timed out"_ustr : u"PDF import cancelled"_ustr;
             }
-            SAL_INFO("pdffast", "native-edit-transport page=" << page
-                << " success=" << value.success << " total_us="
-                << std::chrono::duration_cast<std::chrono::microseconds>(
-                    std::chrono::steady_clock::now() - started).count());
+            SAL_INFO("pdffast", "native-edit-transport page="
+                                    << page << " success=" << value.success << " total_us="
+                                    << std::chrono::duration_cast<std::chrono::microseconds>(
+                                           std::chrono::steady_clock::now() - started)
+                                           .count());
             {
                 std::scoped_lock lock(mutex);
                 result = std::move(value);
@@ -333,13 +347,15 @@ struct NativeImport::Impl
 
 NativeImport::NativeImport(std::shared_ptr<const std::vector<sal_uInt8>> bytes,
                            std::chrono::milliseconds timeout, std::function<void()> ready)
-    : m_impl(std::make_unique<Impl>(std::move(bytes), timeout, std::move(ready))) {}
+    : m_impl(std::make_unique<Impl>(std::move(bytes), timeout, std::move(ready)))
+{
+}
 NativeImport::~NativeImport() = default;
 bool NativeImport::request(int page)
 {
     std::scoped_lock lock(m_impl->mutex);
-    if (page < 0 || page == std::numeric_limits<int>::max()
-        || m_impl->active || m_impl->leased || m_impl->stopping)
+    if (page < 0 || page == std::numeric_limits<int>::max() || m_impl->active || m_impl->leased
+        || m_impl->stopping)
         return false;
     m_impl->active = true;
     m_impl->cancelled = false;

@@ -371,7 +371,10 @@ struct PDFMetadataReader::Impl
     std::unique_ptr<pdf::PDFiumDocument> document;
 };
 
-PDFMetadataReader::PDFMetadataReader(std::unique_ptr<Impl> impl) : m_impl(std::move(impl)) {}
+PDFMetadataReader::PDFMetadataReader(std::unique_ptr<Impl> impl)
+    : m_impl(std::move(impl))
+{
+}
 PDFMetadataReader::~PDFMetadataReader() = default;
 
 std::optional<PDFGraphicResult> PDFMetadataReader::ReadPage(int index)
@@ -383,9 +386,9 @@ std::optional<PDFGraphicResult> PDFMetadataReader::ReadPage(int index)
     if (!page)
         return std::nullopt;
     return PDFGraphicResult(Graphic(m_impl->source, index),
-        Size(std::round(convertPointToMm100(size.getWidth())),
-             std::round(convertPointToMm100(size.getHeight()))),
-        findAnnotations(page, size), findLinks(page, m_impl->document, size));
+                            Size(std::round(convertPointToMm100(size.getWidth())),
+                                 std::round(convertPointToMm100(size.getHeight()))),
+                            findAnnotations(page, size), findLinks(page, m_impl->document, size));
 }
 
 size_t ImportPDFUnloaded(SvStream& stream, std::vector<PDFGraphicResult>& graphics)
@@ -394,7 +397,7 @@ size_t ImportPDFUnloaded(SvStream& stream, std::vector<PDFGraphicResult>& graphi
 }
 
 size_t ImportPDFUnloaded(SvStream& rStream, std::vector<PDFGraphicResult>& rGraphics,
-                        std::unique_ptr<PDFMetadataReader>* deferred)
+                         std::unique_ptr<PDFMetadataReader>* deferred)
 {
     const auto initialSize = rGraphics.size();
     if (deferred)
@@ -454,8 +457,8 @@ size_t ImportPDFUnloaded(SvStream& rStream, std::vector<PDFGraphicResult>& rGrap
         if (deferred)
         {
             rGraphics.emplace_back(std::move(aGraphic), Size(nPageWidth, nPageHeight),
-                std::vector<PDFGraphicAnnotation>(),
-                std::vector<std::pair<basegfx::B2DRectangle, OUString>>());
+                                   std::vector<PDFGraphicAnnotation>(),
+                                   std::vector<std::pair<basegfx::B2DRectangle, OUString>>());
             continue;
         }
 

@@ -96,8 +96,8 @@ public:
                                                          const OString& rPassword)
         = 0;
     // Optional additive entry point; existing memory callers remain unchanged.
-    virtual std::unique_ptr<PDFiumDocument> openDocument(
-        const std::shared_ptr<PDFiumInput>&, const OString&);
+    virtual std::unique_ptr<PDFiumDocument> openDocument(const std::shared_ptr<PDFiumInput>&,
+                                                         const OString&);
     virtual PDFErrorType getLastErrorCode() = 0;
     /// createBitmap can reduce requested size to possible value
     virtual std::unique_ptr<PDFiumBitmap> createBitmap(int& nWidth, int& nHeight, int nAlpha) = 0;
@@ -116,8 +116,9 @@ public:
     // Return false on cooperative cancellation; no partial pixels may be used.
     // Callback must not throw or re-enter PDFium. The default preserves support
     // for alternate implementations that only provide synchronous rendering.
-    virtual bool renderPageBitmapCancelable(PDFiumDocument* doc, PDFiumPage* page,
-        int x, int y, int width, int height, const std::function<bool()>& cancelled)
+    virtual bool renderPageBitmapCancelable(PDFiumDocument* doc, PDFiumPage* page, int x, int y,
+                                            int width, int height,
+                                            const std::function<bool()>& cancelled)
     {
         if (cancelled())
             return false;
@@ -363,8 +364,8 @@ public:
     virtual OUString getBookmarks() = 0;
 };
 
-inline std::unique_ptr<PDFiumDocument> PDFium::openDocument(
-    const std::shared_ptr<PDFiumInput>&, const OString&)
+inline std::unique_ptr<PDFiumDocument> PDFium::openDocument(const std::shared_ptr<PDFiumInput>&,
+                                                            const OString&)
 {
     return nullptr;
 }

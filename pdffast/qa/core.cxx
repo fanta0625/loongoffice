@@ -94,16 +94,14 @@ public:
     void testFallbackLevel()
     {
         using pdffast::TileKey;
-        const std::vector<TileKey> levels{
-            { 0, 300, 400, 0, 0, 300, 400 },
-            { 0, 1200, 1600, 0, 0, 512, 512 },
-            { 0, 1800, 2400, 0, 0, 512, 512 },
-            { 0, 0, 0, 0, 0, 1, 1 }
-        };
-        CPPUNIT_ASSERT((pdffast::fallbackLevel(levels, 1000, 1333)
-                        == std::pair<int, int>(1200, 1600)));
-        CPPUNIT_ASSERT((pdffast::fallbackLevel(levels, 1700, 2267)
-                        == std::pair<int, int>(1800, 2400)));
+        const std::vector<TileKey> levels{ { 0, 300, 400, 0, 0, 300, 400 },
+                                           { 0, 1200, 1600, 0, 0, 512, 512 },
+                                           { 0, 1800, 2400, 0, 0, 512, 512 },
+                                           { 0, 0, 0, 0, 0, 1, 1 } };
+        CPPUNIT_ASSERT(
+            (pdffast::fallbackLevel(levels, 1000, 1333) == std::pair<int, int>(1200, 1600)));
+        CPPUNIT_ASSERT(
+            (pdffast::fallbackLevel(levels, 1700, 2267) == std::pair<int, int>(1800, 2400)));
         CPPUNIT_ASSERT((pdffast::fallbackLevel({}, 1000, 1000) == std::pair<int, int>()));
         CPPUNIT_ASSERT((pdffast::fallbackLevel(levels, 0, 1000) == std::pair<int, int>()));
     }
@@ -163,15 +161,16 @@ public:
         const double viewportPixels = 834;
         for (double scale : { 0.5, 96.0 / 72.0, 2.0 })
         {
-            const double maximum = layout.scrollHeight(viewportPixels / scale) * scale
-                                   - viewportPixels;
+            const double maximum
+                = layout.scrollHeight(viewportPixels / scale) * scale - viewportPixels;
             const double destination = std::clamp(layout.top(1) * scale, 0.0, maximum);
             CPPUNIT_ASSERT_EQUAL(1, layout.pageAt(destination / scale));
         }
         // Metadata may reveal that the final page is even shorter.
         layout.set(1, { 842, 100 });
         const double viewport = 1000;
-        const double destination = std::min(layout.top(1), layout.scrollHeight(viewport) - viewport);
+        const double destination
+            = std::min(layout.top(1), layout.scrollHeight(viewport) - viewport);
         CPPUNIT_ASSERT_EQUAL(1, layout.pageAt(destination));
         CPPUNIT_ASSERT_DOUBLES_EQUAL(layout.top(1), destination, 1e-8);
         // A one-page document must also retain a nonnegative scroll range.
@@ -424,11 +423,14 @@ public:
         CPPUNIT_ASSERT_EQUAL(std::size_t(1), needed.size());
         CPPUNIT_ASSERT(needed.front() == oldRight);
         missing.clear();
-        CPPUNIT_ASSERT(cache.keys([&](const auto& key) {
-            return std::any_of(missing.begin(), missing.end(), [&](const auto& hole) {
-                return pdffast::fallbackIntersects(key, hole);
-            });
-        }).empty());
+        CPPUNIT_ASSERT(cache
+                           .keys([&](const auto& key) {
+                               return std::any_of(missing.begin(), missing.end(),
+                                                  [&](const auto& hole) {
+                                                      return pdffast::fallbackIntersects(key, hole);
+                                                  });
+                           })
+                           .empty());
         // Coverage inspection must not promote either old cache entry.
         const pdffast::TileKey fresh{ 0, 2000, 2000, 0, 0, 512, 512 };
         cache.put(fresh, 3, 4);

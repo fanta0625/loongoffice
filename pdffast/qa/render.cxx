@@ -25,7 +25,8 @@ protected:
         {
             if (auto result = session.takeResult())
             {
-                CPPUNIT_ASSERT_MESSAGE("PDF worker returned an error", result->kind != pdffast::Result::Kind::Error);
+                CPPUNIT_ASSERT_MESSAGE("PDF worker returned an error",
+                                       result->kind != pdffast::Result::Kind::Error);
                 if (result->kind == kind)
                     return std::move(*result);
             }
@@ -55,29 +56,33 @@ CPPUNIT_TEST_FIXTURE(RenderTest, testPixelsAndCancellation)
     CPPUNIT_ASSERT(progressive);
     progressive->fillRect(0, 0, width, height, 0xffffffff);
     int callbacks = 0;
-    CPPUNIT_ASSERT(!progressive->renderPageBitmapCancelable(document.get(), page.get(),
-        0, 0, 1024, 1024, [&] { return ++callbacks >= 2; }));
+    CPPUNIT_ASSERT(!progressive->renderPageBitmapCancelable(
+        document.get(), page.get(), 0, 0, 1024, 1024, [&] { return ++callbacks >= 2; }));
     CPPUNIT_ASSERT(callbacks >= 2);
     // Reuse the SAME page after cancellation: leaked progressive state must not
     // affect a second render. The tiny fixture may finish before its first pause.
     progressive->fillRect(0, 0, width, height, 0xffffffff);
-    CPPUNIT_ASSERT(progressive->renderPageBitmapCancelable(document.get(), page.get(),
-        0, 0, 1024, 1024, [] { return false; }));
+    CPPUNIT_ASSERT(progressive->renderPageBitmapCancelable(document.get(), page.get(), 0, 0, 1024,
+                                                           1024, [] { return false; }));
     CPPUNIT_ASSERT(full->getFormat() == progressive->getFormat());
     const int channels = full->getFormat() == vcl::pdf::PDFBitmapType::BGR ? 3 : 4;
     for (int y = 0; y < 1024; ++y)
         CPPUNIT_ASSERT(std::memcmp(full->getBuffer() + y * full->getStride(),
-            progressive->getBuffer() + y * progressive->getStride(), 1024 * channels) == 0);
+                                   progressive->getBuffer() + y * progressive->getStride(),
+                                   1024 * channels)
+                       == 0);
     int cropWidth = 320, cropHeight = 300;
     auto crop = engine->createBitmap(cropWidth, cropHeight, 0);
     CPPUNIT_ASSERT(crop);
     crop->fillRect(0, 0, cropWidth, cropHeight, 0xffffffff);
-    CPPUNIT_ASSERT(crop->renderPageBitmapCancelable(document.get(), page.get(),
-        -512, -512, 1024, 1024, [] { return false; }));
+    CPPUNIT_ASSERT(crop->renderPageBitmapCancelable(document.get(), page.get(), -512, -512, 1024,
+                                                    1024, [] { return false; }));
     CPPUNIT_ASSERT(full->getFormat() == crop->getFormat());
     for (int y = 0; y < cropHeight; ++y)
-        CPPUNIT_ASSERT(std::memcmp(full->getBuffer() + (y + 512) * full->getStride() + 512 * channels,
-            crop->getBuffer() + y * crop->getStride(), cropWidth * channels) == 0);
+        CPPUNIT_ASSERT(
+            std::memcmp(full->getBuffer() + (y + 512) * full->getStride() + 512 * channels,
+                        crop->getBuffer() + y * crop->getStride(), cropWidth * channels)
+            == 0);
 }
 
 CPPUNIT_TEST_FIXTURE(RenderTest, testRandomInputOwnershipAndFreeze)
@@ -142,9 +147,11 @@ CPPUNIT_TEST_FIXTURE(RenderTest, testSessionReplaceAndClose)
             const int channels = full->getFormat() == vcl::pdf::PDFBitmapType::BGR ? 3 : 4;
             for (int y = 0; y < 513; ++y)
                 for (int x = 0; x < 513; ++x)
-                    CPPUNIT_ASSERT(std::memcmp(
-                        full->getBuffer() + (y + 511) * full->getStride() + (x + 511) * channels,
-                        result.pixels.data.data() + y * result.pixels.stride + x * 3, 3) == 0);
+                    CPPUNIT_ASSERT(
+                        std::memcmp(full->getBuffer() + (y + 511) * full->getStride()
+                                        + (x + 511) * channels,
+                                    result.pixels.data.data() + y * result.pixels.stride + x * 3, 3)
+                        == 0);
         }
         session.request({ { 0, { 0, 8192, 8192, 0, 0, 512, 512 } } });
         // Destructor cancels queued/in-flight work and joins without UI pumping.
@@ -188,8 +195,10 @@ CPPUNIT_TEST_FIXTURE(RenderTest, testNativeMemorySessionAlongsideDirectEngine)
         auto result = wait(*session, pdffast::Result::Kind::Tile);
         for (int y = 0; y < height; ++y)
             for (int x = 0; x < width; ++x)
-                CPPUNIT_ASSERT(std::memcmp(reference->getBuffer() + y * reference->getStride() + x * channels,
-                    result.pixels.data.data() + y * result.pixels.stride + x * 3, 3) == 0);
+                CPPUNIT_ASSERT(
+                    std::memcmp(reference->getBuffer() + y * reference->getStride() + x * channels,
+                                result.pixels.data.data() + y * result.pixels.stride + x * 3, 3)
+                    == 0);
         session->request({ { 0, { 0, 8192, 8192, 0, 0, 512, 512 } } });
         session.reset(); // close/cancel while native document and page remain alive
         CPPUNIT_ASSERT_EQUAL(1, document->getPageCount());
@@ -198,13 +207,14 @@ CPPUNIT_TEST_FIXTURE(RenderTest, testNativeMemorySessionAlongsideDirectEngine)
 
 CPPUNIT_TEST_FIXTURE(RenderTest, testNativeImportSessionAndSpoolOwnership)
 {
-    SvFileStream stream(m_directories.getURLFromSrc(u"/sd/qa/unit/data/pdf/pdffast-native-pages.pdf"),
-                        StreamMode::READ);
+    SvFileStream stream(
+        m_directories.getURLFromSrc(u"/sd/qa/unit/data/pdf/pdffast-native-pages.pdf"),
+        StreamMode::READ);
     BinaryDataContainer bytes(stream, stream.remainingSize());
     std::atomic<int> notifications{ 0 };
     int consumed = 0;
     pdffast::NativeImport importer(bytes.getDataShared(), std::chrono::minutes(2),
-                                  [&] { ++notifications; });
+                                   [&] { ++notifications; });
     auto waitImport = [&] {
         const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(30);
         while (std::chrono::steady_clock::now() < deadline)
@@ -212,7 +222,8 @@ CPPUNIT_TEST_FIXTURE(RenderTest, testNativeImportSessionAndSpoolOwnership)
             if (notifications.load() > consumed)
             {
                 auto result = importer.takeResult();
-                CPPUNIT_ASSERT_MESSAGE("Completion was signalled before result publication", result);
+                CPPUNIT_ASSERT_MESSAGE("Completion was signalled before result publication",
+                                       result);
                 ++consumed;
                 return *result;
             }

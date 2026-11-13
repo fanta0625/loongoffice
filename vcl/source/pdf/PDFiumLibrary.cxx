@@ -64,7 +64,6 @@ public:
 };
 }
 
-
 using namespace com::sun::star;
 
 static_assert(static_cast<int>(vcl::pdf::PDFPageObjectType::Unknown) == FPDF_PAGEOBJ_UNKNOWN,
@@ -305,7 +304,7 @@ public:
     void renderPageBitmap(PDFiumDocument* pDoc, PDFiumPage* pPage, int nStartX, int nStartY,
                           int nSizeX, int nSizeY) override;
     bool renderPageBitmapCancelable(PDFiumDocument*, PDFiumPage*, int, int, int, int,
-                                     const std::function<bool()>&) override;
+                                    const std::function<bool()>&) override;
     ConstScanline getBuffer() override;
     int getStride() override;
     int getWidth() override;
@@ -715,7 +714,8 @@ struct PDFiumFileAccess
 {
     FPDF_FILEACCESS access{};
     std::shared_ptr<PDFiumInput> input;
-    explicit PDFiumFileAccess(const std::shared_ptr<PDFiumInput>& source) : input(source)
+    explicit PDFiumFileAccess(const std::shared_ptr<PDFiumInput>& source)
+        : input(source)
     {
         access.m_FileLen = static_cast<unsigned long>(input->size());
         access.m_Param = this;
@@ -801,7 +801,8 @@ PDFiumImpl::PDFiumImpl()
     FPDF_InitLibraryWithConfig(&aConfig);
 }
 
-PDFiumImpl::~PDFiumImpl() {
+PDFiumImpl::~PDFiumImpl()
+{
     PdfiumGuard aGuard;
     FPDF_DestroyLibrary();
 }
@@ -870,15 +871,15 @@ std::unique_ptr<PDFiumDocument> PDFiumImpl::openDocument(const void* pData, int 
     return pPDFiumDocument;
 }
 
-std::unique_ptr<PDFiumDocument> PDFiumImpl::openDocument(
-    const std::shared_ptr<PDFiumInput>& input, const OString& password)
+std::unique_ptr<PDFiumDocument> PDFiumImpl::openDocument(const std::shared_ptr<PDFiumInput>& input,
+                                                         const OString& password)
 {
     PdfiumGuard aGuard;
     if (!input || !input->size() || input->size() > std::numeric_limits<unsigned long>::max())
         return nullptr;
     auto access = std::make_shared<PDFiumFileAccess>(input);
     auto document = FPDF_LoadCustomDocument(&access->access,
-                                          password.isEmpty() ? nullptr : password.getStr());
+                                            password.isEmpty() ? nullptr : password.getStr());
     if (!document)
         return nullptr;
     comphelper::ScopeGuard close([&] { FPDF_CloseDocument(document); });
@@ -1049,7 +1050,8 @@ bool PDFiumAttachmentImpl::getFile(std::vector<unsigned char>& rOutBuffer)
 
 PDFiumDocumentImpl::PDFiumDocumentImpl(FPDF_DOCUMENT pPdfDocument,
                                        std::shared_ptr<PDFiumFileAccess> input)
-    : m_input(std::move(input)), mpPdfDocument(pPdfDocument)
+    : m_input(std::move(input))
+    , mpPdfDocument(pPdfDocument)
     , m_aFormCallbacks()
 {
     PdfiumGuard aGuard;
@@ -1177,17 +1179,20 @@ basegfx::B2DSize PDFiumDocumentImpl::getPageSize(int nIndex)
     return aSize;
 }
 
-int PDFiumDocumentImpl::getPageCount() {
+int PDFiumDocumentImpl::getPageCount()
+{
     PdfiumGuard aGuard;
     return FPDF_GetPageCount(mpPdfDocument);
 }
 
-int PDFiumDocumentImpl::getSignatureCount() {
+int PDFiumDocumentImpl::getSignatureCount()
+{
     PdfiumGuard aGuard;
     return FPDF_GetSignatureCount(mpPdfDocument);
 }
 
-int PDFiumDocumentImpl::getAttachmentCount() {
+int PDFiumDocumentImpl::getAttachmentCount()
+{
     PdfiumGuard aGuard;
     return FPDFDoc_GetAttachmentCount(mpPdfDocument);
 }
@@ -1216,7 +1221,8 @@ bool PDFiumDocumentImpl::saveWithVersion(SvMemoryStream& rStream, int nFileVersi
     return true;
 }
 
-int PDFiumPageImpl::getObjectCount() {
+int PDFiumPageImpl::getObjectCount()
+{
     PdfiumGuard aGuard;
     return FPDFPage_CountObjects(mpPage);
 }
@@ -1233,7 +1239,8 @@ std::unique_ptr<PDFiumPageObject> PDFiumPageImpl::getObject(int nIndex)
     return pPDFiumPageObject;
 }
 
-int PDFiumPageImpl::getAnnotationCount() {
+int PDFiumPageImpl::getAnnotationCount()
+{
     PdfiumGuard aGuard;
     return FPDFPage_GetAnnotCount(mpPage);
 }
@@ -1329,7 +1336,8 @@ PDFPageObjectType PDFiumPageObjectImpl::getType()
     return static_cast<PDFPageObjectType>(FPDFPageObj_GetType(mpPageObject));
 }
 
-int PDFiumPageObjectImpl::getFormObjectCount() {
+int PDFiumPageObjectImpl::getFormObjectCount()
+{
     PdfiumGuard aGuard;
     return FPDFFormObj_CountObjects(mpPageObject);
 }
@@ -1467,7 +1475,8 @@ bool PDFiumFontImpl::getFontToUnicode(std::vector<uint8_t>& rData) const
     return bOk;
 }
 
-bool PDFiumFontImpl::getIsEmbedded() const {
+bool PDFiumFontImpl::getIsEmbedded() const
+{
     PdfiumGuard aGuard;
     return FPDFFont_GetIsEmbedded(mpFont) == 1;
 }
@@ -1478,7 +1487,8 @@ sal_uInt32 PDFiumFontImpl::getGlyphIndexFromCharCode(const sal_uInt32 nCharCode)
     return FPDFFont_GetGlyphIndexFromCharCode(mpFont, nCharCode);
 }
 
-sal_Int32 PDFiumFontImpl::getFontDictObjNum() const {
+sal_Int32 PDFiumFontImpl::getFontDictObjNum() const
+{
     PdfiumGuard aGuard;
     return FPDFFont_GetFontDictObjNum(mpFont);
 }
@@ -1521,7 +1531,8 @@ double PDFiumPageObjectImpl::getStrokeWidth()
     return fWidth;
 }
 
-int PDFiumPageObjectImpl::getPathSegmentCount() {
+int PDFiumPageObjectImpl::getPathSegmentCount()
+{
     PdfiumGuard aGuard;
     return FPDFPath_CountSegments(mpPageObject);
 }
@@ -1650,17 +1661,20 @@ BitmapChecksum PDFiumPageImpl::getChecksum(int nMDPPerm)
     return aBitmap.GetChecksum();
 }
 
-double PDFiumPageImpl::getWidth() {
+double PDFiumPageImpl::getWidth()
+{
     PdfiumGuard aGuard;
     return FPDF_GetPageWidth(mpPage);
 }
 
-double PDFiumPageImpl::getHeight() {
+double PDFiumPageImpl::getHeight()
+{
     PdfiumGuard aGuard;
     return FPDF_GetPageHeight(mpPage);
 }
 
-bool PDFiumPageImpl::hasTransparency() {
+bool PDFiumPageImpl::hasTransparency()
+{
     PdfiumGuard aGuard;
     return FPDFPage_HasTransparency(mpPage);
 }
@@ -1680,7 +1694,8 @@ basegfx::B2DPoint PDFiumPathSegmentImpl::getPoint() const
     return aPoint;
 }
 
-bool PDFiumPathSegmentImpl::isClosed() const {
+bool PDFiumPathSegmentImpl::isClosed() const
+{
     PdfiumGuard aGuard;
     return FPDFPathSegment_GetClose(mpPathSegment);
 }
@@ -1696,7 +1711,8 @@ PDFiumClipPathImpl::PDFiumClipPathImpl(FPDF_CLIPPATH pClipPath)
 {
 }
 
-int PDFiumClipPathImpl::getPathCount() {
+int PDFiumClipPathImpl::getPathCount()
+{
     PdfiumGuard aGuard;
     return FPDFClipPath_CountPaths(mpClipPath);
 }
@@ -1726,7 +1742,8 @@ PDFiumFormHandle::PDFiumFormHandle(FPDF_FORMHANDLE pHandle)
 {
 }
 
-PDFiumFormHandle::~PDFiumFormHandle() {
+PDFiumFormHandle::~PDFiumFormHandle()
+{
     PdfiumGuard aGuard;
     FPDFDOC_ExitFormFillEnvironment(mpHandle);
 }
@@ -1767,9 +1784,9 @@ void PDFiumBitmapImpl::renderPageBitmap(PDFiumDocument* pDoc, PDFiumPage* pPage,
                  nStartY, nSizeX, nSizeY, /*rotate=*/0, /*flags=*/0);
 }
 
-bool PDFiumBitmapImpl::renderPageBitmapCancelable(
-    PDFiumDocument* doc, PDFiumPage* page, int x, int y, int width, int height,
-    const std::function<bool()>& cancelled)
+bool PDFiumBitmapImpl::renderPageBitmapCancelable(PDFiumDocument* doc, PDFiumPage* page, int x,
+                                                  int y, int width, int height,
+                                                  const std::function<bool()>& cancelled)
 {
     PdfiumGuard aGuard;
     if (cancelled())
@@ -1780,12 +1797,18 @@ bool PDFiumBitmapImpl::renderPageBitmapCancelable(
     pause.user = const_cast<std::function<bool()>*>(&cancelled);
     pause.NeedToPauseNow = [](IFSDK_PAUSE* value) -> FPDF_BOOL {
         // No exception may escape through the C callback.
-        try { return (*static_cast<std::function<bool()>*>(value->user))(); }
-        catch (...) { return true; }
+        try
+        {
+            return (*static_cast<std::function<bool()>*>(value->user))();
+        }
+        catch (...)
+        {
+            return true;
+        }
     };
     comphelper::ScopeGuard close([&] { FPDF_RenderPage_Close(rawPage); });
     int status = FPDF_RenderPageBitmap_Start(mpBitmap, rawPage, x, y, width, height,
-                                            /*rotate=*/0, /*flags=*/0, &pause);
+                                             /*rotate=*/0, /*flags=*/0, &pause);
     while (status == FPDF_RENDER_TOBECONTINUED && !cancelled())
         status = FPDF_RenderPage_Continue(rawPage, &pause);
     if (cancelled())
@@ -1807,17 +1830,20 @@ ConstScanline PDFiumBitmapImpl::getBuffer()
     return static_cast<ConstScanline>(FPDFBitmap_GetBuffer(mpBitmap));
 }
 
-int PDFiumBitmapImpl::getStride() {
+int PDFiumBitmapImpl::getStride()
+{
     PdfiumGuard aGuard;
     return FPDFBitmap_GetStride(mpBitmap);
 }
 
-int PDFiumBitmapImpl::getWidth() {
+int PDFiumBitmapImpl::getWidth()
+{
     PdfiumGuard aGuard;
     return FPDFBitmap_GetWidth(mpBitmap);
 }
 
-int PDFiumBitmapImpl::getHeight() {
+int PDFiumBitmapImpl::getHeight()
+{
     PdfiumGuard aGuard;
     return FPDFBitmap_GetHeight(mpBitmap);
 }
@@ -2185,7 +2211,8 @@ std::unique_ptr<PDFiumAnnotation> PDFiumAnnotationImpl::getLinked(OString const&
     return pPDFiumAnnotation;
 }
 
-int PDFiumAnnotationImpl::getObjectCount() {
+int PDFiumAnnotationImpl::getObjectCount()
+{
     PdfiumGuard aGuard;
     return FPDFAnnot_GetObjectCount(mpAnnotation);
 }
@@ -2374,7 +2401,8 @@ PDFiumTextPageImpl::~PDFiumTextPageImpl()
         FPDFText_ClosePage(mpTextPage);
 }
 
-int PDFiumTextPageImpl::countChars() {
+int PDFiumTextPageImpl::countChars()
+{
     PdfiumGuard aGuard;
     return FPDFText_CountChars(mpTextPage);
 }
@@ -2427,12 +2455,14 @@ PDFiumSearchHandleImpl::~PDFiumSearchHandleImpl()
         FPDFText_FindClose(mpSearchHandle);
 }
 
-bool PDFiumSearchHandleImpl::findNext() {
+bool PDFiumSearchHandleImpl::findNext()
+{
     PdfiumGuard aGuard;
     return FPDFText_FindNext(mpSearchHandle);
 }
 
-bool PDFiumSearchHandleImpl::findPrev() {
+bool PDFiumSearchHandleImpl::findPrev()
+{
     PdfiumGuard aGuard;
     return FPDFText_FindPrev(mpSearchHandle);
 }
@@ -2443,7 +2473,8 @@ int PDFiumSearchHandleImpl::getSearchResultIndex()
     return FPDFText_GetSchResultIndex(mpSearchHandle);
 }
 
-int PDFiumSearchHandleImpl::getSearchCount() {
+int PDFiumSearchHandleImpl::getSearchCount()
+{
     PdfiumGuard aGuard;
     return FPDFText_GetSchCount(mpSearchHandle);
 }

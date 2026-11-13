@@ -172,7 +172,7 @@ struct PdfFastDocument::Impl
     {
         return std::any_of(intents.begin(), intents.end(), [&](const auto& intent) {
             return intent.second.original.is()
-                && intent.second.original->GetGraphic().getPageNumber() == page;
+                   && intent.second.original->GetGraphic().getPageNumber() == page;
         });
     }
 
@@ -188,7 +188,7 @@ struct PdfFastDocument::Impl
         // normal completion path consume and release a cancelled helper result
         // so a later explicit edit can reuse the session safely.
         intents.clear();
-        for (auto& [view, gate] : gates)
+        for (auto & [ view, gate ] : gates)
             if (gate.state != PdfFastDocument::EditState::Ready)
                 setGate(*view, PdfFastDocument::EditState::Ready);
         if (running.is())
@@ -196,7 +196,8 @@ struct PdfFastDocument::Impl
         wake();
     }
 
-    explicit Impl(SdDrawDocument& document) : doc(document)
+    explicit Impl(SdDrawDocument& document)
+        : doc(document)
     {
         for (sal_uInt16 i = 0; i < doc.GetSdPageCount(PageKind::Standard); ++i)
         {
@@ -206,7 +207,8 @@ struct PdfFastDocument::Impl
             {
                 auto* graphic = dynamic_cast<SdrGrafObj*>(page->GetObj(n));
                 if (graphic && graphic->GetGraphic().GetSharedGfxLink()
-                    && graphic->GetGraphic().GetSharedGfxLink()->GetType() == GfxLinkType::NativePdf)
+                    && graphic->GetGraphic().GetSharedGfxLink()->GetType()
+                           == GfxLinkType::NativePdf)
                 {
                     original = graphic;
                     break;
@@ -299,7 +301,8 @@ struct PdfFastDocument::Impl
                     return;
                 const auto partial = page.getAnnotations();
                 for (const auto& annotation : partial)
-                    if (std::find(annotations.begin(), annotations.end(), annotation) == annotations.end())
+                    if (std::find(annotations.begin(), annotations.end(), annotation)
+                        == annotations.end())
                         page.removeAnnotationNoNotify(annotation);
                 page.setLinkAnnotations(links);
             });
@@ -308,10 +311,13 @@ struct PdfFastDocument::Impl
             entry->metadataReady = true;
             entry->metadataFailed = false;
             target.ActionChanged();
-            SAL_INFO("pdffast", "native-metadata page=" << result->GetGraphic().getPageNumber()
-                     << " annotations=" << result->GetAnnotations().size()
-                     << " links=" << result->GetLinksInfo().size() << " total_us="
-                     << std::chrono::duration_cast<std::chrono::microseconds>(Clock::now() - started).count());
+            SAL_INFO("pdffast", "native-metadata page="
+                                    << result->GetGraphic().getPageNumber()
+                                    << " annotations=" << result->GetAnnotations().size()
+                                    << " links=" << result->GetLinksInfo().size() << " total_us="
+                                    << std::chrono::duration_cast<std::chrono::microseconds>(
+                                           Clock::now() - started)
+                                           .count());
             return true;
         }
         catch (const css::uno::Exception& error)
@@ -336,7 +342,7 @@ struct PdfFastDocument::Impl
     }
 
     rtl::Reference<SdrPage> importEditablePage(const Graphic& graphic,
-                                              const pdffast::NativeImport::Result& result)
+                                               const pdffast::NativeImport::Result& result)
     {
         using namespace css;
         const auto link = graphic.GetSharedGfxLink();
@@ -351,7 +357,8 @@ struct PdfFastDocument::Impl
         // Initialize an import/data model. Completing a new Draw document here
         // installs defaults such as automatic kerning which the normal PDF
         // loading path does not use, changing the imported text layout.
-        auto* nativeShell = new DrawDocShell(SfxObjectCreateMode::EMBEDDED, true, DocumentType::Draw);
+        auto* nativeShell
+            = new DrawDocShell(SfxObjectCreateMode::EMBEDDED, true, DocumentType::Draw);
         SfxObjectShellLock shell(nativeShell);
         comphelper::ScopeGuard close([&] { nativeShell->DoClose(); });
         if (!nativeShell->DoInitNew())
@@ -373,10 +380,10 @@ struct PdfFastDocument::Impl
         uno::Reference<document::XFilter> filter(
             context->getServiceManager()->createInstanceWithContext(service, context),
             uno::UNO_QUERY_THROW);
-        uno::Reference<lang::XInitialization>(filter, uno::UNO_QUERY_THROW)->initialize(
-            { uno::Any(definition) });
-        uno::Reference<document::XImporter>(filter, uno::UNO_QUERY_THROW)->setTargetDocument(
-            nativeShell->GetModel());
+        uno::Reference<lang::XInitialization>(filter, uno::UNO_QUERY_THROW)
+            ->initialize({ uno::Any(definition) });
+        uno::Reference<document::XImporter>(filter, uno::UNO_QUERY_THROW)
+            ->setTargetDocument(nativeShell->GetModel());
 
         // Invoke the default desktop filter directly. Loading through sfx would
         // route back into the PDFium read-only filter when PDF Fast is enabled.
@@ -389,13 +396,16 @@ struct PdfFastDocument::Impl
             { "LoongOfficePdfBinary", uno::Any(result.binary) },
             { "FilterName", uno::Any(u"draw_pdf_import"_ustr) },
             { "FilterOptions", uno::Any(u"LoongOfficePdfPage="_ustr
-                + OUString::number(graphic.getPageNumber() + 1)) },
+                                        + OUString::number(graphic.getPageNumber() + 1)) },
         }));
         auto& nativeDoc = *nativeShell->GetDoc();
         const auto count = nativeDoc.GetSdPageCount(PageKind::Standard);
-        SAL_INFO("pdffast", "native-edit-import backend=poppler pdf_page=" << graphic.getPageNumber()
-            << " success=" << imported << " pages=" << count << " total_us="
-            << std::chrono::duration_cast<std::chrono::microseconds>(Clock::now() - started).count());
+        SAL_INFO("pdffast", "native-edit-import backend=poppler pdf_page="
+                                << graphic.getPageNumber() << " success=" << imported
+                                << " pages=" << count << " total_us="
+                                << std::chrono::duration_cast<std::chrono::microseconds>(
+                                       Clock::now() - started)
+                                       .count());
         // Also reject a stale xpdfimport which silently ignores the private page
         // option: editing must never import an entire document behind the UI.
         if (!imported || count != 1)
@@ -453,8 +463,8 @@ struct PdfFastDocument::Impl
         if (number == 0 || index < 0 || index >= count
             || doc.GetSdPage(index, PageKind::Standard) != &current)
             return;
-        const auto window = output.PixelToLogic(
-            tools::Rectangle(Point(), output.GetOutputSizePixel()));
+        const auto window
+            = output.PixelToLogic(tools::Rectangle(Point(), output.GetOutputSizePixel()));
         for (const int adjacent : { index + 1, index - 1 })
         {
             if (adjacent < 0 || adjacent >= count)
@@ -463,8 +473,7 @@ struct PdfFastDocument::Impl
             if (neighbor->GetObjCount() != 1)
                 continue;
             const auto known = rawPages.find(neighbor->GetObj(0));
-            if (known == rawPages.end() || known->second->prepared
-                || !known->second->original.is())
+            if (known == rawPages.end() || known->second->prepared || !known->second->original.is())
                 continue;
             const auto& original = known->second->original;
             const auto bounds = original->GetLogicRect();
@@ -472,8 +481,8 @@ struct PdfFastDocument::Impl
                 || original->GetShearAngle() != Degree100(0))
                 continue;
             const int page = original->GetGraphic().getPageNumber();
-            viewport.adjacent.push_back(pdffast::pagePreview(
-                page, bounds.GetWidth(), bounds.GetHeight()));
+            viewport.adjacent.push_back(
+                pdffast::pagePreview(page, bounds.GetWidth(), bounds.GetHeight()));
             const Size pixels = output.LogicToPixel(bounds.GetSize());
             const int width = std::clamp<tools::Long>(pixels.Width(), 1, 1000000);
             const int height = std::clamp<tools::Long>(pixels.Height(), 1, 1000000);
@@ -491,7 +500,8 @@ struct PdfFastDocument::Impl
                     break;
                 for (int x = firstX; x < right && added < 8; x += 512, ++added)
                     viewport.adjacentSharp.push_back({ page, width, height, x, y,
-                        std::min(512, width - x), std::min(512, height - y) });
+                                                       std::min(512, width - x),
+                                                       std::min(512, height - y) });
             }
         }
     }
@@ -602,7 +612,7 @@ IMPL_LINK_NOARG(PdfFastDocument::Impl, ReadMetadata, Timer*, void)
     if (preparing || running.is() || !intents.empty() || !session->idle())
         return; // Delivery restarts the idle after interactive work.
     // Only visible pages get their links and annotations during interaction.
-    for (const auto& [device, view] : devices)
+    for (const auto & [ device, view ] : devices)
         if (auto* pageView = view->GetSdrPageView())
             if (auto* entry = findPage(*pageView->GetPage());
                 entry && !entry->metadataReady && !entry->metadataFailed)
@@ -622,8 +632,8 @@ IMPL_LINK_NOARG(PdfFastDocument::Impl, Deliver, Timer*, void)
     const auto start = Clock::now();
     std::set<int> changed;
     bool previewDelivered = false;
-    for (std::size_t items = 0;
-         pdffast::TransferBudget::allows(items, Clock::now() - start); ++items)
+    for (std::size_t items = 0; pdffast::TransferBudget::allows(items, Clock::now() - start);
+         ++items)
     {
         auto result = session->takeResult();
         if (!result)
@@ -641,34 +651,45 @@ IMPL_LINK_NOARG(PdfFastDocument::Impl, Deliver, Timer*, void)
                 allocated = bool(access);
             }
             const auto allocatedAt = Clock::now();
-            if (allocated && ReadRawDIB(bitmap, result->pixels.data.data(), ScanlineFormat::N24BitTcBgr,
-                           result->pixels.height, result->pixels.stride))
+            if (allocated
+                && ReadRawDIB(bitmap, result->pixels.data.data(), ScanlineFormat::N24BitTcBgr,
+                              result->pixels.height, result->pixels.stride))
             {
                 const auto thumbnail = thumbnails.find(result->tile);
-                const bool visible = (thumbnail != thumbnails.end() && thumbnail->second.visible)
-                    || std::any_of(viewports.begin(), viewports.end(),
-                    [&](const auto& entry) {
-                        return entry.second.preview == result->tile
-                            || std::find(entry.second.visible.begin(), entry.second.visible.end(),
-                                         result->tile) != entry.second.visible.end();
-                    });
+                const bool visible
+                    = (thumbnail != thumbnails.end() && thumbnail->second.visible)
+                      || std::any_of(viewports.begin(), viewports.end(), [&](const auto& entry) {
+                             return entry.second.preview == result->tile
+                                    || std::find(entry.second.visible.begin(),
+                                                 entry.second.visible.end(), result->tile)
+                                           != entry.second.visible.end();
+                         });
                 cache.put(result->tile, std::move(bitmap), cost(result->tile), !visible);
                 firstContent = true;
-                previewDelivered |= std::any_of(viewports.begin(), viewports.end(),
-                    [&](const auto& entry) { return entry.second.preview == result->tile; });
+                previewDelivered
+                    |= std::any_of(viewports.begin(), viewports.end(), [&](const auto& entry) {
+                           return entry.second.preview == result->tile;
+                       });
             }
             else
                 failed = true;
-            SAL_INFO("pdffast", "native-ui-image page=" << result->page
-                << " allocation_us=" << std::chrono::duration_cast<std::chrono::microseconds>(allocatedAt - imageStart).count()
-                << " upload_cache_us=" << std::chrono::duration_cast<std::chrono::microseconds>(Clock::now() - allocatedAt).count());
+            SAL_INFO("pdffast", "native-ui-image page="
+                                    << result->page << " allocation_us="
+                                    << std::chrono::duration_cast<std::chrono::microseconds>(
+                                           allocatedAt - imageStart)
+                                           .count()
+                                    << " upload_cache_us="
+                                    << std::chrono::duration_cast<std::chrono::microseconds>(
+                                           Clock::now() - allocatedAt)
+                                           .count());
             // A sidebar-only image is consumed by its own cache polling.
             // Broadcasting ActionChanged for it rebuilds the slide sorter
             // queue and needlessly invalidates main-view primitive caches.
             if (std::any_of(viewports.begin(), viewports.end(), [&](const auto& entry) {
                     return entry.second.preview == result->tile
-                        || std::find(entry.second.visible.begin(), entry.second.visible.end(),
-                                     result->tile) != entry.second.visible.end();
+                           || std::find(entry.second.visible.begin(), entry.second.visible.end(),
+                                        result->tile)
+                                  != entry.second.visible.end();
                 }))
                 changed.insert(result->page);
         }
@@ -716,7 +737,10 @@ IMPL_LINK_NOARG(PdfFastDocument::Impl, Deliver, Timer*, void)
         metadataIdle.Start();
 }
 
-PdfFastDocument::PdfFastDocument(SdDrawDocument& doc) : m_impl(std::make_unique<Impl>(doc)) {}
+PdfFastDocument::PdfFastDocument(SdDrawDocument& doc)
+    : m_impl(std::make_unique<Impl>(doc))
+{
+}
 PdfFastDocument::~PdfFastDocument() = default;
 
 void PdfFastDocument::SetMetadataReader(std::unique_ptr<vcl::PDFMetadataReader> reader)
@@ -727,10 +751,7 @@ void PdfFastDocument::SetMetadataReader(std::unique_ptr<vcl::PDFMetadataReader> 
             page.metadataReady = false;
 }
 
-bool PdfFastDocument::EnsureMetadata(SdrPage& page)
-{
-    return m_impl->ensureMetadata(page);
-}
+bool PdfFastDocument::EnsureMetadata(SdrPage& page) { return m_impl->ensureMetadata(page); }
 
 bool PdfFastDocument::EnsureAllMetadata()
 {
@@ -817,13 +838,13 @@ bool PdfFastDocument::PreparePaint(SdrView& view, OutputDevice& output)
     // request newly visible tiles. Invalidate before primitive traversal, not
     // inside the redirector, and only when the viewport actually changes.
     entry->original->ActionChanged();
-    SAL_INFO("pdffast", "native-viewport pixels=" << state.pixels.Width()
-        << 'x' << state.pixels.Height());
+    SAL_INFO("pdffast",
+             "native-viewport pixels=" << state.pixels.Width() << 'x' << state.pixels.Height());
     return true;
 }
 
 bool PdfFastDocument::Paint(const sdr::contact::ViewObjectContact& contact, OutputDevice& output,
-    drawinglayer::primitive2d::Primitive2DDecompositionVisitor& visitor)
+                            drawinglayer::primitive2d::Primitive2DDecompositionVisitor& visitor)
 {
     auto& impl = *m_impl;
     auto* object = contact.GetViewContact().TryToGetSdrObject();
@@ -842,9 +863,9 @@ bool PdfFastDocument::Paint(const sdr::contact::ViewObjectContact& contact, Outp
     // Demand follows the complete window, not ViewInformation2D's paint clip.
     // A small invalidation (e.g. a delivered tile) must not cancel the rest of
     // the visible work. It also bounds requests if the paint viewport is empty.
-    const auto window = output.PixelToLogic(
-        tools::Rectangle(Point(), output.GetOutputSizePixel()));
-    visible.intersect(basegfx::B2DRange(window.Left(), window.Top(), window.Right(), window.Bottom()));
+    const auto window = output.PixelToLogic(tools::Rectangle(Point(), output.GetOutputSizePixel()));
+    visible.intersect(
+        basegfx::B2DRange(window.Left(), window.Top(), window.Right(), window.Bottom()));
     if (visible.isEmpty())
         return true;
     const Size pixels = output.LogicToPixel(rect.GetSize());
@@ -858,26 +879,28 @@ bool PdfFastDocument::Paint(const sdr::contact::ViewObjectContact& contact, Outp
         impl.collectAdjacent(*currentPage, output, viewport);
     const double sx = double(width) / rect.GetWidth();
     const double sy = double(height) / rect.GetHeight();
-    const int left = std::clamp(int((visible.getMinX() - rect.Left()) * sx), 0, width - 1) / 512 * 512;
-    const int top = std::clamp(int((visible.getMinY() - rect.Top()) * sy), 0, height - 1) / 512 * 512;
+    const int left
+        = std::clamp(int((visible.getMinX() - rect.Left()) * sx), 0, width - 1) / 512 * 512;
+    const int top
+        = std::clamp(int((visible.getMinY() - rect.Top()) * sy), 0, height - 1) / 512 * 512;
     const int right = std::clamp(int(std::ceil((visible.getMaxX() - rect.Left()) * sx)), 1, width);
     const int bottom = std::clamp(int(std::ceil((visible.getMaxY() - rect.Top()) * sy)), 1, height);
     for (int y = top; y < bottom; y += 512)
         for (int x = left; x < right; x += 512)
-            viewport.visible.push_back({ page, width, height, x, y,
-                                        std::min(512, width - x), std::min(512, height - y) });
+            viewport.visible.push_back(
+                { page, width, height, x, y, std::min(512, width - x), std::min(512, height - y) });
     // One row beyond the viewport, budgeted behind every visible request.
     const int next = (bottom + 511) / 512 * 512;
     if (next < height)
         for (int x = left; x < right; x += 512)
-            viewport.speculative.push_back({ page, width, height, x, next,
-                                            std::min(512, width - x), std::min(512, height - next) });
+            viewport.speculative.push_back({ page, width, height, x, next, std::min(512, width - x),
+                                             std::min(512, height - next) });
     const auto previous = impl.viewports.find(&output);
-    const bool changed = previous == impl.viewports.end()
-        || previous->second.native || previous->second.visible != viewport.visible
-        || previous->second.adjacent != viewport.adjacent
-        || previous->second.adjacentSharp != viewport.adjacentSharp
-        || !(previous->second.preview == viewport.preview);
+    const bool changed = previous == impl.viewports.end() || previous->second.native
+                         || previous->second.visible != viewport.visible
+                         || previous->second.adjacent != viewport.adjacent
+                         || previous->second.adjacentSharp != viewport.adjacentSharp
+                         || !(previous->second.preview == viewport.preview);
     if (previous != impl.viewports.end())
         viewport.zoom = previous->second.zoom;
     viewport.zoom.update(page, width, height, viewport.seen);
@@ -894,10 +917,10 @@ bool PdfFastDocument::Paint(const sdr::contact::ViewObjectContact& contact, Outp
             const double dx = double(rect.GetWidth()) / key.pageWidth;
             const double dy = double(rect.GetHeight()) / key.pageHeight;
             target.visit(drawinglayer::primitive2d::Primitive2DReference(
-                new drawinglayer::primitive2d::BitmapPrimitive2D(*bitmap,
-                    basegfx::utils::createScaleTranslateB2DHomMatrix(
-                        padded.width * dx, padded.height * dy,
-                        rect.Left() + padded.x * dx, rect.Top() + padded.y * dy))));
+                new drawinglayer::primitive2d::BitmapPrimitive2D(
+                    *bitmap, basegfx::utils::createScaleTranslateB2DHomMatrix(
+                                 padded.width * dx, padded.height * dy, rect.Left() + padded.x * dx,
+                                 rect.Top() + padded.y * dy))));
         }
     };
     std::vector<TileKey> gaps;
@@ -911,10 +934,10 @@ bool PdfFastDocument::Paint(const sdr::contact::ViewObjectContact& contact, Outp
         draw(viewport.preview, visitor);
         const auto candidates = impl.cache.keys([&](const TileKey& key) {
             return key.page == page && (key.pageWidth != width || key.pageHeight != height)
-                && !(key == viewport.preview)
-                && std::any_of(gaps.begin(), gaps.end(), [&](const TileKey& gap) {
-                       return pdffast::fallbackIntersects(key, gap);
-                   });
+                   && !(key == viewport.preview)
+                   && std::any_of(gaps.begin(), gaps.end(), [&](const TileKey& gap) {
+                          return pdffast::fallbackIntersects(key, gap);
+                      });
         });
         const auto level = pdffast::fallbackLevel(candidates, width, height);
         drawinglayer::primitive2d::Primitive2DContainer fallback;
@@ -926,7 +949,8 @@ bool PdfFastDocument::Paint(const sdr::contact::ViewObjectContact& contact, Outp
             basegfx::B2DPolyPolygon holes;
             for (const auto& gap : gaps)
             {
-                basegfx::B2DRange hole(rect.Left() + double(gap.x) * rect.GetWidth() / width,
+                basegfx::B2DRange hole(
+                    rect.Left() + double(gap.x) * rect.GetWidth() / width,
                     rect.Top() + double(gap.y) * rect.GetHeight() / height,
                     rect.Left() + double(gap.x + gap.width) * rect.GetWidth() / width,
                     rect.Top() + double(gap.y + gap.height) * rect.GetHeight() / height);
@@ -951,20 +975,11 @@ void PdfFastDocument::PrepareCurrentPage(SdrView& view)
     m_impl->preparePage(*pageView->GetPage(), &view);
 }
 
-void PdfFastDocument::SetEditMode(bool enabled)
-{
-    m_impl->setEditMode(enabled);
-}
+void PdfFastDocument::SetEditMode(bool enabled) { m_impl->setEditMode(enabled); }
 
-bool PdfFastDocument::IsEditMode() const
-{
-    return m_impl->editMode;
-}
+bool PdfFastDocument::IsEditMode() const { return m_impl->editMode; }
 
-void PdfFastDocument::NoteScroll()
-{
-    m_impl->lastScroll = Clock::now();
-}
+void PdfFastDocument::NoteScroll() { m_impl->lastScroll = Clock::now(); }
 
 void PdfFastDocument::RequestCurrentPage(SdrView& view, const Link<bool, void>& changed)
 {
@@ -1065,8 +1080,7 @@ bool PdfFastDocument::Impl::processEdits()
             const auto link = original->GetGraphic().GetSharedGfxLink();
             bool ready = false;
             if (wanted && page && &page->getSdrModelFromSdrPage() == &doc && link
-                && link->getDataContainer().getDataShared() == source
-                && result->page == runningPage
+                && link->getDataContainer().getDataShared() == source && result->page == runningPage
                 && result->page == original->GetGraphic().getPageNumber())
             {
                 if (!result->success)
@@ -1083,7 +1097,7 @@ bool PdfFastDocument::Impl::processEdits()
                 if (it->second.original == original)
                 {
                     setGate(*it->first, ready ? PdfFastDocument::EditState::Ready
-                                             : PdfFastDocument::EditState::Failed);
+                                              : PdfFastDocument::EditState::Failed);
                     it = intents.erase(it);
                 }
                 else
@@ -1126,9 +1140,10 @@ bool PdfFastDocument::PrepareForSave()
         {
             auto* pageView = gate.first->GetSdrPageView();
             auto* entry = pageView ? m_impl->findPage(*pageView->GetPage()) : nullptr;
-            m_impl->setGate(*gate.first, entry && !entry->prepared
-                && m_impl->doc.GetDocSh() && !m_impl->doc.GetDocSh()->IsReadOnly()
-                ? EditState::Failed : EditState::Ready);
+            m_impl->setGate(*gate.first, entry && !entry->prepared && m_impl->doc.GetDocSh()
+                                                 && !m_impl->doc.GetDocSh()->IsReadOnly()
+                                             ? EditState::Failed
+                                             : EditState::Ready);
         }
     });
     m_impl->intents.clear();
@@ -1143,8 +1158,8 @@ bool PdfFastDocument::PrepareForSave()
     return true;
 }
 
-PdfFastDocument::PreviewResult PdfFastDocument::GetPagePreview(
-    const SdrPage& page, const Size& size, Bitmap& bitmap, bool visible)
+PdfFastDocument::PreviewResult
+PdfFastDocument::GetPagePreview(const SdrPage& page, const Size& size, Bitmap& bitmap, bool visible)
 {
     auto& impl = *m_impl;
     if (impl.failed || size.Width() <= 0 || size.Height() <= 0 || page.GetObjCount() != 1)
@@ -1163,18 +1178,18 @@ PdfFastDocument::PreviewResult PdfFastDocument::GetPagePreview(
         return PreviewResult::NotHandled;
     // Preserve aspect ratio and keep a single result below the worker's
     // bounded output budget, even for oversized preview requests.
-    const double scale = std::min(double(std::min<tools::Long>(size.Width(), 1024))
-                                      / page.GetSize().Width(),
-                                  double(std::min<tools::Long>(size.Height(), 1024))
-                                      / page.GetSize().Height());
+    const double scale
+        = std::min(double(std::min<tools::Long>(size.Width(), 1024)) / page.GetSize().Width(),
+                   double(std::min<tools::Long>(size.Height(), 1024)) / page.GetSize().Height());
     const int width = std::max(1, int(page.GetSize().Width() * scale));
     const int height = std::max(1, int(page.GetSize().Height() * scale));
     const auto preview = pdffast::pagePreview(entry->original->GetGraphic().getPageNumber(),
-                                             page.GetSize().Width(), page.GetSize().Height());
+                                              page.GetSize().Width(), page.GetSize().Height());
     // Share the main window's zoom-independent preview for ordinary sidebar
     // sizes. A page is parsed/rasterized once for both first useful images.
     const TileKey key = width <= preview.width && height <= preview.height
-        ? preview : TileKey{ preview.page, width, height, 0, 0, width, height };
+                            ? preview
+                            : TileKey{ preview.page, width, height, 0, 0, width, height };
     impl.thumbnails[key] = { Clock::now(), visible };
     if (const auto* cached = impl.cache.get(key))
     {
@@ -1188,7 +1203,7 @@ PdfFastDocument::PreviewResult PdfFastDocument::GetPagePreview(
 }
 
 bool PdfFastDocument::Impl::preparePage(SdrPage& target, SdrView* view,
-                                      const pdffast::NativeImport::Result* completed)
+                                        const pdffast::NativeImport::Result* completed)
 {
     auto& impl = *this;
     if (impl.preparing)
@@ -1232,10 +1247,11 @@ bool PdfFastDocument::Impl::preparePage(SdrPage& target, SdrView* view,
     const bool modified = impl.doc.GetDocSh() && impl.doc.GetDocSh()->IsModified();
     const bool undo = impl.doc.IsUndoEnabled();
     const auto originalRect = it->original->GetLogicRect();
-    SAL_INFO("pdffast", "native-edit-begin page=" << page->GetPageNum()
-        << " pdf_page=" << it->original->GetGraphic().getPageNumber()
-        << " x=" << originalRect.Left() << " y=" << originalRect.Top()
-        << " width=" << originalRect.GetWidth() << " height=" << originalRect.GetHeight());
+    SAL_INFO("pdffast",
+             "native-edit-begin page="
+                 << page->GetPageNum() << " pdf_page=" << it->original->GetGraphic().getPageNumber()
+                 << " x=" << originalRect.Left() << " y=" << originalRect.Top()
+                 << " width=" << originalRect.GetWidth() << " height=" << originalRect.GetHeight());
     // Other windows and pages retain their own raster demand during import.
     for (auto viewport = impl.viewports.begin(); viewport != impl.viewports.end();)
         if ((!viewport->second.native
@@ -1312,9 +1328,12 @@ bool PdfFastDocument::Impl::preparePage(SdrPage& target, SdrView* view,
         SAL_WARN("pdffast", "Native single-page import failed: " << error.what());
     }
     it->failed = !it->prepared;
-    SAL_INFO("pdffast", "native-edit-prepare page=" << page->GetPageNum()
-        << " success=" << it->prepared << " objects=" << page->GetObjCount() << " total_us="
-        << std::chrono::duration_cast<std::chrono::microseconds>(Clock::now() - started).count());
+    SAL_INFO("pdffast",
+             "native-edit-prepare page="
+                 << page->GetPageNum() << " success=" << it->prepared
+                 << " objects=" << page->GetObjCount() << " total_us="
+                 << std::chrono::duration_cast<std::chrono::microseconds>(Clock::now() - started)
+                        .count());
     return it->prepared;
 }
 }

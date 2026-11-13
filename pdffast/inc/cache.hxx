@@ -31,11 +31,21 @@ template <typename Key, typename Value> class Cache
     std::map<Key, std::size_t> m_previews;
 
 public:
-    explicit Cache(std::size_t budget) : m_budget(budget) {}
+    explicit Cache(std::size_t budget)
+        : m_budget(budget)
+    {
+    }
     Cache(const Cache&) = delete;
     Cache& operator=(const Cache&) = delete;
     std::size_t used() const { return m_used; }
-    void clear() { m_index.clear(); m_lru.clear(); m_used = 0; m_protected.clear(); m_previews.clear(); }
+    void clear()
+    {
+        m_index.clear();
+        m_lru.clear();
+        m_used = 0;
+        m_protected.clear();
+        m_previews.clear();
+    }
     bool contains(const Key& key) const { return m_index.find(key) != m_index.end(); }
     const Value* get(const Key& key)
     {
@@ -69,8 +79,7 @@ public:
     // space needed by visible results that have not reached the UI yet.
     // Previews are the minimum readable representation. Unlike ordinary visible
     // tiles, they cannot be evicted when the visible working set exceeds budget.
-    void protect(std::map<Key, std::size_t> entries,
-                 std::map<Key, std::size_t> previews = {})
+    void protect(std::map<Key, std::size_t> entries, std::map<Key, std::size_t> previews = {})
     {
         m_protected = std::move(entries);
         m_previews = std::move(previews);
@@ -112,7 +121,7 @@ public:
         }
         if (speculative)
         {
-            for (const auto& [visible, bytes] : m_protected)
+            for (const auto & [ visible, bytes ] : m_protected)
                 if (!contains(visible))
                 {
                     if (bytes > m_budget - reservedMissing)

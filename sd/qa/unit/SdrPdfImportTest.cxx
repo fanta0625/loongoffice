@@ -92,10 +92,7 @@ public:
             m_previous = previous;
         SetEnv(var, val);
     }
-    ~EnvVarGuard()
-    {
-        SetEnv(sVar, m_previous ? m_previous->c_str() : nullptr);
-    }
+    ~EnvVarGuard() { SetEnv(sVar, m_previous ? m_previous->c_str() : nullptr); }
 
 private:
     static void SetEnv(const char* var, const char* val)
@@ -477,8 +474,8 @@ CPPUNIT_TEST_FIXTURE(SdrPdfImportTest, testVisiblePdfThumbnailsArriveWithoutMode
         CPPUNIT_ASSERT(page);
         CPPUNIT_ASSERT(page->GetObjCount() > 0);
         originals.emplace_back();
-        contacts.push_back(std::make_unique<CountingViewObjectContact>(
-            objectContact, page->GetViewContact()));
+        contacts.push_back(
+            std::make_unique<CountingViewObjectContact>(objectContact, page->GetViewContact()));
         for (size_t index = 0; index < page->GetObjCount(); ++index)
         {
             auto* object = page->GetObj(index);
@@ -609,14 +606,15 @@ CPPUNIT_TEST_FIXTURE(SdrPdfImportTest, testDeferredRenderingMatchesNativeImport)
         const Bitmap actual = view.GetMarkedObjBitmap();
         dumpPdfBitmap(u"deferred-"_ustr + OUString::number(index), actual);
         for (std::size_t object = 0; object < page->GetObjCount(); ++object)
-            CPPUNIT_ASSERT_EQUAL(expected[index].bounds[object], page->GetObj(object)->GetSnapRect());
+            CPPUNIT_ASSERT_EQUAL(expected[index].bounds[object],
+                                 page->GetObj(object)->GetSnapRect());
         CPPUNIT_ASSERT_EQUAL(expected[index].pixels.GetSizePixel(), actual.GetSizePixel());
         CPPUNIT_ASSERT_EQUAL(expected[index].pixels.GetChecksum(), actual.GetChecksum());
         view.UnmarkAllObj();
         CPPUNIT_ASSERT(!model->GetDocShell()->IsModified());
         if (index < 2)
             CPPUNIT_ASSERT_EQUAL(std::size_t(1),
-                doc->GetSdPage(index + 1, PageKind::Standard)->GetObjCount());
+                                 doc->GetSdPage(index + 1, PageKind::Standard)->GetObjCount());
     }
 }
 
@@ -663,9 +661,10 @@ CPPUNIT_TEST_FIXTURE(SdrPdfImportTest, testDeferredPageCopyAndCompatibleSave)
     CPPUNIT_ASSERT(sd::PdfFastDocument::Attach(*doc));
     auto* first = doc->GetSdPage(0, PageKind::Standard);
     const auto count = doc->GetSdPageCount(PageKind::Standard);
-    const uno::Reference<drawing::XDrawPageDuplicator> duplicator(mxComponent, uno::UNO_QUERY_THROW);
+    const uno::Reference<drawing::XDrawPageDuplicator> duplicator(mxComponent,
+                                                                  uno::UNO_QUERY_THROW);
     const uno::Reference<drawing::XDrawPage> source(model->getDrawPages()->getByIndex(0),
-                                                 uno::UNO_QUERY_THROW);
+                                                    uno::UNO_QUERY_THROW);
     const auto duplicate = duplicator->duplicate(source);
     CPPUNIT_ASSERT(duplicate.is());
     CPPUNIT_ASSERT_EQUAL(sal_uInt16(count + 1), doc->GetSdPageCount(PageKind::Standard));
@@ -690,7 +689,8 @@ CPPUNIT_TEST_FIXTURE(SdrPdfImportTest, testDeferredPageCopyAndCompatibleSave)
     CPPUNIT_ASSERT_EQUAL(sal_uInt16(count + 1), doc->GetSdPageCount(PageKind::Standard));
     CPPUNIT_ASSERT(!doc->GetPdfFastDocument());
     for (sal_uInt16 n = 0; n < doc->GetSdPageCount(PageKind::Standard); ++n)
-        for (size_t object = 0; object < doc->GetSdPage(n, PageKind::Standard)->GetObjCount(); ++object)
+        for (size_t object = 0; object < doc->GetSdPage(n, PageKind::Standard)->GetObjCount();
+             ++object)
         {
             const auto* graphic = dynamic_cast<const SdrGrafObj*>(
                 doc->GetSdPage(n, PageKind::Standard)->GetObj(object));

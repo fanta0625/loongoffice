@@ -113,14 +113,15 @@ public:
 // bitmaps and must be called on the UI thread, including deferred idle work.
 class PDFMetadataReader;
 VCL_DLLPUBLIC size_t ImportPDFUnloaded(SvStream&, std::vector<PDFGraphicResult>&,
-                                     std::unique_ptr<PDFMetadataReader>*);
+                                       std::unique_ptr<PDFMetadataReader>*);
 class VCL_DLLPUBLIC PDFMetadataReader final
 {
     struct Impl;
     std::unique_ptr<Impl> m_impl;
     explicit PDFMetadataReader(std::unique_ptr<Impl>);
     friend size_t ImportPDFUnloaded(SvStream&, std::vector<PDFGraphicResult>&,
-                                   std::unique_ptr<PDFMetadataReader>*);
+                                    std::unique_ptr<PDFMetadataReader>*);
+
 public:
     ~PDFMetadataReader();
     std::optional<PDFGraphicResult> ReadPage(int index);
