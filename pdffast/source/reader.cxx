@@ -452,7 +452,8 @@ void ReaderWindow::refresh()
             {
                 TileKey key{ page, width, height, x, y,
                              std::min(TileSize, width - x), std::min(TileSize, height - y) };
-                m_visibleTiles.emplace(key, std::size_t(key.width) * key.height * 4);
+                const auto padded = tileWithGutter(key);
+                m_visibleTiles.emplace(key, std::size_t(padded.width) * padded.height * 4);
                 if (!m_cache.contains(key))
                     requests.push_back({ page, key });
             }
@@ -506,7 +507,8 @@ void ReaderWindow::refresh()
     auto speculativeBytes = m_cache.spareForSpeculation();
     for (const auto& request : prefetch)
     {
-        const auto bytes = std::size_t(request.tile.width) * request.tile.height * 4;
+        const auto padded = tileWithGutter(request.tile);
+        const auto bytes = std::size_t(padded.width) * padded.height * 4;
         if (bytes <= speculativeBytes)
         {
             auto background = request;
@@ -1009,10 +1011,11 @@ void ReaderWindow::paint(vcl::RenderContext& context)
                 {
                     if (key.pageWidth != fallbackWidth || key.pageHeight != fallbackHeight)
                         continue;
-                    const Point at(std::floor(double(key.x) * width / key.pageWidth),
-                                   std::floor(double(key.y) * height / key.pageHeight));
-                    const Size size(std::ceil(double(key.x + key.width) * width / key.pageWidth) - at.X(),
-                                    std::ceil(double(key.y + key.height) * height / key.pageHeight) - at.Y());
+                    const auto padded = tileWithGutter(key);
+                    const Point at(std::floor(double(padded.x) * width / key.pageWidth),
+                                   std::floor(double(padded.y) * height / key.pageHeight));
+                    const Size size(std::ceil(double(padded.x + padded.width) * width / key.pageWidth) - at.X(),
+                                    std::ceil(double(padded.y + padded.height) * height / key.pageHeight) - at.Y());
                     if (const auto* bitmap = m_cache.get(key))
                     {
                         context.DrawBitmap(rect.TopLeft() + at, size, *bitmap);
@@ -1024,7 +1027,8 @@ void ReaderWindow::paint(vcl::RenderContext& context)
             for (const auto& key : current)
                 if (const auto* bitmap = m_cache.get(key))
                 {
-                    context.DrawBitmap(rect.TopLeft() + Point(key.x, key.y), *bitmap);
+                    const auto padded = tileWithGutter(key);
+                    context.DrawBitmap(rect.TopLeft() + Point(padded.x, padded.y), *bitmap);
                     drew = true;
                 }
             if (drew && !m_firstPaint)

@@ -17,6 +17,10 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <config_features.h>
+#if HAVE_FEATURE_LOONGOFFICE_PDF_FAST
+#include <PdfFastDocument.hxx>
+#endif
 #include <framework/FrameworkHelper.hxx>
 #include <framework/ViewShellWrapper.hxx>
 #include <framework/ConfigurationController.hxx>
@@ -796,6 +800,11 @@ bool ViewShell::HandleScrollCommand(const CommandEvent& rCEvt, ::sd::Window* pWi
 
         case CommandEventId::Wheel:
             {
+#if HAVE_FEATURE_LOONGOFFICE_PDF_FAST
+                if (auto* doc = GetDoc())
+                    if (auto* fast = doc->GetPdfFastDocument())
+                        fast->NoteScroll();
+#endif
                 Reference< XSlideShowController > xSlideShowController( SlideShow::GetSlideShowController(GetViewShellBase() ) );
                 if( xSlideShowController.is() )
                 {
@@ -870,6 +879,11 @@ bool ViewShell::HandleScrollCommand(const CommandEvent& rCEvt, ::sd::Window* pWi
 
         case CommandEventId::GesturePan:
         {
+#if HAVE_FEATURE_LOONGOFFICE_PDF_FAST
+            if (auto* doc = GetDoc())
+                if (auto* fast = doc->GetPdfFastDocument())
+                    fast->NoteScroll();
+#endif
             bDone = pWin->HandleScrollCommand(rCEvt, mpHorizontalScrollBar.get(),
                                               mpVerticalScrollBar.get());
         }
