@@ -51,11 +51,25 @@ def main():
     parser.add_argument("--stress", action="store_true",
                         help="seek and zoom immediately, without waiting for raster completion")
     parser.add_argument("--preview-only", action="store_true")
+    parser.add_argument("--cache-pressure", action="store_true",
+                        help="use a 1 MB graphic cache and zero allowed idle seconds in the private profile")
     args = parser.parse_args()
     args.output = args.output.resolve()
     args.output.mkdir(parents=True, exist_ok=False)
     sample = args.output / "input.pdf"
     shutil.copyfile(args.pdf, sample)
+    if args.cache_pressure:
+        profile = args.output / "profile" / "user"
+        profile.mkdir(parents=True)
+        (profile / "registrymodifications.xcu").write_text('''<?xml version="1.0" encoding="UTF-8"?>
+<oor:items xmlns:oor="http://openoffice.org/2001/registry">
+<item oor:path="/org.openoffice.Office.Common/Cache/GraphicManager">
+<prop oor:name="GraphicMemoryLimit" oor:op="fuse"><value>1000000</value></prop>
+<prop oor:name="GraphicAllowedIdleTime" oor:op="fuse"><value>0</value></prop>
+<prop oor:name="GraphicSwappingEnabled" oor:op="fuse"><value>true</value></prop>
+</item>
+</oor:items>
+''', encoding="utf-8")
     with socket.socket() as sock:
         sock.bind(("127.0.0.1", 0))
         port = sock.getsockname()[1]
@@ -69,9 +83,12 @@ def main():
                                 "-nolisten", "tcp"], stdout=subprocess.DEVNULL,
                                stderr=subprocess.DEVNULL)
     process = None
+    controller = None
+    max_ui_roundtrip_ms = 0.0
     watchdog = None
     log = (args.output / "sal.log").open("w")
     metrics = {"page": args.page, "vcl": args.vcl, "cpus": args.cpus,
+               "cache_pressure": args.cache_pressure,
                "status": "started", "phases": []}
 
     def save_metrics():
@@ -84,11 +101,20 @@ def main():
         return ImageGrab.grab(xdisplay=args.display)
 
     def settle():
+        nonlocal max_ui_roundtrip_ms
         # Observe both sidebar and canvas. Never use this as an exact frame time.
         deadline = time.monotonic() + 15
         previous, stable = None, 0
         while time.monotonic() < deadline:
             image = screenshot()
+            # A frozen window also has identical screenshots. Require an office
+            # round trip on each observation so synchronous UI rendering cannot
+            # masquerade as a completed/stable frame.
+            if controller is not None:
+                start = time.perf_counter()
+                controller.getPropertyValue("ZoomValue")
+                max_ui_roundtrip_ms = max(max_ui_roundtrip_ms,
+                                         (time.perf_counter() - start) * 1000)
             pixels = image.crop((0, 120, 1100, 840)).tobytes()
             stable = stable + 1 if previous == pixels else 0
             if stable >= 5:
@@ -98,6 +124,8 @@ def main():
         raise TimeoutError("sidebar/canvas did not settle")
 
     def phase(name, operation):
+        nonlocal max_ui_roundtrip_ms
+        max_ui_roundtrip_ms = 0.0
         metrics["active_phase"] = name
         save_metrics()
         print(json.dumps({"begin": name}), flush=True)
@@ -108,7 +136,8 @@ def main():
         elapsed = (time.perf_counter() - start) * 1000
         image.save(args.output / (name + ".png"))
         record = {"name": name, "api_ms": round(api_ms, 1),
-                  "screenshot_stable_ms": round(elapsed, 1)}
+                  "screenshot_stable_ms": round(elapsed, 1),
+                  "max_ui_roundtrip_ms": round(max_ui_roundtrip_ms, 1)}
         metrics["phases"].append(record)
         save_metrics()
         print(json.dumps(record), flush=True)
@@ -156,6 +185,18 @@ def main():
         desktop = context.ServiceManager.createInstanceWithContext(
             "com.sun.star.frame.Desktop", context)
         doc = wait_for(lambda: desktop.getCurrentComponent())
+        configuration = context.ServiceManager.createInstanceWithContext(
+            "com.sun.star.configuration.ConfigurationProvider", context)
+        cache = configuration.createInstanceWithArguments(
+            "com.sun.star.configuration.ConfigurationAccess",
+            (prop("nodepath", "/org.openoffice.Office.Common/Cache/GraphicManager"),))
+        metrics["graphic_cache"] = {name: cache.getPropertyValue(name) for name in (
+            "GraphicMemoryLimit", "GraphicAllowedIdleTime", "GraphicSwappingEnabled")}
+        if args.cache_pressure:
+            assert metrics["graphic_cache"] == {
+                "GraphicMemoryLimit": 1000000, "GraphicAllowedIdleTime": 0,
+                "GraphicSwappingEnabled": True}, metrics["graphic_cache"]
+        save_metrics()
         controller = doc.getCurrentController()
         frame = controller.getFrame()
         frame.getContainerWindow().setPosSize(0, 0, 1280, 900, 15)

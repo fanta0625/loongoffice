@@ -93,6 +93,11 @@ public:
         , maAnnotations(std::move(aAnnotations))
         , maLinksInfo(std::move(aLinks))
     {
+        // Keep the already-read page geometry with the lazy graphic. Otherwise
+        // cache eviction asks getRange() for its preferred size and synchronously
+        // rasterizes a whole PDF page just before discarding it.
+        maGraphic.SetPrefMapMode(MapMode(MapUnit::Map100thMM));
+        maGraphic.SetPrefSize(rSize);
     }
 
     const Graphic& GetGraphic() const { return maGraphic; }

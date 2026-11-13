@@ -21,6 +21,8 @@
 #include <vcl/alpha.hxx>
 #include <vcl/graph.hxx>
 #include <vcl/graphicfilter.hxx>
+#include <vcl/pdfread.hxx>
+#include <vcl/filter/PDFiumLibrary.hxx>
 #include <tools/stream.hxx>
 #include <unotest/directories.hxx>
 #include <comphelper/hash.hxx>
@@ -975,6 +977,66 @@ CPPUNIT_TEST_FIXTURE(GraphicTest, testSwappingGraphicProperties_SVG_WithoutGfxLi
     CPPUNIT_ASSERT_EQUAL(tools::Long(100), aGraphic.GetPrefSize().Height());
     CPPUNIT_ASSERT_EQUAL(tools::Long(51), aGraphic.GetSizePixel().Width());
     CPPUNIT_ASSERT_EQUAL(tools::Long(51), aGraphic.GetSizePixel().Height());
+}
+
+CPPUNIT_TEST_FIXTURE(GraphicTest, testUnloadedPdfSwapDoesNotRasterize)
+{
+    if (!vcl::pdf::PDFiumLibrary::get())
+        return;
+    test::Directories aDirectories;
+    const OUString aURL
+        = aDirectories.getURLFromSrc(PDFEXPORT_DATA_DIRECTORY) + "SimpleMultiPagePDF.pdf";
+    for (bool bDeferred : { false, true })
+    {
+        SvFileStream aStream(aURL, StreamMode::READ);
+        std::vector<vcl::PDFGraphicResult> aPages;
+        std::unique_ptr<vcl::PDFMetadataReader> pMetadata;
+        CPPUNIT_ASSERT(vcl::ImportPDFUnloaded(aStream, aPages,
+                                            bDeferred ? &pMetadata : nullptr) > 1);
+        for (size_t nPage = 0; nPage < aPages.size(); ++nPage)
+        {
+            Graphic aGraphic = aPages[nPage].GetGraphic();
+            CPPUNIT_ASSERT(!aGraphic.isAvailable());
+            for (int nCycle = 0; nCycle < 3; ++nCycle)
+            {
+                CPPUNIT_ASSERT(aGraphic.makeAvailable());
+                // Keep the vector alive to detect even a transient decomposition
+                // during eviction; swapOut() clears the graphic's own reference.
+                auto pVector = aGraphic.getVectorGraphicData();
+                CPPUNIT_ASSERT(pVector);
+                CPPUNIT_ASSERT(pVector->getSizeBytes().first == VectorGraphicData::State::UNPARSED);
+                CPPUNIT_ASSERT(aGraphic.ImplGetImpGraphic()->swapOut());
+                CPPUNIT_ASSERT_MESSAGE("Cache eviction must not rasterize a PDF page on the UI",
+                    pVector->getSizeBytes().first == VectorGraphicData::State::UNPARSED);
+                CPPUNIT_ASSERT(!aGraphic.isAvailable());
+                CPPUNIT_ASSERT_EQUAL(aPages[nPage].GetSize(), aGraphic.GetPrefSize());
+                CPPUNIT_ASSERT(MapMode(MapUnit::Map100thMM) == aGraphic.GetPrefMapMode());
+                CPPUNIT_ASSERT_EQUAL(sal_Int32(nPage), aGraphic.getPageNumber());
+            }
+        }
+    }
+}
+
+CPPUNIT_TEST_FIXTURE(GraphicTest, testPdfPreferredSizeSurvivesCopyOnWrite)
+{
+    if (!vcl::pdf::PDFiumLibrary::get())
+        return;
+    test::Directories aDirectories;
+    const OUString aURL
+        = aDirectories.getURLFromSrc(PDFEXPORT_DATA_DIRECTORY) + "SimpleMultiPagePDF.pdf";
+    SvFileStream aStream(aURL, StreamMode::READ);
+    Graphic aGraphic = GraphicFilter::GetGraphicFilter().ImportUnloadedGraphic(aStream);
+    auto pVector = aGraphic.getVectorGraphicData();
+    CPPUNIT_ASSERT(pVector);
+    const Size aSize(1234, 5678);
+    aGraphic.SetPrefSize(aSize);
+    Graphic aCopy = aGraphic;
+    // This setter detaches ImpGraphic without changing the vector's dimensions.
+    aCopy.SetPrefMapMode(MapMode(MapUnit::Map100thMM));
+    CPPUNIT_ASSERT(aCopy.ImplGetImpGraphic() != aGraphic.ImplGetImpGraphic());
+    CPPUNIT_ASSERT_EQUAL(aSize, aCopy.GetPrefSize());
+    CPPUNIT_ASSERT(pVector->getSizeBytes().first == VectorGraphicData::State::UNPARSED);
+    CPPUNIT_ASSERT_EQUAL(aSize, aGraphic.GetPrefSize());
 }
 
 CPPUNIT_TEST_FIXTURE(GraphicTest, testSwappingVectorGraphic_PDF_WithGfxLink)

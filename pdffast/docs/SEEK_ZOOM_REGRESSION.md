@@ -50,6 +50,8 @@ timeout 180 /usr/bin/python3 pdffast/qa/seek_zoom.py \
 
 ## ae50e6d2a0a2 上的间歇性卡顿调查
 
+本节前半记录取栈前的调查；后续实机栈已定位到图形换出期间的同步 PDF 渲染，见下节。
+
 Loongnix 验证机反馈：快速 seek 后缩放偶尔无响应，预览和编辑模式均可发生。现有日志只记录已完成的图像上传和转换；不能区分卡住时的 PDFium 解析、锁等待、Draw 绘制或窗口后端等待。日志中的图像分配和上传通常为几十到几百微秒，页面 478 的编辑准备为 585974 微秒，没有证据将十几秒无响应归因于这些已完成阶段。Qt 剪贴板信息提示实机存在 Qt 组件，但不能据此认定 Qt 是原因。
 
 此前窗口流程在 seek 后等待截图稳定才缩放，未覆盖任务重叠。`seek_zoom.py --stress` 增加五个目标页（13、498、32、479、400），每次跳页后立即设置六个缩放倍率；在预览和编辑模式分别执行。编辑模式下包含转换尚未完成时的导航与取消，不能声称每个目标页都已转换；原有独立缩放阶段仍在第 400 页确认转换完成后执行。`--cpus 0` 只限制测试进程到一个逻辑 CPU，`--vcl` 指定窗口后端，`--preview-only` 可以单独运行预览部分。每个阶段开始即输出标记并保存 JSON，阻塞时仍保留所在阶段。
@@ -75,3 +77,42 @@ sudo bash pdffast/qa/capture_hang.sh 45403
 脚本需要已安装的 `gdb`，连续三次采集所有线程栈、线程状态、内存和相关绘图后端库路径。每次 attach 短暂停住进程，取栈后自动 detach，不结束程序；不生成 core 或收集环境变量。默认输出目录为 `/tmp/pdf-hang.XXXXXX`，以脚本实际打印的目录为准。若指定输出目录，必须是新目录。工具已在一个仍运行的 WSL Draw 测试进程上验证三次取栈和 detach；另通过 bash 语法检查。
 
 保留 `stacks-1.txt`、`stacks-2.txt`、`stacks-3.txt`、`threads-*.txt` 和 `environment.txt`。采集前不要覆盖或重编译运行中进程所加载的库，以免 GDB 使用了不同版本的符号。结合这组现场数据再决定修复解析、取消、锁顺序或窗口绘制路径。
+
+## 实机确认：图形缓存换出意外渲染整页 PDF
+
+用户提供的 Loongnix 25 / Loongson-3A5000 / Qt6 三次采样中，主线程 47114 都在执行：
+
+```text
+MemoryManager::ReduceMemoryTimerHandler
+  -> loopAndReduceMemory -> ImpGraphic::swapOut -> createSwapInfo
+  -> getPrefSize -> VectorGraphicData::getRange -> ensureSequenceAndRange
+  -> XPdfDecomposer::getDecomposition -> RenderPDFBitmaps
+  -> FPDF_RenderPageBitmap -> PDFium AGG 路径栅格化
+```
+
+三次采样分别落在扫描线、路径矩形判断和描边顶点生成，说明采样期间主线程正在计算。`pdffast::Session` 与转换线程在条件变量上等待；`BufferedDecompositionFlusher` 在等待 SolarMutex。就这次现场而言，直接阻塞来自缓存回收触发的同步整页绘制，不能归因于异步瓦片队列或 Qt 事件线程等待。机器可用内存约 7.2 GiB，进程 VmSwap 为 0；这里的 `swapOut` 是应用内部图形换出，不代表操作系统正在交换该进程的内存。
+
+原先 `ImportPDFUnloaded` 已读取每页物理尺寸，但只把尺寸放在 `PDFGraphicResult::maSize`，没有存入延迟加载的 `Graphic`。图形变为可用后，其首选尺寸仍为空；缓存回收保存换出信息时调用 `getPrefSize()`，后者为计算范围而同步渲染 PDF。回收定时器和图形闲置时间条件解释了间歇性以及预览、编辑模式均可受影响；CPU 较慢可以放大这条错误路径的成本。
+
+修复内容：
+
+- `PDFGraphicResult` 在构造时把已知尺寸和 Map100thMM 单位写入图形。未加载的原生 PDF 可以保存这两个元数据而不触发换入，随后沿用已有的 `restoreFromSwapInfo()` 恢复。
+- `ImpGraphic` 的复制、移动和赋值保留 `maExPrefSize`。否则图形分离复制后仍可能丢失首选尺寸，再次进入范围计算。
+- 保留原有缓存换出机制和 Draw 编辑渲染，没有关闭缓存回收或增大用户缓存设置。
+
+新增两个 VCL 回归用例。`testUnloadedPdfSwapDoesNotRasterize` 同时覆盖普通／延迟元数据导入、各页三轮换入换出、尺寸／单位／页码保持，并持有旧向量对象检查换出期间没有生成绘制序列。旧代码在“Cache eviction must not rasterize a PDF page on the UI”断言失败，修复后通过。`testPdfPreferredSizeSurvivesCopyOnWrite` 在旧代码上将 1234×5678 的首选尺寸丢失为 PDF 固有的 21590×27940，修复后保留自定义尺寸且不分解 PDF。
+
+Linux 构建和测试：`make -j6 sd` 成功；`CppunitTest_vcl_graphic_test` 89 项、`CppunitTest_sd_pdf_import_test` 12 项、`CppunitTest_pdffast_render` 5 项通过，共 106 项。日志位于 `seek-zoom-regression/swap-{baseline,copy-baseline,fixed-vcl,fixed-build-sd,fixed-sd,fixed-render}.log`。
+
+窗口脚本新增 `--cache-pressure`：仅在本次新建的独立配置中设定 1 MB 图形缓存、0 秒允许闲置时间并开启换出，且通过 UNO 读取并核对生效值。观察截图时还执行 UNO 响应探测并记录 `max_ui_roundtrip_ms`，避免将无响应窗口的静止截图误判为完成。截图仍是代理指标，不能保证每个中间帧和状态栏刷新均已呈现。
+
+最终 500 页实窗验证位于 `seek-zoom-regression/swap-pressure-final`：WSL / GTK3 / 单 CPU，缓存配置已读取确认；全部流程完成。五组预览 seek 后连续缩放 API 为 69–129 ms，期间响应探测单次最长 7.6 ms；第 400 页转换为 5221 个 Draw 对象，就绪约 1168 ms。编辑阶段响应探测最高 1465 ms，在这个限制 CPU 和缓存的条件下仍有明显绘制耗时，不能宣称已达到整体流畅度目标或替代 Loongnix 验收。此前 `swap-pressure-baseline` 的窗口流程也完成了，因此这里不以窗口前后时间宣称复现了实机十几秒阻塞；根因复现证据来自上述旧代码失败的回归测试与用户的三次现场栈。
+
+实机复测需要先退出 root shell 回到普通用户，并关闭旧 Draw 进程，再执行：
+
+```bash
+git pull --ff-only pdf-fast-review feat/pdf-fast-26.2.6
+make -j4 vcl && make -j4 sd
+```
+
+本次修复涉及 VCL，不能只替换 `libsdlo.so`。不需要 clean 或全量重建。先正常复测快速跳页、缩放、进入编辑和再次跳页；也可以将上面的窗口脚本示例加上 `--stress --cache-pressure --cpus 0`，使用新结果目录运行。修复切断了所提供调用栈中的同步渲染路径；Loongnix 实机效果仍需验收。
