@@ -307,7 +307,7 @@ struct NativeImport::Impl
                     if (line == "#DONE")
                         break;
                     if (line.starts_with("#"))
-                        throw std::runtime_error("Native PDF page conversion failed");
+                        throw std::runtime_error("Native PDF page conversion failed: " + line);
                     line += '\n';
                     write(commands.handle, line.data(), line.size());
                 }

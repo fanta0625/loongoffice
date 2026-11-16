@@ -47,6 +47,8 @@
 #include <vcl/mapmod.hxx>
 #include <vcl/svapp.hxx>
 #include <vcl/timer.hxx>
+#include <tools/stream.hxx>
+#include <unotools/tempfile.hxx>
 #include <sal/log.hxx>
 #include <comphelper/scopeguard.hxx>
 #include <algorithm>
@@ -351,8 +353,35 @@ struct PdfFastDocument::Impl
         const auto bytes = link->getDataContainer().getDataShared();
         if (!bytes || bytes->empty())
             throw std::runtime_error("Missing native PDF source");
-        if (!result.success || result.page != graphic.getPageNumber())
+        if (result.success && result.page != graphic.getPageNumber())
             throw std::runtime_error("Native PDF transport failed");
+
+        // The asynchronous command transport is an optimization around the
+        // native Draw importer. Complex pages can make that transport fail
+        // after the helper has already produced partial output. Fall back to
+        // the ordinary native filter from the frozen source instead of leaving
+        // an otherwise editable page permanently read-only.
+        std::unique_ptr<utl::TempFileNamed> fallbackSource;
+        OUString inputUrl(u"private:stream"_ustr);
+        uno::Sequence<beans::PropertyValue> fallbackProperties;
+        if (!result.success)
+        {
+            fallbackSource = std::make_unique<utl::TempFileNamed>();
+            fallbackSource->EnableKillingFile();
+            SvFileStream stream(fallbackSource->GetURL(), StreamMode::WRITE);
+            stream.WriteBytes(bytes->data(), bytes->size());
+            stream.Close();
+            if (stream.GetError())
+                throw std::runtime_error("Cannot create native PDF fallback source");
+            inputUrl = fallbackSource->GetURL();
+            fallbackProperties = comphelper::InitPropertySequence({
+                { "URL", uno::Any(inputUrl) },
+                { "FilterName", uno::Any(u"draw_pdf_import"_ustr) },
+                { "FilterOptions", uno::Any(u"LoongOfficePdfPage="_ustr
+                                            + OUString::number(graphic.getPageNumber() + 1)) },
+            });
+            SAL_INFO("pdffast", "native-edit-fallback page=" << graphic.getPageNumber());
+        }
 
         // Initialize an import/data model. Completing a new Draw document here
         // installs defaults such as automatic kerning which the normal PDF
@@ -390,17 +419,22 @@ struct PdfFastDocument::Impl
         // Replay only a completed helper job. Files, helper startup/parse and
         // pipe waits happened on the transport worker; UNO/VCL stay on this thread.
         const auto started = Clock::now();
-        const bool imported = filter->filter(comphelper::InitPropertySequence({
-            { "URL", uno::Any(u"private:stream"_ustr) },
-            { "LoongOfficePdfCommands", uno::Any(result.commands) },
-            { "LoongOfficePdfBinary", uno::Any(result.binary) },
-            { "FilterName", uno::Any(u"draw_pdf_import"_ustr) },
-            { "FilterOptions", uno::Any(u"LoongOfficePdfPage="_ustr
-                                        + OUString::number(graphic.getPageNumber() + 1)) },
-        }));
+        const bool imported = result.success
+                                  ? filter->filter(comphelper::InitPropertySequence({
+                                        { "URL", uno::Any(inputUrl) },
+                                        { "LoongOfficePdfCommands", uno::Any(result.commands) },
+                                        { "LoongOfficePdfBinary", uno::Any(result.binary) },
+                                        { "FilterName", uno::Any(u"draw_pdf_import"_ustr) },
+                                        { "FilterOptions", uno::Any(u"LoongOfficePdfPage="_ustr
+                                                                    + OUString::number(
+                                                                        graphic.getPageNumber() + 1)) },
+                                    }))
+                                  : filter->filter(fallbackProperties);
         auto& nativeDoc = *nativeShell->GetDoc();
         const auto count = nativeDoc.GetSdPageCount(PageKind::Standard);
-        SAL_INFO("pdffast", "native-edit-import backend=poppler pdf_page="
+        SAL_INFO("pdffast", "native-edit-import backend="
+                                << (result.success ? "session" : "native-fallback")
+                                << " pdf_page="
                                 << graphic.getPageNumber() << " success=" << imported
                                 << " pages=" << count << " total_us="
                                 << std::chrono::duration_cast<std::chrono::microseconds>(
@@ -1084,9 +1118,9 @@ bool PdfFastDocument::Impl::processEdits()
                 && result->page == original->GetGraphic().getPageNumber())
             {
                 if (!result->success)
-                    SAL_WARN("pdffast", "Native page preparation failed: " << result->error);
-                else
-                    ready = preparePage(*page, nullptr, &*result);
+                    SAL_WARN("pdffast", "Native page transport failed, using Draw fallback: "
+                                              << result->error);
+                ready = preparePage(*page, nullptr, &*result);
                 if (auto* entry = findPage(*page))
                     entry->failed = !ready;
                 original->ActionChanged();
@@ -1235,7 +1269,6 @@ bool PdfFastDocument::Impl::preparePage(SdrPage& target, SdrView* view,
         {
             it->failed = true;
             SAL_WARN("pdffast", "Native single-page transport failed: " << result.error);
-            return false;
         }
         return preparePage(target, view, &result);
     }

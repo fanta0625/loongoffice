@@ -24,7 +24,7 @@ DrawViewShell 接收 ModeChanged 与 SwitchPage，向控制器登记当前标准
 
 后台 NativeImport 首次把固定源写入临时文件，启动持续会话 xpdfimport，并保持 PDF 打开。每页发出私有 R 请求，使用新的 PDFOutDev 重置字体／图片状态；资源 flush 完成才返回完成标记。命令／资源通过租约交给 UI，回放结束前不复用输出文件。取消会终止 helper；异常和超时可以在后续请求重建。传输期限默认两分钟，主线程回放不在此期限内。
 
-UI 从 FilterFactory 读取默认 `draw_pdf_import` 服务定义，借助私有录制命令／资源描述符回放原有 PDFIProcessor、XML 生成及 Draw XMLOasisImporter。它与默认 XmlFilterAdaptor → DrawPDFImport → Poppler xpdfimport 使用同一对象转换链。普通单页 FilterOptions `LoongOfficePdfPage=N` 仍保留；无私有选项时默认整份导入协议不变，所有扩展受编译开关约束。
+UI 从 FilterFactory 读取默认 `draw_pdf_import` 服务定义，借助私有录制命令／资源描述符回放原有 PDFIProcessor、XML 生成及 Draw XMLOasisImporter。它与默认 XmlFilterAdaptor → DrawPDFImport → Poppler xpdfimport 使用同一对象转换链。普通单页 FilterOptions `LoongOfficePdfPage=N` 仍保留；无私有选项时默认整份导入协议不变，所有扩展受编译开关约束。后台命令传输失败时，控制器从冻结源 PDF 重新调用同一个原生过滤器和 `LoongOfficePdfPage=N`，只把转换时机退回同步原生路径，不引入第二套对象转换逻辑；失败回退仍保留原始 PDF 预览并允许重试。
 
 目标页先导入无窗口临时 Draw 数据模型，沿用导入初始化而不安装新建文档默认样式，避免改变文字字距，要求只有一个标准页；固化样式后克隆对象、映射图层并解除临时主页面及页面样式引用。提交保留当前目标页尺寸、边距、背景与批注，避免覆盖等待期间已有页面设置。提交前验证源、页、视图及原始对象身份，失败保留预览并回滚。转换不成为用户撤销项、不清除已有历史，并分别恢复模型及文档的修改状态。已准备页不重复转换。
 
