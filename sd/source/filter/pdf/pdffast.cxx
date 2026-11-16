@@ -39,6 +39,7 @@
 #include <svx/svdlayer.hxx>
 #include <svx/annotation/Annotation.hxx>
 #include <svl/whiter.hxx>
+#include <svl/lstner.hxx>
 #include <svx/svdmodel.hxx>
 #include <vcl/gfxlink.hxx>
 #include <vcl/BitmapWriteAccess.hxx>
@@ -52,6 +53,7 @@
 #include <sal/log.hxx>
 #include <comphelper/scopeguard.hxx>
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <deque>
 #include <cmath>
@@ -80,15 +82,27 @@ std::size_t cost(const TileKey& key)
 }
 }
 
-struct PdfFastDocument::Impl
+struct PdfFastDocument::Impl : public SfxListener
 {
     struct Page
     {
+        explicit Page(SdrGrafObj* graphic)
+            : original(graphic)
+        {
+        }
         rtl::Reference<SdrGrafObj> original;
         bool prepared = false;
         bool failed = false;
         bool metadataReady = true;
         bool metadataFailed = false;
+        sal_uInt64 pageId = 0;
+        bool dirty = false;
+        Size size;
+        std::array<sal_Int32, 4> borders{};
+        drawinglayer::primitive2d::Primitive2DContainer background;
+        drawinglayer::primitive2d::Primitive2DContainer sourceContent;
+        std::vector<drawinglayer::primitive2d::Primitive2DContainer> content;
+        std::vector<SdrLayerID> layers;
     };
     struct Viewport
     {
@@ -170,6 +184,81 @@ struct PdfFastDocument::Impl
     bool preparing = false;
     bool editMode = false;
 
+    static auto borders(const SdrPage& page)
+    {
+        return std::array<sal_Int32, 4>{ page.GetLeftBorder(), page.GetUpperBorder(),
+                                         page.GetRightBorder(), page.GetLowerBorder() };
+    }
+
+    static auto primitives(const SdrObject& object)
+    {
+        drawinglayer::primitive2d::Primitive2DContainer result;
+        object.GetViewContact().getViewIndependentPrimitive2DContainer(result);
+        return result;
+    }
+
+    static auto background(const SdrPage& page)
+    {
+        drawinglayer::primitive2d::Primitive2DContainer result;
+        // Page fill and master descriptor, excluding the page's object hierarchy.
+        auto& contact = page.GetViewContact();
+        contact.GetViewContact(2).getViewIndependentPrimitive2DContainer(result);
+        contact.GetViewContact(3).getViewIndependentPrimitive2DContainer(result);
+        return result;
+    }
+
+    static void markDirty(Page& entry)
+    {
+        entry.dirty = true;
+        // Once reuse is ruled out, retain no obsolete drawing snapshots.
+        entry.content.clear();
+        entry.layers.clear();
+        entry.sourceContent.clear();
+    }
+
+    void Notify(SfxBroadcaster&, const SfxHint& hint) override
+    {
+        // Import and metadata delivery are internal changes, not user edits.
+        if (preparing || hint.GetId() != SfxHintId::ThisIsAnSdrHint)
+            return;
+        const auto& change = static_cast<const SdrHint&>(hint);
+        switch (change.GetKind())
+        {
+            case SdrHintKind::ObjectChange:
+            case SdrHintKind::ObjectInserted:
+            case SdrHintKind::ObjectRemoved:
+            {
+                const auto* page = change.GetPage();
+                for (auto& entry : pages)
+                    if (!page || page->IsMasterPage() || entry.pageId == page->GetUniqueID())
+                        markDirty(entry);
+                break;
+            }
+            case SdrHintKind::LayerChange:
+            case SdrHintKind::LayerOrderChange:
+            case SdrHintKind::ModelCleared:
+                for (auto& entry : pages)
+                    markDirty(entry);
+                break;
+            default:
+                break; // Selection, navigation and page order do not change content.
+        }
+    }
+
+    void rememberContent(Page& entry, SdrPage& page)
+    {
+        entry.content.clear();
+        entry.layers.clear();
+        entry.sourceContent.clear();
+        if (entry.dirty)
+            return;
+        for (size_t n = 0; n < page.GetObjCount(); ++n)
+        {
+            entry.content.push_back(primitives(*page.GetObj(n)));
+            entry.layers.push_back(page.GetObj(n)->GetLayer());
+        }
+    }
+
     bool editPending(int page) const
     {
         return std::any_of(intents.begin(), intents.end(), [&](const auto& intent) {
@@ -216,7 +305,15 @@ struct PdfFastDocument::Impl
                     break;
                 }
             }
-            pages.push_back({ original, false, false });
+            pages.emplace_back(original.get());
+            auto& entry = pages.back();
+            entry.pageId = page->GetUniqueID();
+            entry.size = page->GetSize();
+            entry.borders = borders(*page);
+            entry.background = background(*page);
+            if (original.is())
+                entry.sourceContent = primitives(*original);
+            entry.dirty = page->GetObjCount() != 1;
             rawPages.emplace(original.get(), &pages.back());
         }
         const auto link = pages.front().original->GetGraphic().GetSharedGfxLink();
@@ -237,6 +334,7 @@ struct PdfFastDocument::Impl
         poll.SetInvokeHandler(LINK(this, Impl, Deliver));
         metadataIdle.SetPriority(TaskPriority::LOWEST);
         metadataIdle.SetInvokeHandler(LINK(this, Impl, ReadMetadata));
+        StartListening(doc);
         wake();
     }
 
@@ -256,7 +354,9 @@ struct PdfFastDocument::Impl
                 continue;
             if (const auto found = rawPages.find(object); found != rawPages.end())
                 return found->second;
-            pages.push_back({ object, false, false });
+            pages.emplace_back(object);
+            // No original edit baseline is available for a discovered clone.
+            pages.back().dirty = true;
             rawPages.emplace(object, &pages.back());
             return &pages.back();
         }
@@ -335,6 +435,7 @@ struct PdfFastDocument::Impl
 
     ~Impl()
     {
+        EndListeningAll();
         poll.Stop();
         metadataIdle.Stop();
         importer.reset(); // join the producer before removing its queued UI event
@@ -1192,6 +1293,53 @@ bool PdfFastDocument::PrepareForSave()
     return true;
 }
 
+const SdrGrafObj* PdfFastDocument::GetUnchangedPageGraphic(const SdrPage& page,
+                                                           const SdrPageView& view)
+{
+    // Source PDF annotations may otherwise be copied a second time by the
+    // native PDF writer. Keep the existing Draw path for metadata-bearing pages.
+    const auto* sdPage = dynamic_cast<const SdPage*>(&page);
+    if (!sdPage || !sdPage->getAnnotations().empty() || !sdPage->getLinkAnnotations().empty())
+        return nullptr;
+    auto& impl = *m_impl;
+    for (auto& entry : impl.pages)
+    {
+        if (entry.pageId != page.GetUniqueID() || !entry.prepared || entry.dirty
+            || !entry.original.is() || entry.content.empty())
+            continue;
+        // Events alone are insufficient (Nbc setters, page format and inherited
+        // styles). Compare immutable primitives too. Never use document IsChanged:
+        // another page may have changed, or a previous save cleared that flag.
+        if (page.GetSize() != entry.size || Impl::borders(page) != entry.borders
+            || Impl::background(page) != entry.background
+            || page.GetObjCount() != entry.content.size())
+            return nullptr;
+        SdrObjListIter objects(&page, SdrIterMode::DeepWithGroups);
+        while (objects.IsMore())
+        {
+            const auto* object = objects.Next();
+            if (!object->IsVisible() || !object->IsPrintable()
+                || !view.GetVisibleLayers().IsSet(object->GetLayer())
+                || !view.GetPrintableLayers().IsSet(object->GetLayer()))
+                return nullptr;
+        }
+        for (size_t n = 0; n < page.GetObjCount(); ++n)
+        {
+            const auto& object = *page.GetObj(n);
+            if (object.GetLayer() != entry.layers[n] || !object.IsVisible() || !object.IsPrintable()
+                || !view.GetVisibleLayers().IsSet(object.GetLayer())
+                || !view.GetPrintableLayers().IsSet(object.GetLayer())
+                || Impl::primitives(object) != entry.content[n])
+                return nullptr;
+        }
+        SAL_INFO("pdffast", "native-export-source page="
+                                << page.GetPageNum()
+                                << " pdf_page=" << entry.original->GetGraphic().getPageNumber());
+        return entry.original.get();
+    }
+    return nullptr;
+}
+
 PdfFastDocument::PreviewResult
 PdfFastDocument::GetPagePreview(const SdrPage& page, const Size& size, Bitmap& bitmap, bool visible)
 {
@@ -1279,6 +1427,9 @@ bool PdfFastDocument::Impl::preparePage(SdrPage& target, SdrView* view,
     const bool changed = impl.doc.IsChanged();
     const bool modified = impl.doc.GetDocSh() && impl.doc.GetDocSh()->IsModified();
     const bool undo = impl.doc.IsUndoEnabled();
+    // Catch silent changes to raw pages before capturing the editable baseline.
+    if (page->GetObjCount() != 1 || primitives(*it->original) != it->sourceContent)
+        markDirty(*it);
     const auto originalRect = it->original->GetLogicRect();
     SAL_INFO("pdffast",
              "native-edit-begin page="
@@ -1347,6 +1498,7 @@ bool PdfFastDocument::Impl::preparePage(SdrPage& target, SdrView* view,
         page->RemoveObject(it->original->GetOrdNum());
         committed = true;
         it->prepared = true; // A blank native page is a valid editable page too.
+        impl.rememberContent(*it, *page);
         // Page geometry, background and annotations already belong to the live
         // Draw document. Materialization replaces only the source graphic;
         // importing must preserve page-format changes and edits made elsewhere.

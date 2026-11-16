@@ -13,6 +13,8 @@ class SdrObject;
 class SdrView;
 class OutputDevice;
 class SdrPage;
+class SdrPageView;
+class SdrGrafObj;
 class Size;
 class Bitmap;
 namespace sdr::contact
@@ -65,6 +67,9 @@ public:
     EditState GetEditState(const SdrView&) const;
     void ForgetView(const SdrView&);
     bool PrepareForSave();
+    // PDF export only. The returned source graphic is borrowed; the live page
+    // is never replaced or changed. Unknown/changed pages use native Draw.
+    const SdrGrafObj* GetUnchangedPageGraphic(const SdrPage&, const SdrPageView&);
     enum class PreviewResult
     {
         NotHandled,

@@ -30,6 +30,7 @@
 
 #include <comphelper/scopeguard.hxx>
 #include <comphelper/propertysequence.hxx>
+#include <comphelper/propertyvalue.hxx>
 
 #include <unotools/tempfile.hxx>
 #include <unotools/mediadescriptor.hxx>
@@ -37,6 +38,7 @@
 #include <editeng/outlobj.hxx>
 #include <editeng/editobj.hxx>
 #include <vcl/filter/PDFiumLibrary.hxx>
+#include <vcl/pdf/PDFPageObjectType.hxx>
 #include <vcl/pdf/PDFAnnotationSubType.hxx>
 #include <vcl/bitmap.hxx>
 #include <vcl/gfxlink.hxx>
@@ -516,6 +518,176 @@ CPPUNIT_TEST_FIXTURE(SdrPdfImportTest, testVisiblePdfThumbnailsArriveWithoutMode
     }
     for (const auto& contact : contacts)
         CPPUNIT_ASSERT_EQUAL(0u, contact->changes);
+}
+
+CPPUNIT_TEST_FIXTURE(SdrPdfImportTest, testPdfFastUnchangedPageExport)
+{
+    auto library = vcl::pdf::PDFiumLibrary::get();
+    if (!library)
+        return;
+    EnvVarGuard preview("LO_IMPORT_USE_PDFIUM", "1");
+    loadFromFile(u"pdf/pdffast-native-pages.pdf");
+    auto* model = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(model);
+    auto* doc = model->GetDocShell()->GetDoc();
+    CPPUNIT_ASSERT(sd::PdfFastDocument::Attach(*doc));
+    auto* controller = doc->GetPdfFastDocument();
+    SdrView view(*doc);
+    struct Exported
+    {
+        std::vector<BitmapChecksum> pixels;
+        std::vector<int> textObjects;
+    };
+    auto exportPdf = [&](bool tagged, const OUString& range = OUString()) {
+        uno::Sequence<beans::PropertyValue> data{
+            comphelper::makePropertyValue(u"UseTaggedPDF"_ustr, tagged),
+            comphelper::makePropertyValue(u"ExportBookmarks"_ustr, false),
+            comphelper::makePropertyValue(u"PageRange"_ustr, range),
+        };
+        uno::Reference<frame::XStorable> storable(mxComponent, uno::UNO_QUERY_THROW);
+        storable->storeToURL(
+            maTempFile.GetURL(),
+            { comphelper::makePropertyValue(u"FilterName"_ustr, u"draw_pdf_Export"_ustr),
+              comphelper::makePropertyValue(u"FilterData"_ustr, data) });
+        auto pdf = parsePDFExport();
+        CPPUNIT_ASSERT(pdf);
+        Exported result;
+        for (int i = 0; i < pdf->getPageCount(); ++i)
+        {
+            auto page = pdf->openPage(i);
+            CPPUNIT_ASSERT(page);
+            int texts = 0;
+            for (int n = 0; n < page->getObjectCount(); ++n)
+                if (page->getObject(n)->getType() == vcl::pdf::PDFPageObjectType::Text)
+                    ++texts;
+            result.textObjects.push_back(texts);
+            int width = 400;
+            int height = 300;
+            auto bitmap = library->createBitmap(width, height, false);
+            CPPUNIT_ASSERT(bitmap);
+            bitmap->fillRect(0, 0, width, height, 0xffffffff);
+            bitmap->renderPageBitmap(pdf.get(), page.get(), 0, 0, width, height);
+            result.pixels.push_back(bitmap->createBitmapFromBuffer().GetChecksum());
+        }
+        return result;
+    };
+    const auto raw = exportPdf(false);
+    CPPUNIT_ASSERT_EQUAL(std::size_t(3), raw.pixels.size());
+    // Compare with the existing raw-PDF export at the same page order. Native
+    // print-area sizing and PDFium resource caching can depend on that order.
+    doc->SdrModel::MovePage(3, 1);
+    doc->SdrModel::MovePage(4, 2);
+    const auto rawReordered = exportPdf(false);
+    const auto rawRange = exportPdf(false, u"1"_ustr);
+    doc->SdrModel::MovePage(3, 1);
+    doc->SdrModel::MovePage(4, 2);
+    for (sal_uInt16 i = 0; i < 2; ++i)
+    {
+        auto* page = doc->GetSdPage(i, PageKind::Standard);
+        auto* pageView = view.ShowSdrPage(page);
+        controller->PrepareCurrentPage(view);
+        CPPUNIT_ASSERT(controller->GetUnchangedPageGraphic(*page, *pageView));
+    }
+    auto* first = doc->GetSdPage(0, PageKind::Standard);
+    auto* second = doc->GetSdPage(1, PageKind::Standard);
+    const auto count = first->GetObjCount();
+    const auto undo = doc->GetSdrUndoManager()->GetUndoActionCount();
+    doc->SdrModel::SetChanged(false);
+    model->GetDocShell()->SetModified(false);
+    const auto unchanged = exportPdf(false);
+    CPPUNIT_ASSERT(raw.pixels == unchanged.pixels);
+    CPPUNIT_ASSERT(raw.textObjects == unchanged.textObjects);
+    CPPUNIT_ASSERT_EQUAL(count, first->GetObjCount());
+    CPPUNIT_ASSERT_EQUAL(undo, doc->GetSdrUndoManager()->GetUndoActionCount());
+    CPPUNIT_ASSERT(!model->GetDocShell()->IsModified());
+    // Range selection follows final page order, not source PDF page indices.
+    doc->SdrModel::MovePage(3, 1);
+    doc->SdrModel::MovePage(4, 2);
+    const auto reordered = exportPdf(false);
+    CPPUNIT_ASSERT(rawReordered.pixels == reordered.pixels);
+    CPPUNIT_ASSERT(rawReordered.textObjects == reordered.textObjects);
+    const auto range = exportPdf(false, u"1"_ustr);
+    CPPUNIT_ASSERT_EQUAL(std::size_t(1), range.pixels.size());
+    CPPUNIT_ASSERT_EQUAL(rawRange.pixels[0], range.pixels[0]);
+    // Tagged export must retain native shape rendering and text tags.
+    const auto tagged = exportPdf(true);
+    CPPUNIT_ASSERT(tagged.textObjects[0] > 0);
+    CPPUNIT_ASSERT(tagged.textObjects[1] > 0);
+    first->GetObj(0)->Move(Size(700, 0));
+    doc->SdrModel::SetChanged(false); // A save/reset must not establish a new baseline.
+    model->GetDocShell()->SetModified(false);
+    auto* firstView = view.ShowSdrPage(first);
+    CPPUNIT_ASSERT(!controller->GetUnchangedPageGraphic(*first, *firstView));
+    auto* secondView = view.ShowSdrPage(second);
+    CPPUNIT_ASSERT(controller->GetUnchangedPageGraphic(*second, *secondView));
+    const auto modified = exportPdf(false);
+    CPPUNIT_ASSERT_EQUAL(rawReordered.pixels[0], modified.pixels[0]);
+    CPPUNIT_ASSERT(modified.pixels[1] != rawReordered.pixels[1]);
+    CPPUNIT_ASSERT(modified.textObjects[1] > 0);
+}
+
+CPPUNIT_TEST_FIXTURE(SdrPdfImportTest, testPdfFastExportCorrectnessBarriers)
+{
+    if (!vcl::pdf::PDFiumLibrary::get())
+        return;
+    EnvVarGuard preview("LO_IMPORT_USE_PDFIUM", "1");
+    loadFromFile(u"pdf/pdffast-native-pages.pdf");
+    auto* model = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(model);
+    auto* doc = model->GetDocShell()->GetDoc();
+    CPPUNIT_ASSERT(sd::PdfFastDocument::Attach(*doc));
+    auto* controller = doc->GetPdfFastDocument();
+    SdrView view(*doc);
+    auto* page = doc->GetSdPage(0, PageKind::Standard);
+    auto* pageView = view.ShowSdrPage(page);
+    controller->PrepareCurrentPage(view);
+    CPPUNIT_ASSERT(controller->GetUnchangedPageGraphic(*page, *pageView));
+    const auto size = page->GetSize();
+    page->SetSize(Size(size.Width() + 100, size.Height()));
+    CPPUNIT_ASSERT(!controller->GetUnchangedPageGraphic(*page, *pageView));
+    page->SetSize(size);
+    CPPUNIT_ASSERT(controller->GetUnchangedPageGraphic(*page, *pageView));
+    const auto layers = pageView->GetPrintableLayers();
+    pageView->SetPrintableLayers(SdrLayerIDSet());
+    CPPUNIT_ASSERT(!controller->GetUnchangedPageGraphic(*page, *pageView));
+    pageView->SetPrintableLayers(layers);
+    CPPUNIT_ASSERT(controller->GetUnchangedPageGraphic(*page, *pageView));
+    // Nbc edits bypass hints; immutable primitive comparison is the second gate.
+    page->GetObj(0)->NbcMove(Size(100, 0));
+    page->GetObj(0)->GetViewContact().ActionChanged();
+    CPPUNIT_ASSERT(!controller->GetUnchangedPageGraphic(*page, *pageView));
+    page->GetObj(0)->NbcMove(Size(-100, 0));
+    page->GetObj(0)->GetViewContact().ActionChanged();
+    CPPUNIT_ASSERT(controller->GetUnchangedPageGraphic(*page, *pageView));
+    // Real edits remain conservatively dirty even after reversing the move.
+    page->GetObj(0)->Move(Size(100, 0));
+    page->GetObj(0)->Move(Size(-100, 0));
+    CPPUNIT_ASSERT(!controller->GetUnchangedPageGraphic(*page, *pageView));
+    // Silent additions before conversion must never disappear from export.
+    auto* raw = doc->GetSdPage(1, PageKind::Standard);
+    raw->NbcInsertObject(page->GetObj(0)->CloneSdrObject(*doc).get());
+    pageView = view.ShowSdrPage(raw);
+    controller->PrepareCurrentPage(view);
+    CPPUNIT_ASSERT(!controller->GetUnchangedPageGraphic(*raw, *pageView));
+}
+
+CPPUNIT_TEST_FIXTURE(SdrPdfImportTest, testPdfFastAnnotatedExportFallback)
+{
+    if (!vcl::pdf::PDFiumLibrary::get())
+        return;
+    EnvVarGuard preview("LO_IMPORT_USE_PDFIUM", "1");
+    loadFromFile(u"PdfWithAnnotation.pdf");
+    auto* model = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(model);
+    auto* doc = model->GetDocShell()->GetDoc();
+    CPPUNIT_ASSERT(sd::PdfFastDocument::Attach(*doc));
+    auto* controller = doc->GetPdfFastDocument();
+    SdrView view(*doc);
+    auto* page = doc->GetSdPage(0, PageKind::Standard);
+    auto* pageView = view.ShowSdrPage(page);
+    controller->PrepareCurrentPage(view);
+    CPPUNIT_ASSERT(!page->getAnnotations().empty());
+    CPPUNIT_ASSERT(!controller->GetUnchangedPageGraphic(*page, *pageView));
 }
 
 CPPUNIT_TEST_FIXTURE(SdrPdfImportTest, testDeferredEditPreservesPageFormat)

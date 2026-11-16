@@ -84,6 +84,7 @@
 #include <config_features.h>
 #if HAVE_FEATURE_LOONGOFFICE_PDF_FAST
 #include <PdfFastDocument.hxx>
+#include <svx/svdograf.hxx>
 #endif
 #include <sdhtmlfilter.hxx>
 #include "unopool.hxx"
@@ -3143,12 +3144,19 @@ class ImplRenderPaintProc : public sdr::contact::ViewObjectContactRedirector
 {
     const SdrLayerAdmin&    rLayerAdmin;
     SdrPageView*            pSdrPageView;
+#if HAVE_FEATURE_LOONGOFFICE_PDF_FAST
+    const SdrGrafObj* mpPdfFastSource = nullptr;
+    bool mbPdfFastSourcePainted = false;
+#endif
 
 public:
     bool IsVisible  ( const SdrObject* pObj ) const;
     bool IsPrintable( const SdrObject* pObj ) const;
 
     ImplRenderPaintProc(const SdrLayerAdmin& rLA, SdrPageView* pView);
+#if HAVE_FEATURE_LOONGOFFICE_PDF_FAST
+    void SetPdfFastSource(const SdrGrafObj* source) { mpPdfFastSource = source; }
+#endif
 
     // all default implementations just call the same methods at the original. To do something
     // different, override the method and at least do what the method does.
@@ -3429,6 +3437,20 @@ void ImplRenderPaintProc::createRedirectedPrimitive2DSequence(
         return;
     if(!IsVisible(pObject) || !IsPrintable(pObject))
         return;
+
+#if HAVE_FEATURE_LOONGOFFICE_PDF_FAST
+    if (mpPdfFastSource && pSdrPageView && pSdrPage == pSdrPageView->GetPage())
+    {
+        // Export-only redirection. Leave the editable model, undo and selections
+        // intact; reuse the frozen PDF exactly once instead of replaying shapes.
+        if (!mbPdfFastSourcePainted)
+        {
+            mpPdfFastSource->GetViewContact().getViewIndependentPrimitive2DContainer(rVisitor);
+            mbPdfFastSourcePainted = true;
+        }
+        return;
+    }
+#endif
 
     sdr::contact::ViewObjectContactRedirector::createRedirectedPrimitive2DSequence(rOriginal, rDisplayInfo, rVisitor);
 }
@@ -3751,6 +3773,15 @@ void SAL_CALL SdXImpressDocument::render( sal_Int32 nRenderer, const uno::Any& r
             }
         }
 
+#if HAVE_FEATURE_LOONGOFFICE_PDF_FAST
+        // Printing, selection export, notes and tagged output keep native Draw
+        // rendering. Source reuse cannot supply the editable shapes' PDF tags.
+        if (pPDFExtOutDevData && pPage && pPV && !bExportNotesPages
+            && !pPDFExtOutDevData->GetIsExportTaggedPDF()
+            && !pPDFExtOutDevData->GetIsExportNotesInMargin())
+            if (auto* fast = mpDoc->GetPdfFastDocument())
+                aImplRenderPaintProc.SetPdfFastSource(fast->GetUnchangedPageGraphic(*pPage, *pPV));
+#endif
         aView.SdrPaintView::CompleteRedraw(pOut, aRegion, &aImplRenderPaintProc);
 
         if (pPDFExtOutDevData && pPage)
