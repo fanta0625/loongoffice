@@ -510,6 +510,9 @@ private:
     bool                                                  mbPastePossible;
     bool                                                  mbMouseButtonDown;
     bool                                                  mbMouseSelecting;
+    // PDF Fast preparation uses the native wait cursor only while the current
+    // page is being materialized. Ordinary Draw documents never set this flag.
+    bool                                                  mbPdfFastWaiting = false;
     std::unique_ptr<AnnotationManager> mpAnnotationManager;
     std::unique_ptr<ViewOverlayManager> mpViewOverlayManager;
     std::vector<std::unique_ptr<SdrExternalToolEdit>> m_ExternalEdits;

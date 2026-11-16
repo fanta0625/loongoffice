@@ -164,6 +164,11 @@ DrawViewShell::~DrawViewShell()
 void DrawViewShell::ImplDestroy()
 {
 #if HAVE_FEATURE_LOONGOFFICE_PDF_FAST
+    if (mbPdfFastWaiting && mpContentWindow)
+    {
+        mpContentWindow->LeaveWait();
+        mbPdfFastWaiting = false;
+    }
     if (auto* controller = GetDoc()->GetPdfFastDocument())
     {
         if (mpDrawView)

@@ -95,6 +95,20 @@ void DrawViewShell::RequestPdfPage()
 IMPL_LINK(DrawViewShell, PdfEditStateChanged, bool, blocked, void)
 {
 #if HAVE_FEATURE_LOONGOFFICE_PDF_FAST
+    const bool preparing = blocked && mpDrawView && GetDoc()->GetPdfFastDocument()
+                           && GetDoc()->GetPdfFastDocument()->GetEditState(*mpDrawView)
+                                  == PdfFastDocument::EditState::Preparing;
+    if (preparing != mbPdfFastWaiting)
+    {
+        if (mpContentWindow)
+        {
+            if (preparing)
+                mpContentWindow->EnterWait();
+            else
+                mpContentWindow->LeaveWait();
+        }
+        mbPdfFastWaiting = preparing;
+    }
     GetViewFrame()->GetDispatcher()->SetContentReadOnly(blocked);
     GetViewFrame()->GetBindings().Invalidate(SID_CONTEXT);
 #else
