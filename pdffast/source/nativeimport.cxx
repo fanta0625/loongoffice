@@ -96,6 +96,8 @@ public:
         }
     }
 };
+
+constexpr std::size_t MAX_HELPER_ERROR = 16 * 1024;
 }
 
 struct NativeImport::Impl
@@ -115,6 +117,8 @@ struct NativeImport::Impl
     oslFileHandle input = nullptr, output = nullptr, errors = nullptr;
     std::unique_ptr<Lines> lines;
     std::thread drain;
+    std::mutex errorMutex;
+    std::string helperError;
     File snapshot, commands, binary;
     std::thread watchdog;
     std::thread worker;
@@ -249,13 +253,19 @@ struct NativeImport::Impl
                 throw std::runtime_error("Cannot start PDF import helper");
         }
         // Binary resources go to -f, but drain diagnostic stderr independently
-        // so a noisy/crashing helper cannot deadlock against a full pipe.
+        // so a noisy/crashing helper cannot deadlock against a full pipe. Keep
+        // a bounded copy so a page conversion failure remains diagnosable.
         drain = std::thread([this] {
             std::array<char, 4096> buffer;
             sal_uInt64 count = 0;
             while (osl_readFile(errors, buffer.data(), buffer.size(), &count) == osl_File_E_None
                    && count)
             {
+                std::scoped_lock lock(errorMutex);
+                const auto remaining
+                    = MAX_HELPER_ERROR - std::min(helperError.size(), MAX_HELPER_ERROR);
+                if (remaining)
+                    helperError.append(buffer.data(), std::min<std::size_t>(count, remaining));
             }
         });
         lines = std::make_unique<Lines>(output);
@@ -285,6 +295,10 @@ struct NativeImport::Impl
                 openHelper();
                 checkStop();
                 commands.create();
+                {
+                    std::scoped_lock lock(errorMutex);
+                    helperError.clear();
+                }
                 const auto request = "R" + std::to_string(page + 1) + "\n";
                 write(input, request.data(), request.size());
                 for (;;)
@@ -308,6 +322,16 @@ struct NativeImport::Impl
                 commands.close();
                 value.error = OUString::fromUtf8(error.what());
                 closeHelper();
+                std::string helperErrorCopy;
+                {
+                    std::scoped_lock lock(errorMutex);
+                    helperErrorCopy = helperError;
+                }
+                if (!helperErrorCopy.empty())
+                {
+                    value.error += u": helper stderr: "_ustr;
+                    value.error += OUString::fromUtf8(helperErrorCopy);
+                }
             }
             bool wasCancelled;
             bool wasTimedOut;
@@ -329,7 +353,10 @@ struct NativeImport::Impl
                     = wasTimedOut ? u"PDF import timed out"_ustr : u"PDF import cancelled"_ustr;
             }
             SAL_INFO("pdffast", "native-edit-transport page="
-                                    << page << " success=" << value.success << " total_us="
+                                    << page << " success=" << value.success
+                                    << (value.error.isEmpty() ? OUString()
+                                                              : u" error="_ustr + value.error)
+                                    << " total_us="
                                     << std::chrono::duration_cast<std::chrono::microseconds>(
                                            std::chrono::steady_clock::now() - started)
                                            .count());
