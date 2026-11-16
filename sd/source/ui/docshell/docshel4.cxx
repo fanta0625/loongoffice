@@ -599,10 +599,19 @@ bool DrawDocShell::Save()
 {
     mpDoc->StopWorkStartupDelay();
 #if HAVE_FEATURE_LOONGOFFICE_PDF_FAST
-    if (auto* fast = mpDoc->GetPdfFastDocument(); fast && !fast->PrepareForSave())
+    // The deferred PDF model must be materialized only when the destination is
+    // the native Draw storage format. PDF export has its own page-aware path:
+    // untouched NativePdf pages can stay backed by the source PDF while pages
+    // that contain Draw edits are rendered by the normal exporter.
+    const auto* filter = GetMedium() ? GetMedium()->GetFilter().get() : nullptr;
+    const bool nativeDrawStorage = filter && filter->GetFilterName() == u"draw8"_ustr;
+    if (nativeDrawStorage)
     {
-        SetError(ERRCODE_IO_GENERAL);
-        return false;
+        if (auto* fast = mpDoc->GetPdfFastDocument(); fast && !fast->PrepareForSave())
+        {
+            SetError(ERRCODE_IO_GENERAL);
+            return false;
+        }
     }
 #endif
 
@@ -624,10 +633,17 @@ bool DrawDocShell::Save()
 bool DrawDocShell::SaveAs( SfxMedium& rMedium )
 {
 #if HAVE_FEATURE_LOONGOFFICE_PDF_FAST
-    if (auto* fast = mpDoc->GetPdfFastDocument(); fast && !fast->PrepareForSave())
+    // SaveAs may also be used by foreign/export filters. Full conversion is
+    // required for an ODG destination only; keep PDF export lazy.
+    const auto* filter = rMedium.GetFilter().get();
+    const bool nativeDrawStorage = filter && filter->GetFilterName() == u"draw8"_ustr;
+    if (nativeDrawStorage)
     {
-        SetError(ERRCODE_IO_GENERAL);
-        return false;
+        if (auto* fast = mpDoc->GetPdfFastDocument(); fast && !fast->PrepareForSave())
+        {
+            SetError(ERRCODE_IO_GENERAL);
+            return false;
+        }
     }
 #endif
     mpDoc->setDocAccTitle(OUString());
