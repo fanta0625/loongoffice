@@ -651,6 +651,13 @@ void PDFWriterImpl::endPage()
             bitmap.m_aBitmap = Bitmap();
         }
     }
+#if HAVE_FEATURE_LOONGOFFICE_PDF_FAST
+    // Source-page objects must be written after the current page stream closes.
+    // Keep this queue separate: ordinary bitmap emission skips empty bitmaps.
+    for (const auto& page : m_aPdfFastPages)
+        writeReferenceXObject(page);
+    m_aPdfFastPages.clear();
+#endif
     for (auto & jpeg : m_aJPGs)
     {
         if( jpeg.m_pStream )
@@ -8961,6 +8968,44 @@ bool PDFWriterImpl::writeBitmapMaskObject( sal_Int32 nMaskObject, const AlphaMas
 
     return true;
 }
+
+#if HAVE_FEATURE_LOONGOFFICE_PDF_FAST
+void PDFWriterImpl::drawPdfFastPage(const Graphic& graphic, const tools::Rectangle& rect)
+{
+    const auto& data = graphic.getVectorGraphicData();
+    if (!data || data->getType() != VectorGraphicDataType::Pdf || rect.IsEmpty())
+        throw css::uno::RuntimeException(u"Invalid PDF Fast source page"_ustr);
+    // Colour conversion must operate on pixels, not copy the colour source PDF.
+    if (m_aContext.ColorMode == PDFWriter::DrawGreyscale)
+    {
+        drawBitmap(rect.TopLeft(), rect.GetSize(), graphic.GetBitmap());
+        return;
+    }
+    // Reference-XObject output needs a real fallback image for ordinary viewers.
+    // Keep that explicitly requested mode correct, even though it is slower.
+    if (m_aContext.UseReferenceXObject)
+    {
+        drawBitmap(rect.TopLeft(), rect.GetSize(), graphic.GetBitmap(), graphic);
+        return;
+    }
+    BitmapEmit emit;
+    auto& reference = emit.m_aReferenceXObject;
+    reference.m_nExternalPDFDataIndex = m_aExternalPDFStreams.store(data->getBinaryDataContainer());
+    reference.m_nExternalPDFPageIndex = data->getPageIndex();
+    reference.m_nFormObject = createObject();
+    // Same scale as ImportPDF, using known page geometry instead of GetSizePixel
+    // (which would render the entire PDF just to find the replacement bitmap size).
+    const Size mm
+        = OutputDevice::LogicToLogic(rect.GetSize(), getMapMode(), MapMode(MapUnit::Map100thMM));
+    const double scale = getDefaultPdfResolutionDpi() * PDF_INSERT_MAGIC_SCALE_FACTOR / 2540.0;
+    reference.m_aPixelSize = Size(std::max<tools::Long>(1, std::lround(mm.Width() * scale)),
+                                  std::max<tools::Long>(1, std::lround(mm.Height() * scale)));
+    pushResource(ResourceKind::XObject, "Im" + OString::number(reference.getObject()),
+                 reference.getObject());
+    drawBitmap(rect.TopLeft(), rect.GetSize(), emit, COL_TRANSPARENT);
+    m_aPdfFastPages.push_back(reference);
+}
+#endif
 
 void PDFWriterImpl::createEmbeddedFile(const Graphic& rGraphic, ReferenceXObjectEmit& rEmit, sal_Int32 nBitmapObject)
 {

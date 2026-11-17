@@ -176,6 +176,13 @@ void PDFWriter::DrawPixel( const Point& rPos, const Color& rColor )
     xImplementation->drawPixel( rPos, rColor );
 }
 
+#if HAVE_FEATURE_LOONGOFFICE_PDF_FAST
+void PDFWriter::DrawPdfFastPage(const Graphic& graphic, const tools::Rectangle& rect)
+{
+    xImplementation->drawPdfFastPage(graphic, rect);
+}
+#endif
+
 void PDFWriter::DrawBitmap( const Point& rDestPt, const Size& rDestSize, const Bitmap& rBitmap, const Graphic& rGraphic )
 {
     xImplementation->drawBitmap( rDestPt, rDestSize, rBitmap, rGraphic );

@@ -20,6 +20,7 @@
 #define INCLUDED_VCL_PDFWRITER_HXX
 
 #include <sal/types.h>
+#include <config_features.h>
 
 #include <tools/gen.hxx>
 #include <tools/color.hxx>
@@ -868,6 +869,9 @@ public:
     void                DrawChord( const tools::Rectangle& rRect,
                                    const Point& rStartPt, const Point& rEndPt );
 
+#if HAVE_FEATURE_LOONGOFFICE_PDF_FAST
+    void DrawPdfFastPage(const Graphic&, const tools::Rectangle&);
+#endif
     void                DrawBitmap( const Point& rDestPt, const Size& rDestSize,
                                     const Bitmap& rBitmap, const Graphic& rGraphic );
 

@@ -29,6 +29,9 @@
 #include <com/sun/star/lang/XMultiComponentFactory.hpp>
 #include <com/sun/star/frame/XModel.hpp>
 #include <sfx2/objsh.hxx>
+#include <sfx2/progress.hxx>
+#include <sdresid.hxx>
+#include <strings.hrc>
 #include <svx/sdr/contact/viewobjectcontact.hxx>
 #include <svx/sdr/contact/viewcontact.hxx>
 #include <svx/svdograf.hxx>
@@ -889,9 +892,20 @@ bool PdfFastDocument::EnsureMetadata(SdrPage& page) { return m_impl->ensureMetad
 bool PdfFastDocument::EnsureAllMetadata()
 {
     m_impl->metadataIdle.Stop();
-    for (sal_uInt16 n = 0; n < m_impl->doc.GetSdPageCount(PageKind::Standard); ++n)
+    const auto count = m_impl->doc.GetSdPageCount(PageKind::Standard);
+    std::unique_ptr<SfxProgress> progress;
+    if (m_impl->doc.GetDocSh() && !Application::IsHeadlessModeEnabled()
+        && std::any_of(m_impl->pages.begin(), m_impl->pages.end(),
+                       [](const auto& page) { return !page.metadataReady; }))
+        progress = std::make_unique<SfxProgress>(m_impl->doc.GetDocSh(),
+                                                 SdResId(STR_PDF_EXPORT_PREPARING), count);
+    for (sal_uInt16 n = 0; n < count; ++n)
+    {
         if (!EnsureMetadata(*m_impl->doc.GetSdPage(n, PageKind::Standard)))
             return false;
+        if (progress)
+            progress->SetState(n + 1);
+    }
     return true;
 }
 
@@ -1302,9 +1316,22 @@ const SdrGrafObj* PdfFastDocument::GetUnchangedPageGraphic(const SdrPage& page,
     auto& impl = *m_impl;
     for (auto& entry : impl.pages)
     {
-        if (entry.pageId != page.GetUniqueID() || !entry.prepared || !entry.original.is()
-            || entry.content.empty())
+        if (entry.pageId != page.GetUniqueID() || !entry.original.is())
             continue;
+        if (!entry.prepared)
+        {
+            if (!entry.dirty && page.GetObjCount() == 1 && page.GetObj(0) == entry.original.get()
+                && page.GetSize() == entry.size && Impl::borders(page) == entry.borders
+                && Impl::background(page) == entry.background && entry.original->IsVisible()
+                && entry.original->IsPrintable()
+                && view.GetVisibleLayers().IsSet(entry.original->GetLayer())
+                && view.GetPrintableLayers().IsSet(entry.original->GetLayer())
+                && Impl::primitives(*entry.original) == entry.sourceContent)
+                return entry.original.get();
+            return nullptr;
+        }
+        if (entry.content.empty())
+            return nullptr;
         // Events alone are insufficient (Nbc setters, page format and inherited
         // styles). Compare immutable primitives too. Never use document IsChanged:
         // another page may have changed, or a previous save cleared that flag.

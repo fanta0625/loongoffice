@@ -3146,7 +3146,6 @@ class ImplRenderPaintProc : public sdr::contact::ViewObjectContactRedirector
     SdrPageView*            pSdrPageView;
 #if HAVE_FEATURE_LOONGOFFICE_PDF_FAST
     const SdrGrafObj* mpPdfFastSource = nullptr;
-    bool mbPdfFastSourcePainted = false;
 #endif
 
 public:
@@ -3156,6 +3155,7 @@ public:
     ImplRenderPaintProc(const SdrLayerAdmin& rLA, SdrPageView* pView);
 #if HAVE_FEATURE_LOONGOFFICE_PDF_FAST
     void SetPdfFastSource(const SdrGrafObj* source) { mpPdfFastSource = source; }
+    const SdrGrafObj* GetPdfFastSource() const { return mpPdfFastSource; }
 #endif
 
     // all default implementations just call the same methods at the original. To do something
@@ -3443,11 +3443,6 @@ void ImplRenderPaintProc::createRedirectedPrimitive2DSequence(
     {
         // Export-only redirection. Leave the editable model, undo and selections
         // intact; reuse the frozen PDF exactly once instead of replaying shapes.
-        if (!mbPdfFastSourcePainted)
-        {
-            mpPdfFastSource->GetViewContact().getViewIndependentPrimitive2DContainer(rVisitor);
-            mbPdfFastSourcePainted = true;
-        }
         return;
     }
 #endif
@@ -3783,6 +3778,20 @@ void SAL_CALL SdXImpressDocument::render( sal_Int32 nRenderer, const uno::Any& r
                 aImplRenderPaintProc.SetPdfFastSource(fast->GetUnchangedPageGraphic(*pPage, *pPV));
 #endif
         aView.SdrPaintView::CompleteRedraw(pOut, aRegion, &aImplRenderPaintProc);
+#if HAVE_FEATURE_LOONGOFFICE_PDF_FAST
+        if (const auto* source = aImplRenderPaintProc.GetPdfFastSource())
+        {
+            // Graphic primitives use the geometric extent, not Rectangle's inclusive size.
+            const auto& geometry = source->GetGeoRect();
+            tools::Rectangle destination(
+                geometry.TopLeft(),
+                Size(geometry.Right() - geometry.Left(), geometry.Bottom() - geometry.Top()));
+            pPDFExtOutDevData->RecordPdfFastPage(source->GetGraphic(), destination);
+            // Ensure the sync action has an action to attach to even on empty pages.
+            pOut->Push();
+            pOut->Pop();
+        }
+#endif
 
         if (pPDFExtOutDevData && pPage)
         {

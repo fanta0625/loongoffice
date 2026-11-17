@@ -21,6 +21,7 @@
 #define INCLUDED_VCL_PDFEXTOUTDEVDATA_HXX
 
 #include <vcl/dllapi.h>
+#include <config_features.h>
 
 #include <vcl/pdfwriter.hxx>
 #include <vcl/extoutdevdata.hxx>
@@ -170,6 +171,10 @@ public:
 
         Use this method to group render output.
      */
+#if HAVE_FEATURE_LOONGOFFICE_PDF_FAST
+    // Explicit opt-in from the PDF Fast renderer only; no graphic decomposition.
+    void RecordPdfFastPage(const Graphic&, const tools::Rectangle&);
+#endif
     void        BeginGroup();
 
     /** End render output

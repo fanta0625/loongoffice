@@ -129,6 +129,14 @@ struct SetAlternateText { OUString maText; };
 struct CreateControl {
     std::shared_ptr< pdf::PDFWriter::AnyWidget > mxControl;
 };
+#if HAVE_FEATURE_LOONGOFFICE_PDF_FAST
+struct PdfFastPage
+{
+    Graphic graphic;
+    tools::Rectangle rect;
+    MapMode mapMode;
+};
+#endif
 struct BeginGroup {};
 struct EndGroupGfxLink {
     Graphic maGraphic;
@@ -150,20 +158,15 @@ typedef std::variant<CreateNamedDest,
                     CreateNote,
                     SetPageTransition> GlobalActionData;
 
-typedef std::variant<EnsureStructureElement,
-                    InitStructureElement,
-                    BeginStructureElement,
-                    EndStructureElement,
-                    SetCurrentStructureElement,
-                    SetStructureAttribute,
-                    SetStructureAttributeNumerical,
-                    SetStructureBoundingBox,
-                    SetStructureAnnotIds,
-                    SetActualText,
-                    SetAlternateText,
-                    CreateControl,
-                    BeginGroup,
-                    EndGroupGfxLink> PageActionData;
+typedef std::variant<
+#if HAVE_FEATURE_LOONGOFFICE_PDF_FAST
+    PdfFastPage,
+#endif
+    EnsureStructureElement, InitStructureElement, BeginStructureElement, EndStructureElement,
+    SetCurrentStructureElement, SetStructureAttribute, SetStructureAttributeNumerical,
+    SetStructureBoundingBox, SetStructureAnnotIds, SetActualText, SetAlternateText, CreateControl,
+    BeginGroup, EndGroupGfxLink>
+    PageActionData;
 
 struct PDFExtOutDevDataSyncPage
 {
@@ -359,7 +362,18 @@ bool PageSyncData::PlaySyncPageAct( pdf::PDFWriter& rWriter, sal_uInt32& rCurGDI
         bRet = true;
         PDFExtOutDevDataSyncPage aDataSync = std::move(mActions.front());
         mActions.pop_front();
-        if (std::holds_alternative<EnsureStructureElement>(aDataSync.eAct)) {
+#if HAVE_FEATURE_LOONGOFFICE_PDF_FAST
+        if (auto* page = std::get_if<PdfFastPage>(&aDataSync.eAct))
+        {
+            rWriter.Push();
+            rWriter.SetMapMode(page->mapMode);
+            rWriter.DrawPdfFastPage(page->graphic, page->rect);
+            rWriter.Pop();
+        }
+        else
+#endif
+            if (std::holds_alternative<EnsureStructureElement>(aDataSync.eAct))
+        {
 #ifndef NDEBUG
             const vcl::EnsureStructureElement& rEnsureStructureElement = std::get<EnsureStructureElement>(aDataSync.eAct);
             sal_Int32 const id =
@@ -843,6 +857,13 @@ void PDFExtOutDevData::CreateControl( const pdf::PDFWriter::AnyWidget& rControlT
 {
     mpPageSyncData->PushAction(mrOutDev, vcl::CreateControl{ rControlType.Clone() });
 }
+
+#if HAVE_FEATURE_LOONGOFFICE_PDF_FAST
+void PDFExtOutDevData::RecordPdfFastPage(const Graphic& graphic, const tools::Rectangle& rect)
+{
+    mpPageSyncData->PushAction(mrOutDev, PdfFastPage{ graphic, rect, mrOutDev.GetMapMode() });
+}
+#endif
 
 void PDFExtOutDevData::BeginGroup()
 {

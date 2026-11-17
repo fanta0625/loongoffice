@@ -20,6 +20,7 @@
 #pragma once
 
 #include <sal/config.h>
+#include <config_features.h>
 
 #include <map>
 #include <list>
@@ -714,6 +715,9 @@ private:
     /* contains Bitmaps until they are written to the
      *  file stream as XObjects*/
     std::list< BitmapEmit >             m_aBitmaps;
+#if HAVE_FEATURE_LOONGOFFICE_PDF_FAST
+    std::vector<ReferenceXObjectEmit> m_aPdfFastPages;
+#endif
     /* contains JPG streams until written to file     */
     std::vector<JPGEmit>                m_aJPGs;
     /*--->i56629 contains all named destinations ever set during the PDF creation,
@@ -1244,6 +1248,9 @@ public:
     void drawEllipse( const tools::Rectangle& rRect );
     void drawArc( const tools::Rectangle& rRect, const Point& rStart, const Point& rStop, bool bWithPie, bool bWidthChord );
 
+#if HAVE_FEATURE_LOONGOFFICE_PDF_FAST
+    void drawPdfFastPage(const Graphic&, const tools::Rectangle&);
+#endif
     void drawBitmap( const Point& rDestPoint, const Size& rDestSize, const Bitmap& rBitmap, const Graphic& rGraphic );
     void drawBitmap( const Point& rDestPoint, const Size& rDestSize, const Bitmap& rBitmap );
     void drawJPGBitmap( SvStream& rDCTData, bool bIsTrueColor, const Size& rSizePixel, const tools::Rectangle& rTargetArea, const AlphaMask& rAlphaMask, const Graphic& rGraphic );

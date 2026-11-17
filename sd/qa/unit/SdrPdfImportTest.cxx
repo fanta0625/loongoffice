@@ -39,6 +39,7 @@
 #include <editeng/editobj.hxx>
 #include <vcl/filter/PDFiumLibrary.hxx>
 #include <vcl/pdf/PDFPageObjectType.hxx>
+#include <vcl/vectorgraphicdata.hxx>
 #include <vcl/pdf/PDFAnnotationSubType.hxx>
 #include <vcl/bitmap.hxx>
 #include <vcl/gfxlink.hxx>
@@ -530,17 +531,15 @@ CPPUNIT_TEST_FIXTURE(SdrPdfImportTest, testPdfFastUnchangedPageExport)
     auto* model = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
     CPPUNIT_ASSERT(model);
     auto* doc = model->GetDocShell()->GetDoc();
-    CPPUNIT_ASSERT(sd::PdfFastDocument::Attach(*doc));
-    auto* controller = doc->GetPdfFastDocument();
-    SdrView view(*doc);
     struct Exported
     {
         std::vector<BitmapChecksum> pixels;
         std::vector<int> textObjects;
     };
-    auto exportPdf = [&](bool tagged, const OUString& range = OUString()) {
+    auto exportPdf = [&](bool tagged, const OUString& range = OUString(), bool lossless = false) {
         uno::Sequence<beans::PropertyValue> data{
             comphelper::makePropertyValue(u"UseTaggedPDF"_ustr, tagged),
+            comphelper::makePropertyValue(u"UseLosslessCompression"_ustr, lossless),
             comphelper::makePropertyValue(u"ExportBookmarks"_ustr, false),
             comphelper::makePropertyValue(u"PageRange"_ustr, range),
         };
@@ -571,7 +570,35 @@ CPPUNIT_TEST_FIXTURE(SdrPdfImportTest, testPdfFastUnchangedPageExport)
         }
         return result;
     };
+    // Native reference from a separate fresh model, before attaching PDF Fast.
+    CPPUNIT_ASSERT(!doc->GetPdfFastDocument());
+    const auto native = exportPdf(false);
+    loadFromFile(u"pdf/pdffast-native-pages.pdf");
+    model = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(model);
+    doc = model->GetDocShell()->GetDoc();
+    CPPUNIT_ASSERT(sd::PdfFastDocument::Attach(*doc));
+    auto* controller = doc->GetPdfFastDocument();
+    SdrView view(*doc);
+    // Exporting an untouched source must never ask PDFium to decompose it.
+    std::vector<std::shared_ptr<VectorGraphicData>> sources;
+    for (sal_uInt16 n = 0; n < 2; ++n)
+    {
+        auto* page = doc->GetSdPage(n, PageKind::Standard);
+        auto* pv = view.ShowSdrPage(page);
+        const auto* graphic = controller->GetUnchangedPageGraphic(*page, *pv);
+        CPPUNIT_ASSERT(graphic);
+        sources.push_back(graphic->GetGraphic().getVectorGraphicData());
+        CPPUNIT_ASSERT(!sources.back()->isPrimitiveSequenceCreated());
+    }
     const auto raw = exportPdf(false);
+    for (const auto& source : sources)
+        CPPUNIT_ASSERT(!source->isPrimitiveSequenceCreated());
+    const auto lossless = exportPdf(false, OUString(), true);
+    CPPUNIT_ASSERT(raw.pixels == lossless.pixels);
+    for (const auto& source : sources)
+        CPPUNIT_ASSERT(!source->isPrimitiveSequenceCreated());
+    CPPUNIT_ASSERT(raw.pixels == native.pixels);
     CPPUNIT_ASSERT_EQUAL(std::size_t(3), raw.pixels.size());
     // Compare with the existing raw-PDF export at the same page order. Native
     // print-area sizing and PDFium resource caching can depend on that order.
