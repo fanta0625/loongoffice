@@ -659,10 +659,11 @@ CPPUNIT_TEST_FIXTURE(SdrPdfImportTest, testPdfFastExportCorrectnessBarriers)
     page->GetObj(0)->NbcMove(Size(-100, 0));
     page->GetObj(0)->GetViewContact().ActionChanged();
     CPPUNIT_ASSERT(controller->GetUnchangedPageGraphic(*page, *pageView));
-    // Real edits remain conservatively dirty even after reversing the move.
+    // After reversing the edit, the immutable baseline proves that the page is
+    // unchanged again and source reuse is safe.
     page->GetObj(0)->Move(Size(100, 0));
     page->GetObj(0)->Move(Size(-100, 0));
-    CPPUNIT_ASSERT(!controller->GetUnchangedPageGraphic(*page, *pageView));
+    CPPUNIT_ASSERT(controller->GetUnchangedPageGraphic(*page, *pageView));
     // Silent additions before conversion must never disappear from export.
     auto* raw = doc->GetSdPage(1, PageKind::Standard);
     raw->NbcInsertObject(page->GetObj(0)->CloneSdrObject(*doc).get());

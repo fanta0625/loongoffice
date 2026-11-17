@@ -210,10 +210,8 @@ struct PdfFastDocument::Impl : public SfxListener
     static void markDirty(Page& entry)
     {
         entry.dirty = true;
-        // Once reuse is ruled out, retain no obsolete drawing snapshots.
-        entry.content.clear();
-        entry.layers.clear();
-        entry.sourceContent.clear();
+        // Keep the immutable baseline. An edit followed by a complete undo can
+        // still be compared against it safely at export time.
     }
 
     void Notify(SfxBroadcaster&, const SfxHint& hint) override
@@ -1304,8 +1302,8 @@ const SdrGrafObj* PdfFastDocument::GetUnchangedPageGraphic(const SdrPage& page,
     auto& impl = *m_impl;
     for (auto& entry : impl.pages)
     {
-        if (entry.pageId != page.GetUniqueID() || !entry.prepared || entry.dirty
-            || !entry.original.is() || entry.content.empty())
+        if (entry.pageId != page.GetUniqueID() || !entry.prepared || !entry.original.is()
+            || entry.content.empty())
             continue;
         // Events alone are insufficient (Nbc setters, page format and inherited
         // styles). Compare immutable primitives too. Never use document IsChanged:
