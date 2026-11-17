@@ -636,10 +636,10 @@ CPPUNIT_TEST_FIXTURE(SdrPdfImportTest, testPdfFastUnchangedPageExport)
     const auto range = exportPdf(false, u"1"_ustr);
     CPPUNIT_ASSERT_EQUAL(std::size_t(1), range.pixels.size());
     CPPUNIT_ASSERT_EQUAL(rawRange.pixels[0], range.pixels[0]);
-    // Tagged export must retain native shape rendering and text tags.
+    // Untouched pages keep source PDF objects even when ordinary tags are on.
     const auto tagged = exportPdf(true);
-    CPPUNIT_ASSERT(tagged.textObjects[0] > 0);
-    CPPUNIT_ASSERT(tagged.textObjects[1] > 0);
+    CPPUNIT_ASSERT(tagged.pixels == reordered.pixels);
+    CPPUNIT_ASSERT(tagged.textObjects == reordered.textObjects);
     first->GetObj(0)->Move(Size(700, 0));
     doc->SdrModel::SetChanged(false); // A save/reset must not establish a new baseline.
     model->GetDocShell()->SetModified(false);
@@ -651,6 +651,130 @@ CPPUNIT_TEST_FIXTURE(SdrPdfImportTest, testPdfFastUnchangedPageExport)
     CPPUNIT_ASSERT_EQUAL(rawReordered.pixels[0], modified.pixels[0]);
     CPPUNIT_ASSERT(modified.pixels[1] != rawReordered.pixels[1]);
     CPPUNIT_ASSERT(modified.textObjects[1] > 0);
+}
+
+CPPUNIT_TEST_FIXTURE(SdrPdfImportTest, testPdfFastMixedTaggedExport)
+{
+    auto library = vcl::pdf::PDFiumLibrary::get();
+    if (!library)
+        return;
+    EnvVarGuard preview("LO_IMPORT_USE_PDFIUM", "1");
+    loadFromFile(u"pdf/pdffast-native-pages.pdf");
+    auto* model = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(model);
+    auto* doc = model->GetDocShell()->GetDoc();
+    auto* first = doc->GetSdPage(0, PageKind::Standard);
+    auto* second = doc->GetSdPage(1, PageKind::Standard);
+    second->GetObj(0)->SetTitle(u"Source page"_ustr);
+    second->GetObj(0)->SetDescription(u"Page description"_ustr);
+    CPPUNIT_ASSERT(sd::PdfFastDocument::Attach(*doc));
+    auto* fast = doc->GetPdfFastDocument();
+    SdrView view(*doc);
+    auto* secondView = view.ShowSdrPage(second);
+    const auto* original = fast->GetUnchangedPageGraphic(*second, *secondView);
+    CPPUNIT_ASSERT(original);
+    auto source = original->GetGraphic().getVectorGraphicData();
+    CPPUNIT_ASSERT(!source->isPrimitiveSequenceCreated());
+    struct Exported
+    {
+        std::vector<BitmapChecksum> pixels;
+        std::vector<std::vector<OUString>> tags;
+        std::vector<OUString> figureAlt;
+        std::vector<int> figureMCIDs;
+    };
+    auto exportPdf = [&](bool tagged, const OUString& range = OUString(), bool ua = false) {
+        uno::Reference<frame::XStorable> storable(mxComponent, uno::UNO_QUERY_THROW);
+        storable->storeToURL(
+            maTempFile.GetURL(),
+            { comphelper::makePropertyValue(u"FilterName"_ustr, u"draw_pdf_Export"_ustr),
+              comphelper::makePropertyValue(
+                  u"FilterData"_ustr,
+                  uno::Sequence<beans::PropertyValue>{
+                      comphelper::makePropertyValue(u"UseTaggedPDF"_ustr, tagged),
+                      comphelper::makePropertyValue(u"PDFUACompliance"_ustr, ua),
+                      comphelper::makePropertyValue(u"ExportBookmarks"_ustr, false),
+                      comphelper::makePropertyValue(u"PageRange"_ustr, range) }) });
+        auto pdf = parsePDFExport();
+        CPPUNIT_ASSERT(pdf);
+        Exported result;
+        for (int i = 0; i < pdf->getPageCount(); ++i)
+        {
+            auto page = pdf->openPage(i);
+            CPPUNIT_ASSERT(page);
+            int width = 400, height = 300;
+            auto bitmap = library->createBitmap(width, height, false);
+            CPPUNIT_ASSERT(bitmap);
+            bitmap->fillRect(0, 0, width, height, 0xffffffff);
+            bitmap->renderPageBitmap(pdf.get(), page.get(), 0, 0, width, height);
+            result.pixels.push_back(bitmap->createBitmapFromBuffer().GetChecksum());
+            result.tags.emplace_back();
+            auto collect = [&](auto&& self, vcl::pdf::PDFiumStructureElement& element) -> void {
+                result.tags.back().push_back(element.getType());
+                if (element.getType() == "Figure")
+                {
+                    result.figureAlt.push_back(element.getAltText());
+                    for (int n = 0; n < element.getNumberOfChildren(); ++n)
+                    {
+                        const int mcid = element.getChildMarkedContentID(n);
+                        if (mcid >= 0)
+                            result.figureMCIDs.push_back(mcid);
+                    }
+                }
+                for (int n = 0; n < element.getNumberOfChildren(); ++n)
+                    if (auto child = element.getChild(n))
+                        self(self, *child);
+            };
+            if (auto tree = page->getStructureTree())
+                for (int n = 0; n < tree->getNumberOfChildren(); ++n)
+                    if (auto child = tree->getChild(n))
+                        collect(collect, *child);
+        }
+        return result;
+    };
+    const auto raw = exportPdf(false);
+    view.ShowSdrPage(first);
+    fast->PrepareCurrentPage(view);
+    CPPUNIT_ASSERT(first->GetObjCount() > 1);
+    first->GetObj(0)->Move(Size(700, 0));
+    // Document-wide saved/modified flags must not decide which page is reused.
+    model->GetDocShell()->SetModified(false);
+    doc->SdrModel::SetChanged(false);
+    auto* firstView = view.ShowSdrPage(first);
+    CPPUNIT_ASSERT(!fast->GetUnchangedPageGraphic(*first, *firstView));
+    secondView = view.ShowSdrPage(second);
+    CPPUNIT_ASSERT(fast->GetUnchangedPageGraphic(*second, *secondView));
+    const auto mixed = exportPdf(true);
+    CPPUNIT_ASSERT_EQUAL(std::size_t(3), mixed.pixels.size());
+    CPPUNIT_ASSERT(raw.pixels[0] != mixed.pixels[0]);
+    CPPUNIT_ASSERT_EQUAL(raw.pixels[1], mixed.pixels[1]);
+    CPPUNIT_ASSERT_EQUAL(std::size_t(1), second->GetObjCount());
+    CPPUNIT_ASSERT(!source->isPrimitiveSequenceCreated());
+    // Modified text retains native paragraph tags. Source pages are real tagged
+    // Figures with MCIDs, not unmarked content in a nominally tagged document.
+    CPPUNIT_ASSERT(std::find(mixed.tags[0].begin(), mixed.tags[0].end(), u"P"_ustr)
+                   != mixed.tags[0].end());
+    CPPUNIT_ASSERT(std::find(mixed.tags[1].begin(), mixed.tags[1].end(), u"Figure"_ustr)
+                   != mixed.tags[1].end());
+    CPPUNIT_ASSERT(std::find(mixed.figureAlt.begin(), mixed.figureAlt.end(),
+                             u"Source page - Page description"_ustr)
+                   != mixed.figureAlt.end());
+    CPPUNIT_ASSERT(!mixed.figureMCIDs.empty());
+    const auto repeated = exportPdf(true);
+    CPPUNIT_ASSERT(mixed.pixels == repeated.pixels);
+    CPPUNIT_ASSERT(mixed.tags == repeated.tags);
+    doc->SdrModel::MovePage(3, 1);
+    doc->SdrModel::MovePage(4, 2);
+    // Native export sizing depends on the first page; compare the same order.
+    const auto rangeReference = exportPdf(false, u"1"_ustr);
+    const auto range = exportPdf(true, u"1"_ustr);
+    CPPUNIT_ASSERT_EQUAL(std::size_t(1), range.pixels.size());
+    CPPUNIT_ASSERT_EQUAL(rangeReference.pixels[0], range.pixels[0]);
+    CPPUNIT_ASSERT_EQUAL(std::size_t(1), range.figureMCIDs.size());
+    CPPUNIT_ASSERT_EQUAL(0, range.figureMCIDs[0]);
+    CPPUNIT_ASSERT(!source->isPrimitiveSequenceCreated());
+    // Strict accessibility output deliberately keeps native Draw tagging.
+    exportPdf(true, u"1"_ustr, true);
+    CPPUNIT_ASSERT(source->isPrimitiveSequenceCreated());
 }
 
 CPPUNIT_TEST_FIXTURE(SdrPdfImportTest, testPdfFastExportCorrectnessBarriers)
@@ -705,7 +829,8 @@ CPPUNIT_TEST_FIXTURE(SdrPdfImportTest, testPdfFastUnchangedLinksExport)
     if (!library)
         return;
     EnvVarGuard preview("LO_IMPORT_USE_PDFIUM", "1");
-    auto exportPdf = [&](const std::vector<OUString>& urls, const OUString& range = OUString()) {
+    auto exportPdf = [&](const std::vector<OUString>& urls, const OUString& range = OUString(),
+                         bool tagged = false) {
         uno::Reference<frame::XStorable> storable(mxComponent, uno::UNO_QUERY_THROW);
         storable->storeToURL(
             maTempFile.GetURL(),
@@ -713,7 +838,7 @@ CPPUNIT_TEST_FIXTURE(SdrPdfImportTest, testPdfFastUnchangedLinksExport)
               comphelper::makePropertyValue(
                   u"FilterData"_ustr,
                   uno::Sequence<beans::PropertyValue>{
-                      comphelper::makePropertyValue(u"UseTaggedPDF"_ustr, false),
+                      comphelper::makePropertyValue(u"UseTaggedPDF"_ustr, tagged),
                       comphelper::makePropertyValue(u"ExportBookmarks"_ustr, false),
                       comphelper::makePropertyValue(u"PageRange"_ustr, range) }) });
         auto pdf = parsePDFExport();
@@ -731,11 +856,12 @@ CPPUNIT_TEST_FIXTURE(SdrPdfImportTest, testPdfFastUnchangedLinksExport)
             {
                 CPPUNIT_ASSERT(link);
                 CPPUNIT_ASSERT_EQUAL(urls[i], link->getURIPath());
-                // The two distinct source rectangles must follow their source page.
+                // Rectangles follow their source page. Native Draw uses rounded
+                // 1/100 mm page/annotation coordinates on materialized pages.
                 const auto rect = link->getRectangle();
                 CPPUNIT_ASSERT_DOUBLES_EQUAL(urls[i].endsWith("first") ? 10.0 : 15.0,
-                                             rect.getMinX(), 0.01);
-                CPPUNIT_ASSERT_DOUBLES_EQUAL(20.0, rect.getMinY(), 0.01);
+                                             rect.getMinX(), 0.04);
+                CPPUNIT_ASSERT_DOUBLES_EQUAL(20.0, rect.getMinY(), 0.04);
                 CPPUNIT_ASSERT(!page->enumerateLink(&index, pdf.get()));
             }
             else
@@ -788,6 +914,15 @@ CPPUNIT_TEST_FIXTURE(SdrPdfImportTest, testPdfFastUnchangedLinksExport)
     CPPUNIT_ASSERT(native == exportPdf({ firstURL, secondURL, OUString() }));
     // A new writer must register its own source, with no stale indices across saves.
     CPPUNIT_ASSERT(native == exportPdf({ firstURL, secondURL, OUString() }));
+    first->GetObj(0)->Move(Size(700, 0));
+    CPPUNIT_ASSERT(!fast->GetUnchangedPageGraphic(*first, *pv));
+    exportPdf({ firstURL, secondURL, OUString() });
+    exportPdf({ firstURL, secondURL, OUString() }, OUString(), true);
+    first->setLinkAnnotations({});
+    exportPdf({ OUString(), secondURL, OUString() });
+    first->setLinkAnnotations(links);
+    first->GetObj(0)->Move(Size(-700, 0));
+    CPPUNIT_ASSERT(fast->GetUnchangedPageGraphic(*first, *pv));
     doc->SdrModel::MovePage(3, 1);
     doc->SdrModel::MovePage(4, 2);
     exportPdf({ secondURL, firstURL, OUString() });

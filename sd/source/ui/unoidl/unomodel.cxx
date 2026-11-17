@@ -3521,6 +3521,9 @@ void SAL_CALL SdXImpressDocument::render( sal_Int32 nRenderer, const uno::Any& r
     const sal_Int32                 nPageNumber = nRenderer + 1;
     PageKind                        ePageKind = PageKind::Standard;
     bool                        bExportNotesPages = false;
+#if HAVE_FEATURE_LOONGOFFICE_PDF_FAST
+    bool bPdfFastRequireNativeTags = false;
+#endif
 
     for( const auto& rOption : rxOptions )
     {
@@ -3532,6 +3535,10 @@ void SAL_CALL SdXImpressDocument::render( sal_Int32 nRenderer, const uno::Any& r
             if ( bExportNotesPages )
                 ePageKind = PageKind::Notes;
         }
+#if HAVE_FEATURE_LOONGOFFICE_PDF_FAST
+        else if (rOption.Name == "PdfFastRequireNativeTags")
+            rOption.Value >>= bPdfFastRequireNativeTags;
+#endif
     }
 
     if( !(xRenderDevice.is() && nPageNumber && ( nPageNumber <= mpDoc->GetSdPageCount( ePageKind ) )) )
@@ -3769,15 +3776,14 @@ void SAL_CALL SdXImpressDocument::render( sal_Int32 nRenderer, const uno::Any& r
         }
 
 #if HAVE_FEATURE_LOONGOFFICE_PDF_FAST
-        // Source registration is independent of page reuse: tagged/changed pages
+        // Source registration is independent of page reuse: PDF/UA and changed pages
         // still need native painting, but must not hash the whole PDF per page.
         if (pPDFExtOutDevData)
             if (auto* fast = mpDoc->GetPdfFastDocument())
                 pPDFExtOutDevData->RecordPdfFastSource(fast->GetSourceData());
-        // Printing, selection export, notes and tagged output keep native Draw
-        // rendering. Source reuse cannot supply the editable shapes' PDF tags.
-        if (pPDFExtOutDevData && pPage && pPV && !bExportNotesPages
-            && !pPDFExtOutDevData->GetIsExportTaggedPDF()
+        // Ordinary tagged output can reuse an unchanged PDF as a tagged page
+        // graphic. PDF/UA, printing, selection and notes retain native Draw.
+        if (pPDFExtOutDevData && pPage && pPV && !bExportNotesPages && !bPdfFastRequireNativeTags
             && !pPDFExtOutDevData->GetIsExportNotesInMargin())
             if (auto* fast = mpDoc->GetPdfFastDocument())
                 aImplRenderPaintProc.SetPdfFastSource(fast->GetUnchangedPageGraphic(*pPage, *pPV));
@@ -3791,11 +3797,47 @@ void SAL_CALL SdXImpressDocument::render( sal_Int32 nRenderer, const uno::Any& r
             tools::Rectangle destination(
                 geometry.TopLeft(),
                 Size(geometry.Right() - geometry.Left(), geometry.Bottom() - geometry.Top()));
+            const bool tagged = pPDFExtOutDevData->GetIsExportTaggedPDF();
+            if (tagged)
+            {
+                // Match the native PDF page graphic's Figure (or Artifact),
+                // without decomposing/rendering it to manufacture a bitmap.
+                const bool decorative = source->IsDecorative();
+                pPDFExtOutDevData->WrapBeginStructureElement(
+                    decorative ? vcl::pdf::StructElement::NonStructElement
+                               : vcl::pdf::StructElement::Figure);
+                if (!decorative)
+                {
+                    pPDFExtOutDevData->SetStructureAttribute(vcl::pdf::PDFWriter::Placement,
+                                                             vcl::pdf::PDFWriter::Block);
+                    pPDFExtOutDevData->SetStructureBoundingBox(geometry);
+                    OUString alternate = source->GetTitle();
+                    if (!source->GetDescription().isEmpty())
+                    {
+                        if (!alternate.isEmpty())
+                            alternate += " - ";
+                        alternate += source->GetDescription();
+                    }
+                    if (!alternate.isEmpty())
+                        pPDFExtOutDevData->SetAlternateText(alternate);
+                }
+            }
             pPDFExtOutDevData->RecordPdfFastPage(source->GetGraphic(), destination);
+            if (tagged)
+                pPDFExtOutDevData->EndStructureElement();
             // Ensure the sync action has an action to attach to even on empty pages.
             pOut->Push();
             pOut->Pop();
         }
+        else if (pPDFExtOutDevData && pPage && !bExportNotesPages
+                 && !pPDFExtOutDevData->GetIsExportNotesInMargin())
+            if (auto* fast = mpDoc->GetPdfFastDocument())
+            {
+                fast->ExportPageLinks(*pPage, *pPDFExtOutDevData);
+                // Flush trailing structure actions even if no further shape is drawn.
+                pOut->Push();
+                pOut->Pop();
+            }
 #endif
 
         if (pPDFExtOutDevData && pPage)

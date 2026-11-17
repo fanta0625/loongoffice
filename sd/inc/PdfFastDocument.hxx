@@ -26,6 +26,7 @@ class ViewObjectContact;
 namespace vcl
 {
 class PDFMetadataReader;
+class PDFExtOutDevData;
 }
 namespace drawinglayer::primitive2d
 {
@@ -74,6 +75,8 @@ public:
     // PDF export only. The returned source graphic is borrowed; the live page
     // is never replaced or changed. Unknown/changed pages use native Draw.
     const SdrGrafObj* GetUnchangedPageGraphic(const SdrPage&, const SdrPageView&);
+    // Materialized pages no longer contain a PDF graphic to carry source links.
+    void ExportPageLinks(const SdrPage&, vcl::PDFExtOutDevData&) const;
     enum class PreviewResult
     {
         NotHandled,

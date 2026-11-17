@@ -9003,6 +9003,9 @@ sal_Int32 PDFWriterImpl::storePdfFastSource(const BinaryDataContainer& data)
 
 void PDFWriterImpl::drawPdfFastPage(const Graphic& graphic, const tools::Rectangle& rect)
 {
+    // Native bitmap drawing calls MARK as well. Open the tagged content
+    // sequence before emitting Do, so the Figure has a real MCID/ParentTree.
+    MARK("drawPdfFastPage");
     const auto& data = graphic.getVectorGraphicData();
     if (!data || data->getType() != VectorGraphicDataType::Pdf || rect.IsEmpty())
         throw css::uno::RuntimeException(u"Invalid PDF Fast source page"_ustr);

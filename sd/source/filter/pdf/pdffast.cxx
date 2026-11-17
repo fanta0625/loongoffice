@@ -8,6 +8,8 @@
 #include <sdpage.hxx>
 #include <sdpdffilter.hxx>
 #include <vcl/pdfread.hxx>
+#include <vcl/pdfextoutdevdata.hxx>
+#include <o3tl/unit_conversion.hxx>
 #include <vcl/idle.hxx>
 #include <session.hxx>
 #include <cache.hxx>
@@ -1373,6 +1375,55 @@ const SdrGrafObj* PdfFastDocument::GetUnchangedPageGraphic(const SdrPage& page,
         return entry.original.get();
     }
     return nullptr;
+}
+
+void PdfFastDocument::ExportPageLinks(const SdrPage& page, vcl::PDFExtOutDevData& output) const
+{
+    const auto* sdPage = dynamic_cast<const SdPage*>(&page);
+    if (!sdPage || sdPage->getLinkAnnotations().empty())
+        return;
+    const auto entry
+        = std::find_if(m_impl->pages.begin(), m_impl->pages.end(),
+                       [&](const auto& item) { return item.pageId == page.GetUniqueID(); });
+    if (entry == m_impl->pages.end() || !entry->prepared || !entry->metadataReady
+        || !entry->original.is())
+        return;
+    // An original page graphic inserted back into the live page already copies
+    // its PDF annotations. Do not emit the retained metadata a second time.
+    SdrObjListIter objects(&page, SdrIterMode::DeepWithGroups);
+    while (objects.IsMore())
+    {
+        const auto* graphic = dynamic_cast<const SdrGrafObj*>(objects.Next());
+        if (!graphic)
+            continue;
+        const auto& link = graphic->GetGraphic().GetSharedGfxLink();
+        if (link && link->GetType() == GfxLinkType::NativePdf
+            && link->getDataContainer().getDataShared() == m_impl->source
+            && graphic->GetGraphic().getPageNumber()
+                   == entry->original->GetGraphic().getPageNumber())
+            return;
+    }
+    const auto coordinate = [](double value) {
+        return tools::Long(
+            std::lround(o3tl::convert(value, o3tl::Length::twip, o3tl::Length::mm100)));
+    };
+    for (const auto & [ rectangle, url ] : sdPage->getLinkAnnotations())
+    {
+        const tools::Rectangle area(
+            Point(coordinate(rectangle.getMinX()), coordinate(rectangle.getMinY())),
+            Point(coordinate(rectangle.getMaxX()), coordinate(rectangle.getMaxY())));
+        const bool tagged = output.GetIsExportTaggedPDF();
+        if (tagged)
+            output.WrapBeginStructureElement(vcl::pdf::StructElement::Link);
+        const sal_Int32 id = output.CreateLink(area, url);
+        output.SetLinkURL(id, url);
+        if (tagged)
+        {
+            output.SetAlternateText(url);
+            output.SetStructureAttributeNumerical(vcl::pdf::PDFWriter::LinkAnnotation, id);
+            output.EndStructureElement();
+        }
+    }
 }
 
 PdfFastDocument::PreviewResult

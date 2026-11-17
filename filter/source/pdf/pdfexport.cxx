@@ -1076,6 +1076,12 @@ bool PDFExport::Export( const OUString& rFile, const Sequence< PropertyValue >& 
                     comphelper::makePropertyValue(u"SinglePageSheets"_ustr, bSinglePageSheets),
                     comphelper::makePropertyValue(u"ExportNotesInMargin"_ustr, bExportNotesInMargin)
                 };
+#if HAVE_FEATURE_LOONGOFFICE_PDF_FAST
+                // PDF Fast page reuse can retain page-graphic tags, but PDF/UA
+                // still requires the full native Draw tagging path.
+                aRenderOptionsVector.push_back(comphelper::makePropertyValue(
+                    u"PdfFastRequireNativeTags"_ustr, bPDFUACompliance));
+#endif
                 if (oMathTitleRow)
                     aRenderOptionsVector.push_back(*oMathTitleRow);
                 if (oMathFormulaText)
