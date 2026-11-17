@@ -870,6 +870,7 @@ public:
                                    const Point& rStartPt, const Point& rEndPt );
 
 #if HAVE_FEATURE_LOONGOFFICE_PDF_FAST
+    void RegisterPdfFastSource(const std::shared_ptr<const std::vector<sal_uInt8>>&);
     void DrawPdfFastPage(const Graphic&, const tools::Rectangle&);
 #endif
     void                DrawBitmap( const Point& rDestPt, const Size& rDestSize,

@@ -130,6 +130,10 @@ struct CreateControl {
     std::shared_ptr< pdf::PDFWriter::AnyWidget > mxControl;
 };
 #if HAVE_FEATURE_LOONGOFFICE_PDF_FAST
+struct PdfFastSource
+{
+    std::shared_ptr<const std::vector<sal_uInt8>> bytes;
+};
 struct PdfFastPage
 {
     Graphic graphic;
@@ -160,7 +164,7 @@ typedef std::variant<CreateNamedDest,
 
 typedef std::variant<
 #if HAVE_FEATURE_LOONGOFFICE_PDF_FAST
-    PdfFastPage,
+    PdfFastSource, PdfFastPage,
 #endif
     EnsureStructureElement, InitStructureElement, BeginStructureElement, EndStructureElement,
     SetCurrentStructureElement, SetStructureAttribute, SetStructureAttributeNumerical,
@@ -363,7 +367,9 @@ bool PageSyncData::PlaySyncPageAct( pdf::PDFWriter& rWriter, sal_uInt32& rCurGDI
         PDFExtOutDevDataSyncPage aDataSync = std::move(mActions.front());
         mActions.pop_front();
 #if HAVE_FEATURE_LOONGOFFICE_PDF_FAST
-        if (auto* page = std::get_if<PdfFastPage>(&aDataSync.eAct))
+        if (auto* source = std::get_if<PdfFastSource>(&aDataSync.eAct))
+            rWriter.RegisterPdfFastSource(source->bytes);
+        else if (auto* page = std::get_if<PdfFastPage>(&aDataSync.eAct))
         {
             rWriter.Push();
             rWriter.SetMapMode(page->mapMode);
@@ -859,6 +865,12 @@ void PDFExtOutDevData::CreateControl( const pdf::PDFWriter::AnyWidget& rControlT
 }
 
 #if HAVE_FEATURE_LOONGOFFICE_PDF_FAST
+void PDFExtOutDevData::RecordPdfFastSource(
+    const std::shared_ptr<const std::vector<sal_uInt8>>& bytes)
+{
+    mpPageSyncData->PushAction(mrOutDev, PdfFastSource{ bytes });
+}
+
 void PDFExtOutDevData::RecordPdfFastPage(const Graphic& graphic, const tools::Rectangle& rect)
 {
     mpPageSyncData->PushAction(mrOutDev, PdfFastPage{ graphic, rect, mrOutDev.GetMapMode() });

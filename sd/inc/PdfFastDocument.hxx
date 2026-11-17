@@ -5,6 +5,8 @@
 #pragma once
 
 #include <memory>
+#include <vector>
+#include <sal/types.h>
 #include <tools/link.hxx>
 #include <sddllapi.h>
 
@@ -67,6 +69,8 @@ public:
     EditState GetEditState(const SdrView&) const;
     void ForgetView(const SdrView&);
     bool PrepareForSave();
+    // Immutable imported bytes, borrowed for the duration of PDF export.
+    const std::shared_ptr<const std::vector<sal_uInt8>>& GetSourceData() const;
     // PDF export only. The returned source graphic is borrowed; the live page
     // is never replaced or changed. Unknown/changed pages use native Draw.
     const SdrGrafObj* GetUnchangedPageGraphic(const SdrPage&, const SdrPageView&);

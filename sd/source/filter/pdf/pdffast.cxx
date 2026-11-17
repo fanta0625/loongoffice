@@ -106,6 +106,7 @@ struct PdfFastDocument::Impl : public SfxListener
         drawinglayer::primitive2d::Primitive2DContainer sourceContent;
         std::vector<drawinglayer::primitive2d::Primitive2DContainer> content;
         std::vector<SdrLayerID> layers;
+        std::vector<std::pair<basegfx::B2DRectangle, OUString>> sourceLinks;
     };
     struct Viewport
     {
@@ -312,6 +313,7 @@ struct PdfFastDocument::Impl : public SfxListener
             entry.size = page->GetSize();
             entry.borders = borders(*page);
             entry.background = background(*page);
+            entry.sourceLinks = page->getLinkAnnotations();
             if (original.is())
                 entry.sourceContent = primitives(*original);
             entry.dirty = page->GetObjCount() != 1;
@@ -410,6 +412,7 @@ struct PdfFastDocument::Impl : public SfxListener
                 page.setLinkAnnotations(links);
             });
             SdPdfFilter::ApplyPageMetadata(page, *result);
+            entry->sourceLinks = result->GetLinksInfo();
             applied = true;
             entry->metadataReady = true;
             entry->metadataFailed = false;
@@ -1305,19 +1308,26 @@ bool PdfFastDocument::PrepareForSave()
     return true;
 }
 
+const std::shared_ptr<const std::vector<sal_uInt8>>& PdfFastDocument::GetSourceData() const
+{
+    return m_impl->source;
+}
+
 const SdrGrafObj* PdfFastDocument::GetUnchangedPageGraphic(const SdrPage& page,
                                                            const SdrPageView& view)
 {
-    // Source PDF annotations may otherwise be copied a second time by the
-    // native PDF writer. Keep the existing Draw path for metadata-bearing pages.
+    // Notes still need native Draw annotation output. Unchanged links are copied
+    // once by the existing external-page writer; shape replay is suppressed.
     const auto* sdPage = dynamic_cast<const SdPage*>(&page);
-    if (!sdPage || !sdPage->getAnnotations().empty() || !sdPage->getLinkAnnotations().empty())
+    if (!sdPage || !sdPage->getAnnotations().empty())
         return nullptr;
     auto& impl = *m_impl;
     for (auto& entry : impl.pages)
     {
         if (entry.pageId != page.GetUniqueID() || !entry.original.is())
             continue;
+        if (!entry.metadataReady || sdPage->getLinkAnnotations() != entry.sourceLinks)
+            return nullptr;
         if (!entry.prepared)
         {
             if (!entry.dirty && page.GetObjCount() == 1 && page.GetObj(0) == entry.original.get()

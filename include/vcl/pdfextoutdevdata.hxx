@@ -173,6 +173,7 @@ public:
      */
 #if HAVE_FEATURE_LOONGOFFICE_PDF_FAST
     // Explicit opt-in from the PDF Fast renderer only; no graphic decomposition.
+    void RecordPdfFastSource(const std::shared_ptr<const std::vector<sal_uInt8>>&);
     void RecordPdfFastPage(const Graphic&, const tools::Rectangle&);
 #endif
     void        BeginGroup();

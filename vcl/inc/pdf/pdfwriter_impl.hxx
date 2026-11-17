@@ -717,6 +717,11 @@ private:
     std::list< BitmapEmit >             m_aBitmaps;
 #if HAVE_FEATURE_LOONGOFFICE_PDF_FAST
     std::vector<ReferenceXObjectEmit> m_aPdfFastPages;
+    // Empty for ordinary Draw. Keys pin immutable bytes for this writer only.
+    std::map<std::shared_ptr<const std::vector<sal_uInt8>>, sal_Int32,
+             std::owner_less<std::shared_ptr<const std::vector<sal_uInt8>>>>
+        m_aPdfFastSources;
+    sal_Int32 storePdfFastSource(const BinaryDataContainer&);
 #endif
     /* contains JPG streams until written to file     */
     std::vector<JPGEmit>                m_aJPGs;
@@ -1249,6 +1254,7 @@ public:
     void drawArc( const tools::Rectangle& rRect, const Point& rStart, const Point& rStop, bool bWithPie, bool bWidthChord );
 
 #if HAVE_FEATURE_LOONGOFFICE_PDF_FAST
+    void registerPdfFastSource(const std::shared_ptr<const std::vector<sal_uInt8>>&);
     void drawPdfFastPage(const Graphic&, const tools::Rectangle&);
 #endif
     void drawBitmap( const Point& rDestPoint, const Size& rDestSize, const Bitmap& rBitmap, const Graphic& rGraphic );

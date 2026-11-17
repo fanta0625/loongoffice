@@ -3769,6 +3769,11 @@ void SAL_CALL SdXImpressDocument::render( sal_Int32 nRenderer, const uno::Any& r
         }
 
 #if HAVE_FEATURE_LOONGOFFICE_PDF_FAST
+        // Source registration is independent of page reuse: tagged/changed pages
+        // still need native painting, but must not hash the whole PDF per page.
+        if (pPDFExtOutDevData)
+            if (auto* fast = mpDoc->GetPdfFastDocument())
+                pPDFExtOutDevData->RecordPdfFastSource(fast->GetSourceData());
         // Printing, selection export, notes and tagged output keep native Draw
         // rendering. Source reuse cannot supply the editable shapes' PDF tags.
         if (pPDFExtOutDevData && pPage && pPV && !bExportNotesPages

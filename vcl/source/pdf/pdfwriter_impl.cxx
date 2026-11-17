@@ -8653,8 +8653,16 @@ void PDFWriterImpl::mergeAnnotationsFromExternalPage(filter::PDFObjectElement* p
         auto pType = dynamic_cast<filter::PDFNameElement*>(pObject->Lookup("Type"_ostr));
         auto pSubtype = dynamic_cast<filter::PDFNameElement*>(pObject->Lookup("Subtype"_ostr));
 
+        // /Type is optional for link annotations. Opt in only for a registered
+        // PDF Fast export; ordinary Draw keeps its existing annotation handling.
+#if HAVE_FEATURE_LOONGOFFICE_PDF_FAST
+        const bool bPdfFastLink
+            = !m_aPdfFastSources.empty() && !pType && pSubtype && pSubtype->GetValue() == "Link";
+#else
+        constexpr bool bPdfFastLink = false;
+#endif
         // Is it a /Annot we want to copy?
-        if (pType && pType->GetValue() == "Annot" && pSubtype)
+        if (((pType && pType->GetValue() == "Annot") || bPdfFastLink) && pSubtype)
         {
             bool bIsLink = pSubtype->GetValue() == "Link";
             bool bIsWidget = pSubtype->GetValue() == "Widget";
@@ -8970,6 +8978,29 @@ bool PDFWriterImpl::writeBitmapMaskObject( sal_Int32 nMaskObject, const AlphaMas
 }
 
 #if HAVE_FEATURE_LOONGOFFICE_PDF_FAST
+void PDFWriterImpl::registerPdfFastSource(
+    const std::shared_ptr<const std::vector<sal_uInt8>>& bytes)
+{
+    if (bytes && !bytes->empty())
+        m_aPdfFastSources.try_emplace(bytes, -1);
+}
+
+sal_Int32 PDFWriterImpl::storePdfFastSource(const BinaryDataContainer& data)
+{
+    // Do not pin or inspect additional data on the ordinary Draw path.
+    if (!m_aPdfFastSources.empty())
+    {
+        const auto found = m_aPdfFastSources.find(data.getDataShared());
+        if (found != m_aPdfFastSources.end())
+        {
+            if (found->second < 0)
+                found->second = m_aExternalPDFStreams.store(data);
+            return found->second;
+        }
+    }
+    return m_aExternalPDFStreams.store(data);
+}
+
 void PDFWriterImpl::drawPdfFastPage(const Graphic& graphic, const tools::Rectangle& rect)
 {
     const auto& data = graphic.getVectorGraphicData();
@@ -8990,7 +9021,7 @@ void PDFWriterImpl::drawPdfFastPage(const Graphic& graphic, const tools::Rectang
     }
     BitmapEmit emit;
     auto& reference = emit.m_aReferenceXObject;
-    reference.m_nExternalPDFDataIndex = m_aExternalPDFStreams.store(data->getBinaryDataContainer());
+    reference.m_nExternalPDFDataIndex = storePdfFastSource(data->getBinaryDataContainer());
     reference.m_nExternalPDFPageIndex = data->getPageIndex();
     reference.m_nFormObject = createObject();
     // Same scale as ImportPDF, using known page geometry instead of GetSizePixel
@@ -9026,7 +9057,11 @@ void PDFWriterImpl::createEmbeddedFile(const Graphic& rGraphic, ReferenceXObject
     }
     else
     {
+#if HAVE_FEATURE_LOONGOFFICE_PDF_FAST
+        sal_Int32 aIndex = storePdfFastSource(rDataContainer);
+#else
         sal_Int32 aIndex = m_aExternalPDFStreams.store(rDataContainer);
+#endif
         rEmit.m_nExternalPDFPageIndex = rGraphic.getVectorGraphicData()->getPageIndex();
         rEmit.m_nExternalPDFDataIndex = aIndex;
     }

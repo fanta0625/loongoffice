@@ -699,6 +699,101 @@ CPPUNIT_TEST_FIXTURE(SdrPdfImportTest, testPdfFastExportCorrectnessBarriers)
     CPPUNIT_ASSERT(!controller->GetUnchangedPageGraphic(*raw, *pageView));
 }
 
+CPPUNIT_TEST_FIXTURE(SdrPdfImportTest, testPdfFastUnchangedLinksExport)
+{
+    auto library = vcl::pdf::PDFiumLibrary::get();
+    if (!library)
+        return;
+    EnvVarGuard preview("LO_IMPORT_USE_PDFIUM", "1");
+    auto exportPdf = [&](const std::vector<OUString>& urls, const OUString& range = OUString()) {
+        uno::Reference<frame::XStorable> storable(mxComponent, uno::UNO_QUERY_THROW);
+        storable->storeToURL(
+            maTempFile.GetURL(),
+            { comphelper::makePropertyValue(u"FilterName"_ustr, u"draw_pdf_Export"_ustr),
+              comphelper::makePropertyValue(
+                  u"FilterData"_ustr,
+                  uno::Sequence<beans::PropertyValue>{
+                      comphelper::makePropertyValue(u"UseTaggedPDF"_ustr, false),
+                      comphelper::makePropertyValue(u"ExportBookmarks"_ustr, false),
+                      comphelper::makePropertyValue(u"PageRange"_ustr, range) }) });
+        auto pdf = parsePDFExport();
+        CPPUNIT_ASSERT(pdf);
+        CPPUNIT_ASSERT_EQUAL(int(urls.size()), pdf->getPageCount());
+        std::vector<BitmapChecksum> pixels;
+        for (int i = 0; i < pdf->getPageCount(); ++i)
+        {
+            auto page = pdf->openPage(i);
+            CPPUNIT_ASSERT(page);
+            CPPUNIT_ASSERT_EQUAL(urls[i].isEmpty() ? 0 : 1, page->getAnnotationCount());
+            int index = 0;
+            auto link = page->enumerateLink(&index, pdf.get());
+            if (!urls[i].isEmpty())
+            {
+                CPPUNIT_ASSERT(link);
+                CPPUNIT_ASSERT_EQUAL(urls[i], link->getURIPath());
+                // The two distinct source rectangles must follow their source page.
+                const auto rect = link->getRectangle();
+                CPPUNIT_ASSERT_DOUBLES_EQUAL(urls[i].endsWith("first") ? 10.0 : 15.0,
+                                             rect.getMinX(), 0.01);
+                CPPUNIT_ASSERT_DOUBLES_EQUAL(20.0, rect.getMinY(), 0.01);
+                CPPUNIT_ASSERT(!page->enumerateLink(&index, pdf.get()));
+            }
+            else
+                CPPUNIT_ASSERT(!link);
+            int width = 400, height = 300;
+            auto bitmap = library->createBitmap(width, height, false);
+            CPPUNIT_ASSERT(bitmap);
+            bitmap->fillRect(0, 0, width, height, 0xffffffff);
+            bitmap->renderPageBitmap(pdf.get(), page.get(), 0, 0, width, height);
+            pixels.push_back(bitmap->createBitmapFromBuffer().GetChecksum());
+        }
+        return pixels;
+    };
+    const OUString firstURL = u"https://example.test/first"_ustr;
+    const OUString secondURL = u"https://example.test/second"_ustr;
+    loadFromFile(u"pdf/pdffast-linked-pages.pdf");
+    // The second source link omits optional /Type: ordinary Draw currently
+    // skips it. PDF Fast must preserve both links without changing Draw.
+    const auto native = exportPdf({ firstURL, OUString(), OUString() });
+    loadFromFile(u"pdf/pdffast-linked-pages.pdf");
+    auto* model = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(model);
+    auto* doc = model->GetDocShell()->GetDoc();
+    CPPUNIT_ASSERT(sd::PdfFastDocument::Attach(*doc));
+    auto* fast = doc->GetPdfFastDocument();
+    SdrView view(*doc);
+    std::vector<std::shared_ptr<VectorGraphicData>> sources;
+    for (sal_uInt16 i = 0; i < 2; ++i)
+    {
+        auto* page = doc->GetSdPage(i, PageKind::Standard);
+        auto* pv = view.ShowSdrPage(page);
+        const auto* source = fast->GetUnchangedPageGraphic(*page, *pv);
+        CPPUNIT_ASSERT(source);
+        sources.push_back(source->GetGraphic().getVectorGraphicData());
+        CPPUNIT_ASSERT(!sources.back()->isPrimitiveSequenceCreated());
+    }
+    CPPUNIT_ASSERT(native == exportPdf({ firstURL, secondURL, OUString() }));
+    for (const auto& source : sources)
+        CPPUNIT_ASSERT(!source->isPrimitiveSequenceCreated());
+    auto* first = doc->GetSdPage(0, PageKind::Standard);
+    auto* pv = view.ShowSdrPage(first);
+    const auto links = first->getLinkAnnotations();
+    // Even setters without notifications must not allow a stale metadata copy.
+    first->setLinkAnnotations({});
+    CPPUNIT_ASSERT(!fast->GetUnchangedPageGraphic(*first, *pv));
+    first->setLinkAnnotations(links);
+    fast->PrepareCurrentPage(view);
+    CPPUNIT_ASSERT(first->GetObjCount() > 1);
+    CPPUNIT_ASSERT(fast->GetUnchangedPageGraphic(*first, *pv));
+    CPPUNIT_ASSERT(native == exportPdf({ firstURL, secondURL, OUString() }));
+    // A new writer must register its own source, with no stale indices across saves.
+    CPPUNIT_ASSERT(native == exportPdf({ firstURL, secondURL, OUString() }));
+    doc->SdrModel::MovePage(3, 1);
+    doc->SdrModel::MovePage(4, 2);
+    exportPdf({ secondURL, firstURL, OUString() });
+    exportPdf({ secondURL }, u"1"_ustr);
+}
+
 CPPUNIT_TEST_FIXTURE(SdrPdfImportTest, testPdfFastAnnotatedExportFallback)
 {
     if (!vcl::pdf::PDFiumLibrary::get())

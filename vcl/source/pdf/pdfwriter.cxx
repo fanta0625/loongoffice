@@ -177,6 +177,11 @@ void PDFWriter::DrawPixel( const Point& rPos, const Color& rColor )
 }
 
 #if HAVE_FEATURE_LOONGOFFICE_PDF_FAST
+void PDFWriter::RegisterPdfFastSource(const std::shared_ptr<const std::vector<sal_uInt8>>& bytes)
+{
+    xImplementation->registerPdfFastSource(bytes);
+}
+
 void PDFWriter::DrawPdfFastPage(const Graphic& graphic, const tools::Rectangle& rect)
 {
     xImplementation->drawPdfFastPage(graphic, rect);
