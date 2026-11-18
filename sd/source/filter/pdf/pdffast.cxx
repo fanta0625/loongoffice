@@ -80,6 +80,16 @@ namespace
 {
 using pdffast::TileKey;
 using Clock = std::chrono::steady_clock;
+// Explicit edit actions (mode switch, direct request) wait only briefly for
+// the input queue to drain before committing on the UI thread.
+constexpr auto COMMIT_QUIET = std::chrono::milliseconds(120);
+// Navigation intents stay dormant while the user keeps flipping pages. The
+// transport and the UI-thread replay start only after this much input
+// silence, so scrolling never competes with page conversion. A page-by-page
+// browse pauses around a second per page; keep the window above that so
+// steady flipping does not trigger a replay (which blocks the UI thread).
+constexpr auto NAVIGATION_SETTLE = std::chrono::milliseconds(1200);
+constexpr auto REQUEST_DEBOUNCE = std::chrono::milliseconds(120);
 std::size_t cost(const TileKey& key)
 {
     const auto padded = pdffast::tileWithGutter(key);
@@ -149,6 +159,9 @@ struct PdfFastDocument::Impl : public SfxListener
     {
         rtl::Reference<SdrGrafObj> original;
         Clock::time_point due;
+        // Navigation intent: never start conversion while the user is still
+        // flipping; wait for NAVIGATION_SETTLE of input silence.
+        bool settle = false;
     };
     std::map<SdrView*, EditIntent> intents;
     struct EditGate
@@ -174,15 +187,18 @@ struct PdfFastDocument::Impl : public SfxListener
     struct PrefetchedEdit
     {
         rtl::Reference<SdrGrafObj> original;
+        // Transport spool only. The UI-thread replay happens on the commit
+        // path, after input settles; it is never run speculatively.
         pdffast::NativeImport::Result result;
-        std::vector<rtl::Reference<SdrObject>> objects;
     };
     std::deque<PrefetchedEdit> prefetchedEdits;
     std::set<sal_uInt64> prefetchAttempted;
+    // Direction the user is traveling; the next request in that direction is
+    // transported first.
     int navigationDirection = 1;
     int previousEditPage = -1;
     bool prefetchEdits();
-    std::vector<rtl::Reference<SdrObject>> materializePrefetch(
+    std::vector<rtl::Reference<SdrObject>> stagePageObjects(
         const rtl::Reference<SdrGrafObj>& original,
         const pdffast::NativeImport::Result& result);
     std::optional<pdffast::NativeImport::Result> pendingEditResult;
@@ -194,6 +210,12 @@ struct PdfFastDocument::Impl : public SfxListener
         // request would postpone delivery forever while thumbnails are pending.
         if (!poll.IsActive())
             poll.Start();
+    }
+    bool inputQuiet(std::chrono::milliseconds limit) const
+    {
+        return Clock::now() - lastScroll >= limit
+               && Application::GetLastInputInterval() >= sal_uInt64(limit.count())
+               && !Application::AnyInput(VclInputFlags::MOUSE | VclInputFlags::KEYBOARD);
     }
     Idle metadataIdle{ "Draw PDF deferred metadata" };
     std::mutex editEventMutex;
@@ -272,10 +294,9 @@ struct PdfFastDocument::Impl : public SfxListener
         if (entry.dirty)
             return;
         for (size_t n = 0; n < page.GetObjCount(); ++n)
-        {
             entry.content.push_back(primitives(*page.GetObj(n)));
+        for (size_t n = 0; n < page.GetObjCount(); ++n)
             entry.layers.push_back(page.GetObj(n)->GetLayer());
-        }
     }
 
     bool editPending(int page) const
@@ -385,8 +406,7 @@ struct PdfFastDocument::Impl : public SfxListener
         return nullptr;
     }
 
-    bool preparePage(SdrPage&, SdrView*, const pdffast::NativeImport::Result* = nullptr,
-                     const std::vector<rtl::Reference<SdrObject>>* = nullptr);
+    bool preparePage(SdrPage&, SdrView*, const pdffast::NativeImport::Result* = nullptr);
     bool processEdits();
     bool ensureMetadata(SdrPage& target)
     {
@@ -1159,7 +1179,8 @@ bool PdfFastDocument::HasPrefetchedPage(const SdrPage& page) const
 
 void PdfFastDocument::NoteScroll() { m_impl->lastScroll = Clock::now(); }
 
-void PdfFastDocument::RequestCurrentPage(SdrView& view, const Link<bool, void>& changed)
+void PdfFastDocument::RequestCurrentPage(SdrView& view, const Link<bool, void>& changed,
+                                         bool settle)
 {
     auto& impl = *m_impl;
     const bool readOnlyUI = impl.doc.GetDocSh() && impl.doc.GetDocSh()->IsReadOnlyUI();
@@ -1195,8 +1216,10 @@ void PdfFastDocument::RequestCurrentPage(SdrView& view, const Link<bool, void>& 
     if (!entry || entry->prepared)
         return;
     entry->failed = false; // An explicit revisit/edit action is a retry.
-    impl.setGate(view, EditState::Preparing);
-    impl.intents[&view] = { entry->original, Clock::now() + std::chrono::milliseconds(120) };
+    // Navigation requests stay dormant (Waiting) until input settles; only an
+    // explicit edit action blocks the page and starts conversion right away.
+    impl.setGate(view, settle ? EditState::Waiting : EditState::Preparing);
+    impl.intents[&view] = { entry->original, Clock::now() + REQUEST_DEBOUNCE, settle };
     // Remove stale high-resolution PDF work immediately. The conversion
     // helper and the native Draw renderer must not compete with old tiles.
     impl.schedule();
@@ -1266,26 +1289,38 @@ bool PdfFastDocument::Impl::processEdits()
             it = prefetchedEdits.erase(it);
             continue;
         }
-        if (wanted && Clock::now() - lastScroll >= std::chrono::milliseconds(120)
-            && Application::GetLastInputInterval() >= 120
-            && !Application::AnyInput(VclInputFlags::MOUSE | VclInputFlags::KEYBOARD))
+        if (wanted)
         {
-            auto cached = std::move(*it);
-            it = prefetchedEdits.erase(it);
-            SAL_INFO("pdffast", "native-edit-prefetch-hit page=" << cached.result.page);
-            const bool ready = preparePage(*page, nullptr, &cached.result, &cached.objects);
-            for (auto intent = intents.begin(); intent != intents.end();)
-                if (intent->second.original == cached.original)
-                {
-                    setGate(*intent->first, ready ? PdfFastDocument::EditState::Ready
-                                                  : PdfFastDocument::EditState::Failed);
-                    intent = intents.erase(intent);
-                }
-                else
-                    ++intent;
-            cached.original->ActionChanged();
-            schedule();
-            continue;
+            const bool settle
+                = std::any_of(intents.begin(), intents.end(), [&](const auto& intent) {
+                      return intent.second.original == it->original && intent.second.settle;
+                  });
+            if (inputQuiet(settle ? NAVIGATION_SETTLE : COMMIT_QUIET))
+            {
+                auto cached = std::move(*it);
+                it = prefetchedEdits.erase(it);
+                SAL_INFO("pdffast", "native-edit-prefetch-hit page="
+                                        << cached.result.page << " settle=" << settle);
+                // The dormant navigation gate becomes busy only now, when the
+                // commit (and its UI-thread cost) actually starts.
+                if (settle)
+                    for (const auto& intent : intents)
+                        if (intent.second.original == cached.original)
+                            setGate(*intent.first, PdfFastDocument::EditState::Preparing);
+                const bool ready = preparePage(*page, nullptr, &cached.result);
+                for (auto intent = intents.begin(); intent != intents.end();)
+                    if (intent->second.original == cached.original)
+                    {
+                        setGate(*intent->first, ready ? PdfFastDocument::EditState::Ready
+                                                      : PdfFastDocument::EditState::Failed);
+                        intent = intents.erase(intent);
+                    }
+                    else
+                        ++intent;
+                cached.original->ActionChanged();
+                schedule();
+                continue;
+            }
         }
         ++it;
     }
@@ -1301,10 +1336,12 @@ bool PdfFastDocument::Impl::processEdits()
             importer->cancel();
         if (!pendingEditResult)
             pendingEditResult = importer->takeResult();
+        const bool settle
+            = wanted && std::any_of(intents.begin(), intents.end(), [&](const auto& intent) {
+                  return intent.second.original == running && intent.second.settle;
+              });
         if (pendingEditResult && wanted && pendingEditResult->success
-            && (Clock::now() - lastScroll < std::chrono::milliseconds(120)
-                || Application::GetLastInputInterval() < 120
-                || Application::AnyInput(VclInputFlags::MOUSE | VclInputFlags::KEYBOARD)))
+            && !inputQuiet(settle ? NAVIGATION_SETTLE : COMMIT_QUIET))
             return true;
         if (pendingEditResult)
         {
@@ -1321,21 +1358,10 @@ bool PdfFastDocument::Impl::processEdits()
             {
                 if (prefetchedEdits.size() == 2)
                     prefetchedEdits.pop_front();
+                // Publishing the transport result must stay cheap. Replaying it
+                // into Draw objects happens only on the commit path.
                 SAL_INFO("pdffast", "native-edit-prefetch-ready page=" << result->page);
-                auto prefetched = PrefetchedEdit{ original, std::move(*result), {} };
-                try
-                {
-                    prefetched.objects = materializePrefetch(original, prefetched.result);
-                    SAL_INFO("pdffast", "native-edit-prefetch-materialize-ready page="
-                                                << prefetched.result.page);
-                }
-                catch (const std::exception& error)
-                {
-                    SAL_WARN("pdffast", "Native prefetch materialization failed: "
-                                             << error.what());
-                }
-                if (!prefetched.objects.empty())
-                    prefetchedEdits.push_back(std::move(prefetched));
+                prefetchedEdits.push_back(PrefetchedEdit{ original, std::move(*result) });
             }
             runningPrefetch = false;
             if (wanted && page && &page->getSdrModelFromSdrPage() == &doc && link
@@ -1345,6 +1371,13 @@ bool PdfFastDocument::Impl::processEdits()
                 if (!result->success)
                     SAL_WARN("pdffast", "Native page transport failed, using Draw fallback: "
                                               << result->error);
+                // Promote the dormant navigation gate only now: the wait
+                // cursor must track the actual UI-thread commit, not the
+                // quiet period before it.
+                if (settle)
+                    for (const auto& intent : intents)
+                        if (intent.second.original == original)
+                            setGate(*intent.first, PdfFastDocument::EditState::Preparing);
                 ready = preparePage(*page, nullptr, &*result);
                 if (auto* entry = findPage(*page))
                     entry->failed = !ready;
@@ -1368,7 +1401,11 @@ bool PdfFastDocument::Impl::processEdits()
     }
     if (!running.is())
         for (const auto& entry : intents)
+            // A navigation intent must not even start its transport while the
+            // user is still flipping pages: nothing PDF-related runs during
+            // interaction, only after the view settles.
             if (Clock::now() >= entry.second.due
+                && (!entry.second.settle || inputQuiet(NAVIGATION_SETTLE))
                 && std::none_of(prefetchedEdits.begin(), prefetchedEdits.end(),
                                 [&](const auto& cached) {
                                     return cached.original == entry.second.original;
@@ -1435,9 +1472,10 @@ bool PdfFastDocument::Impl::prefetchEdits()
             || std::any_of(prefetchedEdits.begin(), prefetchedEdits.end(),
                            [&](const auto& cached) { return cached.original == original; }))
             continue;
-        if (Clock::now() - lastScroll < std::chrono::milliseconds(200)
-            || Application::GetLastInputInterval() < 200
-            || Application::AnyInput(VclInputFlags::MOUSE | VclInputFlags::KEYBOARD))
+        // The transport runs in another process and only fills helper spools,
+        // so it may start as soon as the input queue is empty. Its result is
+        // replayed on the UI thread only after the commit gate opens.
+        if (Application::AnyInput(VclInputFlags::MOUSE | VclInputFlags::KEYBOARD))
             return true;
         // One transport at a time. Foreground navigation cancels speculative
         // work; immutable results are bounded to two 32 MiB disk spools.
@@ -1651,7 +1689,7 @@ PdfFastDocument::GetPagePreview(const SdrPage& page, const Size& size, Bitmap& b
     return PreviewResult::Pending;
 }
 
-std::vector<rtl::Reference<SdrObject>> PdfFastDocument::Impl::materializePrefetch(
+std::vector<rtl::Reference<SdrObject>> PdfFastDocument::Impl::stagePageObjects(
     const rtl::Reference<SdrGrafObj>& original, const pdffast::NativeImport::Result& result)
 {
     const bool changed = doc.IsChanged();
@@ -1674,9 +1712,8 @@ std::vector<rtl::Reference<SdrObject>> PdfFastDocument::Impl::materializePrefetc
     return objects;
 }
 
-bool PdfFastDocument::Impl::preparePage(
-    SdrPage& target, SdrView* view, const pdffast::NativeImport::Result* completed,
-    const std::vector<rtl::Reference<SdrObject>>* stagedObjects)
+bool PdfFastDocument::Impl::preparePage(SdrPage& target, SdrView* view,
+                                        const pdffast::NativeImport::Result* completed)
 {
     auto& impl = *this;
     if (impl.preparing)
@@ -1684,8 +1721,12 @@ bool PdfFastDocument::Impl::preparePage(
     auto* it = impl.findPage(target);
     if (!it || it->prepared)
         return true;
+    const auto metadataStart = Clock::now();
     if (!impl.ensureMetadata(target))
         return false;
+    const auto metadataUs
+        = std::chrono::duration_cast<std::chrono::microseconds>(Clock::now() - metadataStart)
+              .count();
     if (!completed)
     {
         // Explicit save/tests retain a synchronous barrier. Normal navigation
@@ -1751,14 +1792,20 @@ bool PdfFastDocument::Impl::preparePage(
     impl.doc.EnableUndo(false);
     if (view)
         view->UnmarkAllObj();
+    // Stage/insert/rememberContent are the remaining UI-thread costs of a
+    // commit; keep them separately visible so scheduling stays measurable.
+    sal_uInt64 stagingUs = 0, insertUs = 0, rememberUs = 0;
     try
     {
         auto* targetPage = dynamic_cast<SdPage*>(page);
         if (!targetPage)
             throw std::runtime_error("Missing native Draw page");
         const auto originalPosition = it->original->GetOrdNum();
+        const auto stagingStart = Clock::now();
         std::vector<rtl::Reference<SdrObject>> objects
-            = stagedObjects ? *stagedObjects : impl.materializePrefetch(it->original, *completed);
+            = impl.stagePageObjects(it->original, *completed);
+        stagingUs = std::chrono::duration_cast<std::chrono::microseconds>(Clock::now() - stagingStart)
+                        .count();
         bool committed = false;
         comphelper::ScopeGuard rollback([&] {
             if (committed)
@@ -1770,9 +1817,18 @@ bool PdfFastDocument::Impl::preparePage(
                 page->NbcInsertObject(it->original.get(), originalPosition);
             page->GetViewContact().ActionChanged();
         });
-        std::size_t position = originalPosition;
-        for (const auto& object : objects)
-            page->InsertObject(object.get(), position++);
+        {
+            // Batch insertion: suppress the per-object model broadcast (UNO
+            // shape events, repaint marks) like the SD import filters do via
+            // setLock. Large pages otherwise pay one broadcast per object;
+            // the page-level ActionChanged below delivers one update.
+            const bool wasLocked = impl.doc.isLocked();
+            impl.doc.setLock(true);
+            comphelper::ScopeGuard unlock([&] { impl.doc.setLock(wasLocked); });
+            std::size_t position = originalPosition;
+            for (const auto& object : objects)
+                page->InsertObject(object.get(), position++);
+        }
         // SdPage cloning rebinds presentation callbacks to the staging page.
         // Moving its objects must not leave that temporary page as a callback.
         SdrObjListIter callbacks(page, SdrIterMode::DeepWithGroups);
@@ -1785,7 +1841,15 @@ bool PdfFastDocument::Impl::preparePage(
         page->RemoveObject(it->original->GetOrdNum());
         committed = true;
         it->prepared = true; // A blank native page is a valid editable page too.
+        insertUs
+            = std::chrono::duration_cast<std::chrono::microseconds>(Clock::now() - stagingStart)
+                  .count()
+              - stagingUs;
+        const auto rememberStart = Clock::now();
         impl.rememberContent(*it, *page);
+        rememberUs = std::chrono::duration_cast<std::chrono::microseconds>(Clock::now()
+                                                                          - rememberStart)
+                         .count();
         // Page geometry, background and annotations already belong to the live
         // Draw document. Materialization replaces only the source graphic;
         // importing must preserve page-format changes and edits made elsewhere.
@@ -1803,7 +1867,9 @@ bool PdfFastDocument::Impl::preparePage(
     SAL_INFO("pdffast",
              "native-edit-prepare page="
                  << page->GetPageNum() << " success=" << it->prepared
-                 << " objects=" << page->GetObjCount() << " total_us="
+                 << " objects=" << page->GetObjCount()
+                 << " metadata_us=" << metadataUs << " staging_us=" << stagingUs
+                 << " insert_us=" << insertUs << " remember_us=" << rememberUs << " total_us="
                  << std::chrono::duration_cast<std::chrono::microseconds>(Clock::now() - started)
                         .count());
     return it->prepared;

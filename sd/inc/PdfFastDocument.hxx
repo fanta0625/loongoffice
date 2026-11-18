@@ -64,10 +64,15 @@ public:
     enum class EditState
     {
         Ready,
+        // Navigation intent: conversion is deferred until the user stops
+        // flipping pages, so scrolling never waits for Draw object replay.
+        Waiting,
         Preparing,
         Failed
     };
-    void RequestCurrentPage(SdrView&, const Link<bool, void>& = {});
+    // `settle` marks a navigation-driven request. It stays dormant during
+    // input and only converts after the view has been quiet for a while.
+    void RequestCurrentPage(SdrView&, const Link<bool, void>& = {}, bool settle = false);
     EditState GetEditState(const SdrView&) const;
     void ForgetView(const SdrView&);
     bool PrepareForSave();

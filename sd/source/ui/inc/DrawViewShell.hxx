@@ -29,6 +29,7 @@
 #include <unotools/options.hxx>
 #include <sddllapi.h>
 #include <viewopt.hxx>
+#include <vcl/timer.hxx>
 
 namespace svx::sidebar { class SelectionChangeHandler; }
 namespace com::sun::star::lang { class XEventListener; }
@@ -463,11 +464,14 @@ private:
 
     /// return true if "Edit Hyperlink" in context menu should be disabled
     bool ShouldDisableEditHyperlink() const;
-    void RequestPdfPage();
+    // `navigation` marks page changes while flipping pages: conversion stays
+    // dormant until the user settles, so scrolling is never blocked by it.
+    void RequestPdfPage(bool navigation = false);
     OUString GetPdfStatusText() const;
 
 private:
     DECL_LINK(PdfEditStateChanged, bool, void);
+    DECL_LINK(PdfFastWaitTimeout, Timer*, void);
     std::unique_ptr<DrawView> mpDrawView;
     SdPage*             mpActualPage;
     ::tools::Rectangle           maMarkRect;
@@ -513,6 +517,10 @@ private:
     // PDF Fast preparation uses the native wait cursor only while the current
     // page is being materialized. Ordinary Draw documents never set this flag.
     bool                                                  mbPdfFastWaiting = false;
+    // The cursor is entered after a short delay (see PdfFastWaitTimeout) so a
+    // prefetched flip that commits quickly never flashes it.
+    bool                                                  mbPdfFastWaitShown = false;
+    Timer                                                 maPdfFastWaitTimer{ "PDF fast wait cursor" };
     std::unique_ptr<AnnotationManager> mpAnnotationManager;
     std::unique_ptr<ViewOverlayManager> mpViewOverlayManager;
     std::vector<std::unique_ptr<SdrExternalToolEdit>> m_ExternalEdits;

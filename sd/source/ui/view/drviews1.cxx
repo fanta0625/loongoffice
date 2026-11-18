@@ -83,12 +83,15 @@ using namespace com::sun::star;
 
 namespace sd {
 
-void DrawViewShell::RequestPdfPage()
+void DrawViewShell::RequestPdfPage(bool navigation)
 {
 #if HAVE_FEATURE_LOONGOFFICE_PDF_FAST
     if (mpDrawView)
         if (auto* fast = GetDoc()->GetPdfFastDocument())
-            fast->RequestCurrentPage(*mpDrawView, LINK(this, DrawViewShell, PdfEditStateChanged));
+            fast->RequestCurrentPage(*mpDrawView, LINK(this, DrawViewShell, PdfEditStateChanged),
+                                     navigation);
+#else
+    (void)navigation;
 #endif
 }
 
@@ -100,19 +103,41 @@ IMPL_LINK(DrawViewShell, PdfEditStateChanged, bool, blocked, void)
                                   == PdfFastDocument::EditState::Preparing;
     if (preparing != mbPdfFastWaiting)
     {
-        if (mpContentWindow)
-        {
-            if (preparing)
-                mpContentWindow->EnterWait();
-            else
-                mpContentWindow->LeaveWait();
-        }
         mbPdfFastWaiting = preparing;
+        if (preparing)
+        {
+            // A prefetched page usually commits in a few hundred milliseconds.
+            // Delay the wait cursor so quick flips do not flash it; slow
+            // first-time preparation still gets feedback.
+            maPdfFastWaitTimer.SetTimeout(400);
+            maPdfFastWaitTimer.SetInvokeHandler(LINK(this, DrawViewShell, PdfFastWaitTimeout));
+            maPdfFastWaitTimer.Start();
+        }
+        else
+        {
+            maPdfFastWaitTimer.Stop();
+            if (mbPdfFastWaitShown && mpContentWindow)
+            {
+                mpContentWindow->LeaveWait();
+                mbPdfFastWaitShown = false;
+            }
+        }
     }
     GetViewFrame()->GetDispatcher()->SetContentReadOnly(blocked);
     GetViewFrame()->GetBindings().Invalidate(SID_CONTEXT);
 #else
     (void)blocked;
+#endif
+}
+
+IMPL_LINK_NOARG(DrawViewShell, PdfFastWaitTimeout, Timer*, void)
+{
+#if HAVE_FEATURE_LOONGOFFICE_PDF_FAST
+    if (mbPdfFastWaiting && !mbPdfFastWaitShown && mpContentWindow)
+    {
+        mbPdfFastWaitShown = true;
+        mpContentWindow->EnterWait();
+    }
 #endif
 }
 
@@ -1257,7 +1282,7 @@ bool DrawViewShell::SwitchPage(sal_uInt16 nSelectedPage, bool bAllowChangeFocus,
             UpdateScrollBars();
 #if HAVE_FEATURE_LOONGOFFICE_PDF_FAST
         if (auto* fast = GetDoc()->GetPdfFastDocument(); fast && fast->IsEditMode())
-            RequestPdfPage();
+            RequestPdfPage(true);
 #endif
     }
 
