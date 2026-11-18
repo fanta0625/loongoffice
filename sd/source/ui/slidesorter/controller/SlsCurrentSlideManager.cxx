@@ -73,6 +73,12 @@ void CurrentSlideManager::NotifyCurrentSlideChange (const sal_Int32 nSlideIndex)
     if (mnCurrentSlideIndex == nSlideIndex)
         return;
 
+    // A slide switch requested by this manager is pending: the main view
+    // still reports the old page until the delayed SwitchPage() runs.
+    // Do not let that stale notification cancel the pending destination.
+    if (maSwitchPageDelayTimer.IsActive())
+        return;
+
     PageSelector::BroadcastLock aBroadcastLock (mrSlideSorter.GetController().GetPageSelector());
 
     mrSlideSorter.GetController().GetPageSelector().DeselectAllPages();
