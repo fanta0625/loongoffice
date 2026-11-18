@@ -175,12 +175,16 @@ struct PdfFastDocument::Impl : public SfxListener
     {
         rtl::Reference<SdrGrafObj> original;
         pdffast::NativeImport::Result result;
+        std::vector<rtl::Reference<SdrObject>> objects;
     };
     std::deque<PrefetchedEdit> prefetchedEdits;
     std::set<sal_uInt64> prefetchAttempted;
     int navigationDirection = 1;
     int previousEditPage = -1;
     bool prefetchEdits();
+    std::vector<rtl::Reference<SdrObject>> materializePrefetch(
+        const rtl::Reference<SdrGrafObj>& original,
+        const pdffast::NativeImport::Result& result);
     std::optional<pdffast::NativeImport::Result> pendingEditResult;
     Clock::time_point lastScroll{};
     Timer poll{ "Draw PDF tile delivery" };
@@ -381,7 +385,8 @@ struct PdfFastDocument::Impl : public SfxListener
         return nullptr;
     }
 
-    bool preparePage(SdrPage&, SdrView*, const pdffast::NativeImport::Result* = nullptr);
+    bool preparePage(SdrPage&, SdrView*, const pdffast::NativeImport::Result* = nullptr,
+                     const std::vector<rtl::Reference<SdrObject>>* = nullptr);
     bool processEdits();
     bool ensureMetadata(SdrPage& target)
     {
@@ -1261,14 +1266,14 @@ bool PdfFastDocument::Impl::processEdits()
             it = prefetchedEdits.erase(it);
             continue;
         }
-        if (wanted && Clock::now() - lastScroll >= std::chrono::milliseconds(250)
-            && Application::GetLastInputInterval() >= 250
+        if (wanted && Clock::now() - lastScroll >= std::chrono::milliseconds(120)
+            && Application::GetLastInputInterval() >= 120
             && !Application::AnyInput(VclInputFlags::MOUSE | VclInputFlags::KEYBOARD))
         {
             auto cached = std::move(*it);
             it = prefetchedEdits.erase(it);
             SAL_INFO("pdffast", "native-edit-prefetch-hit page=" << cached.result.page);
-            const bool ready = preparePage(*page, nullptr, &cached.result);
+            const bool ready = preparePage(*page, nullptr, &cached.result, &cached.objects);
             for (auto intent = intents.begin(); intent != intents.end();)
                 if (intent->second.original == cached.original)
                 {
@@ -1297,8 +1302,8 @@ bool PdfFastDocument::Impl::processEdits()
         if (!pendingEditResult)
             pendingEditResult = importer->takeResult();
         if (pendingEditResult && wanted && pendingEditResult->success
-            && (Clock::now() - lastScroll < std::chrono::milliseconds(250)
-                || Application::GetLastInputInterval() < 250
+            && (Clock::now() - lastScroll < std::chrono::milliseconds(120)
+                || Application::GetLastInputInterval() < 120
                 || Application::AnyInput(VclInputFlags::MOUSE | VclInputFlags::KEYBOARD)))
             return true;
         if (pendingEditResult)
@@ -1317,7 +1322,20 @@ bool PdfFastDocument::Impl::processEdits()
                 if (prefetchedEdits.size() == 2)
                     prefetchedEdits.pop_front();
                 SAL_INFO("pdffast", "native-edit-prefetch-ready page=" << result->page);
-                prefetchedEdits.push_back({ original, std::move(*result) });
+                auto prefetched = PrefetchedEdit{ original, std::move(*result), {} };
+                try
+                {
+                    prefetched.objects = materializePrefetch(original, prefetched.result);
+                    SAL_INFO("pdffast", "native-edit-prefetch-materialize-ready page="
+                                                << prefetched.result.page);
+                }
+                catch (const std::exception& error)
+                {
+                    SAL_WARN("pdffast", "Native prefetch materialization failed: "
+                                             << error.what());
+                }
+                if (!prefetched.objects.empty())
+                    prefetchedEdits.push_back(std::move(prefetched));
             }
             runningPrefetch = false;
             if (wanted && page && &page->getSdrModelFromSdrPage() == &doc && link
@@ -1417,8 +1435,8 @@ bool PdfFastDocument::Impl::prefetchEdits()
             || std::any_of(prefetchedEdits.begin(), prefetchedEdits.end(),
                            [&](const auto& cached) { return cached.original == original; }))
             continue;
-        if (Clock::now() - lastScroll < std::chrono::milliseconds(500)
-            || Application::GetLastInputInterval() < 500
+        if (Clock::now() - lastScroll < std::chrono::milliseconds(200)
+            || Application::GetLastInputInterval() < 200
             || Application::AnyInput(VclInputFlags::MOUSE | VclInputFlags::KEYBOARD))
             return true;
         // One transport at a time. Foreground navigation cancels speculative
@@ -1633,8 +1651,32 @@ PdfFastDocument::GetPagePreview(const SdrPage& page, const Size& size, Bitmap& b
     return PreviewResult::Pending;
 }
 
-bool PdfFastDocument::Impl::preparePage(SdrPage& target, SdrView* view,
-                                        const pdffast::NativeImport::Result* completed)
+std::vector<rtl::Reference<SdrObject>> PdfFastDocument::Impl::materializePrefetch(
+    const rtl::Reference<SdrGrafObj>& original, const pdffast::NativeImport::Result& result)
+{
+    const bool changed = doc.IsChanged();
+    const bool modified = doc.GetDocSh() && doc.GetDocSh()->IsModified();
+    const bool undo = doc.IsUndoEnabled();
+    comphelper::ScopeGuard restore([&] {
+        doc.EnableUndo(undo);
+        doc.SetChanged(changed);
+        if (auto* shell = doc.GetDocSh())
+            shell->SetModified(modified);
+    });
+    doc.EnableUndo(false);
+    auto staged = importEditablePage(original->GetGraphic(), result);
+    if (!staged)
+        throw std::runtime_error("Missing staged PDF page");
+    std::vector<rtl::Reference<SdrObject>> objects;
+    while (staged->GetObjCount())
+        objects.push_back(staged->NbcRemoveObject(staged->GetObjCount() - 1));
+    std::reverse(objects.begin(), objects.end());
+    return objects;
+}
+
+bool PdfFastDocument::Impl::preparePage(
+    SdrPage& target, SdrView* view, const pdffast::NativeImport::Result* completed,
+    const std::vector<rtl::Reference<SdrObject>>* stagedObjects)
 {
     auto& impl = *this;
     if (impl.preparing)
@@ -1711,17 +1753,12 @@ bool PdfFastDocument::Impl::preparePage(SdrPage& target, SdrView* view,
         view->UnmarkAllObj();
     try
     {
-        auto staged = impl.importEditablePage(it->original->GetGraphic(), *completed);
-        auto* stagedPage = dynamic_cast<SdPage*>(staged.get());
         auto* targetPage = dynamic_cast<SdPage*>(page);
-        if (!stagedPage || !targetPage)
+        if (!targetPage)
             throw std::runtime_error("Missing native Draw page");
         const auto originalPosition = it->original->GetOrdNum();
-        std::vector<rtl::Reference<SdrObject>> objects;
-        objects.reserve(staged->GetObjCount());
-        while (staged->GetObjCount())
-            objects.push_back(staged->NbcRemoveObject(staged->GetObjCount() - 1));
-        std::reverse(objects.begin(), objects.end());
+        std::vector<rtl::Reference<SdrObject>> objects
+            = stagedObjects ? *stagedObjects : impl.materializePrefetch(it->original, *completed);
         bool committed = false;
         comphelper::ScopeGuard rollback([&] {
             if (committed)
@@ -1742,7 +1779,7 @@ bool PdfFastDocument::Impl::preparePage(SdrPage& target, SdrView* view,
         while (callbacks.IsMore())
         {
             auto* object = callbacks.Next();
-            if (object->GetUserCall() == stagedPage)
+            if (object->GetUserCall() && object->GetUserCall() != targetPage)
                 object->SetUserCall(targetPage);
         }
         page->RemoveObject(it->original->GetOrdNum());
