@@ -59,6 +59,7 @@ public:
     // explicitly entered Draw's edit mode.
     void SetEditMode(bool);
     bool IsEditMode() const;
+    bool HasPrefetchedPage(const SdrPage&) const;
     void NoteScroll();
     enum class EditState
     {

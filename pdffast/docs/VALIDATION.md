@@ -105,3 +105,12 @@ UI ui-image 的 allocation_us 包含 Bitmap 创建和写访问取得；upload_ca
 最终 GUI 与性能结果见 [Linux 实测报告](LINUX_VALIDATION.md)：15 个编辑／保存用例及 30 个直接启动用例全部通过。
 
 真实 500 页 PDF 的桥接错误根因与修复复测见 [large-test-500p-50mb 分析](LINUX_VALIDATION.md)。
+
+
+## 相邻页原生转换预加载验证（2026-11-18）
+
+新增 `testAdjacentEditPrefetchDoesNotMaterializePages`：停留中间页时确认前后页缓存完成、未提前替换 PDF 占位对象，翻页后消费缓存；确认转换不标记文档修改、不增加撤销记录，退出编辑释放缓存。`testNativeImportSessionAndSpoolOwnership` 增加独立临时文件的持有、后续请求不覆盖和结果销毁清理验证。既有导航防抖、保存屏障和只读门控测试继续运行。
+
+本轮开启功能时通过 Draw PDF 导入 18 项、VCL PDF 导出 60 项和 PDF Fast 渲染／资源生命周期 5 项测试；关闭功能后完成依赖重建与链接，原生 PDF 导入 2 项测试通过，并检查 VCL 不含 PDF Fast 导出符号。恢复开启配置后重新构建、链接，18 项导入测试再次通过。修改的 C++ 行通过 clang-format 5.0.1 检查，`git diff --check` 通过。
+
+自动验证使用 Linux x86_64 WSL 构建；真实龙芯机器连续滚动、反向翻页、复杂页及快速关闭仍需人工验收。后台缓存减少转换传输等待，不保证消除主线程 Draw 对象构建成本。

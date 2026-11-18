@@ -107,6 +107,7 @@ struct NativeImport::Impl
     std::condition_variable condition;
     bool stopping = false, active = false, leased = false, cancelled = false;
     bool snapshotReady = false;
+    bool detachResult = false;
     const std::chrono::milliseconds timeout;
     const std::function<void()> ready;
     std::chrono::steady_clock::time_point deadline;
@@ -312,9 +313,50 @@ struct NativeImport::Impl
                     write(commands.handle, line.data(), line.size());
                 }
                 commands.close();
+                if (detachResult)
+                {
+                    // Copy on the transport thread, never on the UI thread. The
+                    // helper may append to its binary spool on the next request.
+                    struct Storage
+                    {
+                        File commands, binary;
+                    };
+                    auto storage = std::make_shared<Storage>();
+                    sal_uInt64 total = 0;
+                    for (const auto* file : { &commands, &binary })
+                    {
+                        oslFileHandle handle = nullptr;
+                        sal_uInt64 size = 0;
+                        if (osl_openFile(file->url.pData, &handle, osl_File_OpenFlag_Read)
+                            != osl_File_E_None)
+                            throw std::runtime_error("Cannot inspect PDF prefetch spool");
+                        const auto error = osl_getFileSize(handle, &size);
+                        osl_closeFile(handle);
+                        if (error != osl_File_E_None || size > 32 * 1024 * 1024 - total)
+                            throw std::runtime_error("PDF prefetch result exceeds cache budget");
+                        total += size;
+                    }
+                    for (auto pair : { std::pair{ &commands, &storage->commands },
+                                       std::pair{ &binary, &storage->binary } })
+                    {
+                        checkStop();
+                        pair.second->create();
+                        pair.second->close();
+                        osl_removeFile(pair.second->url.pData);
+                        if (osl_copyFile(pair.first->url.pData, pair.second->url.pData)
+                            != osl_File_E_None)
+                            throw std::runtime_error("Cannot detach PDF prefetch spool");
+                    }
+                    value.commands = storage->commands.url;
+                    value.binary = storage->binary.url;
+                    value.storage = storage;
+                }
                 value.success = true;
-                value.commands = commands.url;
-                value.binary = binary.url;
+                if (!value.storage)
+                {
+                    value.commands = commands.url;
+                    value.binary = binary.url;
+                }
             }
             catch (const std::exception& error)
             {
@@ -378,12 +420,13 @@ NativeImport::NativeImport(std::shared_ptr<const std::vector<sal_uInt8>> bytes,
 {
 }
 NativeImport::~NativeImport() = default;
-bool NativeImport::request(int page)
+bool NativeImport::request(int page, bool detached)
 {
     std::scoped_lock lock(m_impl->mutex);
     if (page < 0 || page == std::numeric_limits<int>::max() || m_impl->active || m_impl->leased
         || m_impl->stopping)
         return false;
+    m_impl->detachResult = detached;
     m_impl->active = true;
     m_impl->cancelled = false;
     m_impl->timedOut = false;

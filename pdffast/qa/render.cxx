@@ -260,6 +260,28 @@ CPPUNIT_TEST_FIXTURE(RenderTest, testNativeImportSessionAndSpoolOwnership)
         text.Close();
         importer.release();
     }
+    // Cached conversion must survive release and later helper writes.
+    CPPUNIT_ASSERT(importer.request(0, true));
+    auto detached = waitImport();
+    CPPUNIT_ASSERT(detached.success);
+    CPPUNIT_ASSERT(detached.storage);
+    auto read = [](const OUString& url) {
+        SvFileStream file(url, StreamMode::READ);
+        CPPUNIT_ASSERT_EQUAL(ERRCODE_NONE, file.GetError());
+        return read_uInt8s_ToOString(file, file.remainingSize());
+    };
+    const auto detachedCommands = read(detached.commands);
+    const auto detachedBinary = read(detached.binary);
+    importer.release();
+    CPPUNIT_ASSERT(importer.request(1));
+    CPPUNIT_ASSERT(waitImport().success);
+    importer.release();
+    CPPUNIT_ASSERT_EQUAL(detachedCommands, read(detached.commands));
+    CPPUNIT_ASSERT_EQUAL(detachedBinary, read(detached.binary));
+    const auto detachedURL = detached.commands;
+    detached = {};
+    SvFileStream removed(detachedURL, StreamMode::READ);
+    CPPUNIT_ASSERT(removed.GetError());
     CPPUNIT_ASSERT(importer.request(999));
     CPPUNIT_ASSERT(!waitImport().success);
     importer.release();

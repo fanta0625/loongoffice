@@ -1208,6 +1208,58 @@ CPPUNIT_TEST_FIXTURE(SdrPdfImportTest, testDeferredEditRequestTracksViewAndReadO
     CPPUNIT_ASSERT_EQUAL(undoCount, doc->GetSdrUndoManager()->GetUndoActionCount());
 }
 
+CPPUNIT_TEST_FIXTURE(SdrPdfImportTest, testAdjacentEditPrefetchDoesNotMaterializePages)
+{
+    EnvVarGuard preview("LO_IMPORT_USE_PDFIUM", "1");
+    loadFromFile(u"pdf/pdffast-native-pages.pdf");
+    auto* model = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(model);
+    auto* shell = model->GetDocShell();
+    auto* doc = shell->GetDoc();
+    CPPUNIT_ASSERT(sd::PdfFastDocument::Attach(*doc));
+    auto* fast = doc->GetPdfFastDocument();
+    shell->SetReadOnlyUI(false);
+    fast->ForgetView(*shell->GetViewShell()->GetDrawView());
+    SdrView view(*doc);
+    comphelper::ScopeGuard forget([&] { fast->ForgetView(view); });
+    auto* first = doc->GetSdPage(0, PageKind::Standard);
+    auto* middle = doc->GetSdPage(1, PageKind::Standard);
+    auto* last = doc->GetSdPage(2, PageKind::Standard);
+    rtl::Reference<SdrObject> firstOriginal = first->GetObj(0);
+    rtl::Reference<SdrObject> lastOriginal = last->GetObj(0);
+    view.ShowSdrPage(middle);
+    fast->PrepareCurrentPage(view);
+    shell->SetModified(false);
+    const auto undo = doc->GetSdrUndoManager()->GetUndoActionCount();
+    fast->RequestCurrentPage(view);
+    auto pumpUntil = [&](auto condition) {
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(30);
+        while (!condition() && std::chrono::steady_clock::now() < deadline)
+        {
+            Application::Reschedule();
+            std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        }
+        CPPUNIT_ASSERT(condition());
+    };
+    pumpUntil([&] { return fast->HasPrefetchedPage(*first) && fast->HasPrefetchedPage(*last); });
+    CPPUNIT_ASSERT(firstOriginal->getSdrPageFromSdrObject() == first);
+    CPPUNIT_ASSERT(lastOriginal->getSdrPageFromSdrObject() == last);
+    CPPUNIT_ASSERT(!shell->IsModified());
+    CPPUNIT_ASSERT_EQUAL(undo, doc->GetSdrUndoManager()->GetUndoActionCount());
+    view.ShowSdrPage(first);
+    fast->NoteScroll();
+    fast->RequestCurrentPage(view);
+    CPPUNIT_ASSERT(fast->HasPrefetchedPage(*first));
+    pumpUntil([&] { return fast->GetEditState(view) == sd::PdfFastDocument::EditState::Ready; });
+    CPPUNIT_ASSERT(firstOriginal->getSdrPageFromSdrObject() != first);
+    CPPUNIT_ASSERT(!fast->HasPrefetchedPage(*first));
+    CPPUNIT_ASSERT(!shell->IsModified());
+    CPPUNIT_ASSERT_EQUAL(undo, doc->GetSdrUndoManager()->GetUndoActionCount());
+    fast->SetEditMode(false);
+    CPPUNIT_ASSERT(!fast->HasPrefetchedPage(*last));
+    CPPUNIT_ASSERT(lastOriginal->getSdrPageFromSdrObject() == last);
+}
+
 CPPUNIT_TEST_FIXTURE(SdrPdfImportTest, testSaveWhileScrollDefersEdit)
 {
     EnvVarGuard preview("LO_IMPORT_USE_PDFIUM", "1");

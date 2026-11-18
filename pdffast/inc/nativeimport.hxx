@@ -22,6 +22,8 @@ public:
         OUString commands;
         OUString binary;
         OUString error;
+        // Detached spools keep cached results valid after release()/later requests.
+        std::shared_ptr<void> storage;
     };
     explicit NativeImport(std::shared_ptr<const std::vector<sal_uInt8>>,
                           std::chrono::milliseconds timeout = std::chrono::minutes(2),
@@ -29,7 +31,7 @@ public:
     // ready runs on the transport thread after publication, outside its lock.
     // It must only signal the consumer; destruction joins any active callback.
     ~NativeImport();
-    bool request(int page);
+    bool request(int page, bool detached = false);
     std::optional<Result> takeResult();
     Result wait(); // Only for explicit synchronous operations (save/tests).
     void release();

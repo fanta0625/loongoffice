@@ -170,6 +170,17 @@ struct PdfFastDocument::Impl : public SfxListener
     }
     rtl::Reference<SdrGrafObj> running;
     int runningPage = -1;
+    bool runningPrefetch = false;
+    struct PrefetchedEdit
+    {
+        rtl::Reference<SdrGrafObj> original;
+        pdffast::NativeImport::Result result;
+    };
+    std::deque<PrefetchedEdit> prefetchedEdits;
+    std::set<sal_uInt64> prefetchAttempted;
+    int navigationDirection = 1;
+    int previousEditPage = -1;
+    bool prefetchEdits();
     std::optional<pdffast::NativeImport::Result> pendingEditResult;
     Clock::time_point lastScroll{};
     Timer poll{ "Draw PDF tile delivery" };
@@ -283,6 +294,8 @@ struct PdfFastDocument::Impl : public SfxListener
         // normal completion path consume and release a cancelled helper result
         // so a later explicit edit can reuse the session safely.
         intents.clear();
+        prefetchedEdits.clear();
+        prefetchAttempted.clear();
         for (auto & [ view, gate ] : gates)
             if (gate.state != PdfFastDocument::EditState::Ready)
                 setGate(*view, PdfFastDocument::EditState::Ready);
@@ -444,6 +457,7 @@ struct PdfFastDocument::Impl : public SfxListener
         EndListeningAll();
         poll.Stop();
         metadataIdle.Stop();
+        prefetchedEdits.clear();
         importer.reset(); // join the producer before removing its queued UI event
         if (editEvent)
             Application::RemoveUserEvent(editEvent);
@@ -1131,6 +1145,13 @@ void PdfFastDocument::SetEditMode(bool enabled) { m_impl->setEditMode(enabled); 
 
 bool PdfFastDocument::IsEditMode() const { return m_impl->editMode; }
 
+bool PdfFastDocument::HasPrefetchedPage(const SdrPage& page) const
+{
+    return std::any_of(
+        m_impl->prefetchedEdits.begin(), m_impl->prefetchedEdits.end(),
+        [&](const auto& cached) { return cached.original->getSdrPageFromSdrObject() == &page; });
+}
+
 void PdfFastDocument::NoteScroll() { m_impl->lastScroll = Clock::now(); }
 
 void PdfFastDocument::RequestCurrentPage(SdrView& view, const Link<bool, void>& changed)
@@ -1153,6 +1174,18 @@ void PdfFastDocument::RequestCurrentPage(SdrView& view, const Link<bool, void>& 
     if (!pageView || pageView->GetPage()->IsMasterPage()
         || (impl.doc.GetDocSh() && impl.doc.GetDocSh()->IsReadOnly()))
         return;
+    const int index = (int(pageView->GetPage()->GetPageNum()) - 1) / 2;
+    if (impl.previousEditPage >= 0 && index != impl.previousEditPage)
+        impl.navigationDirection = index > impl.previousEditPage ? 1 : -1;
+    impl.previousEditPage = index;
+    if (impl.runningPrefetch && impl.running.is()
+        && impl.running->getSdrPageFromSdrObject() != pageView->GetPage())
+    {
+        if (auto* page = impl.running->getSdrPageFromSdrObject())
+            impl.prefetchAttempted.erase(page->GetUniqueID());
+        impl.importer->cancel();
+    }
+    impl.wake();
     auto* entry = impl.findPage(*pageView->GetPage());
     if (!entry || entry->prepared)
         return;
@@ -1186,6 +1219,13 @@ void PdfFastDocument::ForgetView(const SdrView& view)
         }
         else
             ++it;
+    if (impl.gates.empty())
+    {
+        impl.prefetchedEdits.clear();
+        impl.prefetchAttempted.clear();
+        if (impl.runningPrefetch)
+            impl.importer->cancel();
+    }
     impl.schedule();
 }
 
@@ -1207,12 +1247,52 @@ bool PdfFastDocument::Impl::processEdits()
         else
             ++it;
     }
+    for (auto it = prefetchedEdits.begin(); it != prefetchedEdits.end();)
+    {
+        auto* page = it->original->getSdrPageFromSdrObject();
+        const bool wanted = std::any_of(intents.begin(), intents.end(), [&](const auto& intent) {
+            return intent.second.original == it->original;
+        });
+        const auto link = it->original->GetGraphic().GetSharedGfxLink();
+        if (!page || &page->getSdrModelFromSdrPage() != &doc || !editMode || !link
+            || link->getDataContainer().getDataShared() != source
+            || it->result.page != it->original->GetGraphic().getPageNumber())
+        {
+            it = prefetchedEdits.erase(it);
+            continue;
+        }
+        if (wanted && Clock::now() - lastScroll >= std::chrono::milliseconds(250)
+            && Application::GetLastInputInterval() >= 250
+            && !Application::AnyInput(VclInputFlags::MOUSE | VclInputFlags::KEYBOARD))
+        {
+            auto cached = std::move(*it);
+            it = prefetchedEdits.erase(it);
+            SAL_INFO("pdffast", "native-edit-prefetch-hit page=" << cached.result.page);
+            const bool ready = preparePage(*page, nullptr, &cached.result);
+            for (auto intent = intents.begin(); intent != intents.end();)
+                if (intent->second.original == cached.original)
+                {
+                    setGate(*intent->first, ready ? PdfFastDocument::EditState::Ready
+                                                  : PdfFastDocument::EditState::Failed);
+                    intent = intents.erase(intent);
+                }
+                else
+                    ++intent;
+            cached.original->ActionChanged();
+            schedule();
+            continue;
+        }
+        ++it;
+    }
     if (running.is())
     {
         const bool wanted = std::any_of(intents.begin(), intents.end(), [&](const auto& intent) {
             return intent.second.original == running;
         });
-        if (!wanted)
+        if (!wanted
+            && (!runningPrefetch || !editMode || !intents.empty() || gates.empty()
+                || (doc.GetDocSh()
+                    && (doc.GetDocSh()->IsReadOnly() || doc.GetDocSh()->IsReadOnlyUI()))))
             importer->cancel();
         if (!pendingEditResult)
             pendingEditResult = importer->takeResult();
@@ -1231,6 +1311,15 @@ bool PdfFastDocument::Impl::processEdits()
             auto* page = original->getSdrPageFromSdrObject();
             const auto link = original->GetGraphic().GetSharedGfxLink();
             bool ready = false;
+            if (runningPrefetch && !wanted && editMode && intents.empty() && page
+                && &page->getSdrModelFromSdrPage() == &doc && result->success && result->storage)
+            {
+                if (prefetchedEdits.size() == 2)
+                    prefetchedEdits.pop_front();
+                SAL_INFO("pdffast", "native-edit-prefetch-ready page=" << result->page);
+                prefetchedEdits.push_back({ original, std::move(*result) });
+            }
+            runningPrefetch = false;
             if (wanted && page && &page->getSdrModelFromSdrPage() == &doc && link
                 && link->getDataContainer().getDataShared() == source && result->page == runningPage
                 && result->page == original->GetGraphic().getPageNumber())
@@ -1261,17 +1350,90 @@ bool PdfFastDocument::Impl::processEdits()
     }
     if (!running.is())
         for (const auto& entry : intents)
-            if (Clock::now() >= entry.second.due)
+            if (Clock::now() >= entry.second.due
+                && std::none_of(prefetchedEdits.begin(), prefetchedEdits.end(),
+                                [&](const auto& cached) {
+                                    return cached.original == entry.second.original;
+                                }))
             {
                 const int page = entry.second.original->GetGraphic().getPageNumber();
                 if (importer->request(page))
                 {
                     running = entry.second.original;
                     runningPage = page;
+                    runningPrefetch = false;
                 }
                 break;
             }
-    return running.is() || !intents.empty();
+    const bool background = prefetchEdits();
+    return running.is() || !intents.empty() || background;
+}
+
+bool PdfFastDocument::Impl::prefetchEdits()
+{
+    if (!editMode || gates.empty() || preparing
+        || (doc.GetDocSh() && (doc.GetDocSh()->IsReadOnly() || doc.GetDocSh()->IsReadOnlyUI())))
+        return false;
+    if (running.is() || !intents.empty())
+        return true;
+    std::vector<rtl::Reference<SdrGrafObj>> candidates;
+    for (const auto & [ view, gate ] : gates)
+    {
+        const auto* pv = view->GetSdrPageView();
+        if (!pv || pv->GetPage()->IsMasterPage())
+            continue;
+        // Materialization removes the PDF placeholder; use the retained page
+        // identity rather than looking for that object in the live page.
+        if (std::none_of(pages.begin(), pages.end(), [&](const auto& entry) {
+                return entry.pageId == pv->GetPage()->GetUniqueID() && entry.prepared;
+            }))
+            continue;
+        const int index = (int(pv->GetPage()->GetPageNum()) - 1) / 2;
+        for (int delta : { navigationDirection, -navigationDirection })
+        {
+            const int neighbor = index + delta;
+            if (neighbor < 0 || neighbor >= doc.GetSdPageCount(PageKind::Standard))
+                continue;
+            auto* page = doc.GetSdPage(neighbor, PageKind::Standard);
+            auto* entry = findPage(*page);
+            if (entry && !entry->prepared && !entry->failed && entry->original.is()
+                && page->GetObjCount() == 1 && page->GetObj(0) == entry->original.get())
+                candidates.push_back(entry->original);
+        }
+    }
+    std::erase_if(prefetchedEdits, [&](const auto& cached) {
+        return std::find(candidates.begin(), candidates.end(), cached.original) == candidates.end();
+    });
+    std::erase_if(prefetchAttempted, [&](sal_uInt64 id) {
+        return std::none_of(candidates.begin(), candidates.end(), [&](const auto& original) {
+            const auto* page = original->getSdrPageFromSdrObject();
+            return page && page->GetUniqueID() == id;
+        });
+    });
+    for (const auto& original : candidates)
+    {
+        auto* page = original->getSdrPageFromSdrObject();
+        if (!page || prefetchAttempted.contains(page->GetUniqueID())
+            || std::any_of(prefetchedEdits.begin(), prefetchedEdits.end(),
+                           [&](const auto& cached) { return cached.original == original; }))
+            continue;
+        if (Clock::now() - lastScroll < std::chrono::milliseconds(500)
+            || Application::GetLastInputInterval() < 500
+            || Application::AnyInput(VclInputFlags::MOUSE | VclInputFlags::KEYBOARD))
+            return true;
+        // One transport at a time. Foreground navigation cancels speculative
+        // work; immutable results are bounded to two 32 MiB disk spools.
+        if (importer->request(original->GetGraphic().getPageNumber(), true))
+        {
+            prefetchAttempted.insert(page->GetUniqueID());
+            running = original;
+            runningPage = original->GetGraphic().getPageNumber();
+            runningPrefetch = true;
+            SAL_INFO("pdffast", "native-edit-prefetch-start page=" << runningPage);
+        }
+        return running.is();
+    }
+    return false;
 }
 
 IMPL_LINK_NOARG(PdfFastDocument::Impl, EditCompleted, void*, void)
@@ -1299,6 +1461,7 @@ bool PdfFastDocument::PrepareForSave()
         }
     });
     m_impl->intents.clear();
+    m_impl->prefetchedEdits.clear();
     if (!EnsureAllMetadata())
         return false;
     // A regular ODG must remain fully editable without this PDF-only adapter.
@@ -1494,6 +1657,7 @@ bool PdfFastDocument::Impl::preparePage(SdrPage& target, SdrView* view,
                 impl.importer->wait();
             impl.importer->release();
             impl.running.clear();
+            impl.runningPrefetch = false;
         }
         if (!impl.importer->request(it->original->GetGraphic().getPageNumber()))
             return false;
