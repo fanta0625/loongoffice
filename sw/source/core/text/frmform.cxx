@@ -2311,9 +2311,19 @@ void SwTextFrame::Format( vcl::RenderContext* pRenderContext, const SwBorderAttr
             {
                 ::std::vector<SwAnchoredObject *> intersectingObjs;
                 ::std::vector<SwFrame const*> nexts;
-                for (SwFrame const* pNext = GetNext(); pNext; pNext = pNext->GetNext())
+                // nexts is only used for intersecting objects, and FormatImpl()
+                // only reports those when the page has anchored objects at all
+                // (SwTextFly::IsOn() is page->GetSortedObjs() != nullptr).
+                // Avoid walking the whole frame chain otherwise: all content may
+                // be chained on the first page during the initial layout
+                // (tdf#167310).
+                SwPageFrame* pPageFrame = FindPageFrame();
+                if (pPageFrame && pPageFrame->GetSortedObjs())
                 {
-                    nexts.push_back(pNext);
+                    for (SwFrame const* pNext = GetNext(); pNext; pNext = pNext->GetNext())
+                    {
+                        nexts.push_back(pNext);
+                    }
                 }
                 FormatImpl(pRenderContext, xPara.get(), intersectingObjs);
                 if( pFootnoteBoss && nFootnoteHeight )
