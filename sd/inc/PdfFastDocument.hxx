@@ -64,14 +64,18 @@ public:
     enum class EditState
     {
         Ready,
-        // Navigation intent: conversion is deferred until the user stops
-        // flipping pages, so scrolling never waits for Draw object replay.
+        // The page shows its read-only PDF preview while conversion is
+        // scheduled or running. The replay polls for input and abandons
+        // itself, so flipping pages never waits for Draw object replay.
         Waiting,
+        // An explicit edit action is waiting for its page conversion; the
+        // page is blocked and a wait cursor may appear.
         Preparing,
         Failed
     };
-    // `settle` marks a navigation-driven request. It stays dormant during
-    // input and only converts after the view has been quiet for a while.
+    // Converts the page now: `settle` only selects the gate state (Waiting
+    // for navigation, Preparing for explicit edits) and the debounce is the
+    // same. The replay itself abandons on pending input and is retried.
     void RequestCurrentPage(SdrView&, const Link<bool, void>& = {}, bool settle = false);
     EditState GetEditState(const SdrView&) const;
     void ForgetView(const SdrView&);

@@ -55,8 +55,10 @@
 #include <vcl/metric.hxx>
 #include <vcl/font.hxx>
 #include <vcl/pdf/pwdinteract.hxx>
+#include <vcl/svapp.hxx>
 #include <vcl/virdev.hxx>
 
+#include <chrono>
 #include <cstddef>
 #include <memory>
 #include <string_view>
@@ -1041,9 +1043,21 @@ public:
 
 }
 
+bool inputPending()
+{
+    // Peak at the local event queue only, mouse and keyboard. Asking for
+    // "any input" would also report the Qt/KF6 backend's event-loop state
+    // (OTHER / !sleeping), which this code itself flips while pumping inside
+    // the replay; that would make every replay abort itself. Nothing is
+    // dispatched here; input that the toolkit has not delivered yet is picked
+    // up by the pump in the private interruptible emitter.
+    return Application::AnyInput(VclInputFlags::MOUSE | VclInputFlags::KEYBOARD);
+}
+
 bool xpdf_ImportFromRecorded(const OUString& commands, const OUString& binary,
                            const ContentSinkSharedPtr& sink,
-                           const uno::Reference<uno::XComponentContext>& context)
+                           const uno::Reference<uno::XComponentContext>& context,
+                           bool interruptible)
 {
     struct Handle
     {
@@ -1057,7 +1071,8 @@ bool xpdf_ImportFromRecorded(const OUString& commands, const OUString& binary,
     Parser parser(sink, resources.value, context);
     Buffering lines(text.value);
     OStringBuffer line;
-    unsigned pages = 0, ends = 0;
+    unsigned pages = 0, ends = 0, parsed = 0;
+    auto polled = std::chrono::steady_clock::now();
     try
     {
         for (;;)
@@ -1073,12 +1088,30 @@ bool xpdf_ImportFromRecorded(const OUString& commands, const OUString& binary,
             if (line.toString() == "endPage")
                 ++ends;
             parser.parseLine(line);
+            // Only the private pdf-fast replay opts in; ordinary PDF import
+            // never takes this branch. Look at the clock every few commands:
+            // a single page can contain fewer than 256 commands, so a
+            // command-count gate would leave long replays completely
+            // uninterruptible. The display poll itself stays limited to one
+            // per 8 ms.
+            if (interruptible && (++parsed & 0xF) == 0)
+            {
+                const auto now = std::chrono::steady_clock::now();
+                if (now - polled >= std::chrono::milliseconds(8))
+                {
+                    polled = now;
+                    if (inputPending())
+                        return false;
+                }
+            }
         }
     }
     catch (const uno::Exception&)
     {
         return false;
     }
+    SAL_INFO("pdffast", "native-edit-replay parsed=" << parsed << " pages=" << pages
+                                                     << " ends=" << ends);
     return pages == 1 && ends == 1;
 }
 

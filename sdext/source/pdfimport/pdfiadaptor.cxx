@@ -29,6 +29,7 @@
 #include <osl/file.h>
 #include <sal/log.hxx>
 #include <rtl/ref.hxx>
+#include <vcl/svapp.hxx>
 
 #include <cppuhelper/supportsservice.hxx>
 #include <com/sun/star/lang/IllegalArgumentException.hpp>
@@ -36,6 +37,7 @@
 #include <com/sun/star/io/XSeekable.hpp>
 #include <comphelper/diagnose_ex.hxx>
 
+#include <chrono>
 #include <memory>
 
 using namespace com::sun::star;
@@ -43,6 +45,89 @@ using namespace com::sun::star;
 
 namespace pdfi
 {
+namespace
+{
+// Thrown by the replay emitter and caught before any UNO frame is crossed:
+// the SAX calls it guards are C++ calls made from PDFIProcessor::emit.
+struct ReplayInterrupted
+{
+};
+
+// Private pdf-fast replay only. The staged page is rebuilt as thousands of
+// SAX callbacks on the UI thread; polling for pending input lets a page flip
+// abandon the replay within a frame instead of waiting for it. Undelivered
+// input cannot be peeked on every backend (Qt/KF6 reads xcb in its own
+// thread), so the emitter pumps the event loop and watches VCL's last-input
+// timestamp. Pumping may re-enter document code; pdffast guards its own
+// scheduling against that (processEdits defers while staging is in flight).
+class InterruptibleEmitter final : public XmlEmitter
+{
+    XmlEmitterSharedPtr m_wrapped;
+    std::chrono::steady_clock::time_point m_polled;
+    std::chrono::steady_clock::time_point m_yielded;
+    unsigned m_polls = 0;
+
+    void poll()
+    {
+        const auto now = std::chrono::steady_clock::now();
+        if (now - m_polled < std::chrono::milliseconds(8))
+            return;
+        m_polled = now;
+        ++m_polls;
+        // Cheap on backends that can peek at their toolkit queue; always
+        // false on the Qt/KF6 backend, which only tracks dispatched events.
+        if (inputPending())
+        {
+            SAL_INFO("pdffast", "native-edit-emit-abort reason=queued polls=" << m_polls);
+            throw ReplayInterrupted();
+        }
+        // A blocked UI thread never runs the event loop, so a page flip
+        // requested by the user cannot be seen by AnyInput on the Qt
+        // backend. Pump the loop every few milliseconds; input dispatched
+        // while pumping makes the "time since last input" counter go
+        // backwards (or stay tiny), which abandons this replay.
+        if (now - m_yielded < std::chrono::milliseconds(24))
+            return;
+        m_yielded = now;
+        const sal_uInt64 before = Application::GetLastInputInterval();
+        Application::Reschedule(false);
+        const sal_uInt64 after = Application::GetLastInputInterval();
+        if (after < before || after < 50)
+        {
+            SAL_INFO("pdffast", "native-edit-emit-abort reason=pump before="
+                                    << before << " after=" << after << " polls=" << m_polls);
+            throw ReplayInterrupted();
+        }
+    }
+
+public:
+    explicit InterruptibleEmitter(XmlEmitterSharedPtr wrapped)
+        : m_wrapped(std::move(wrapped))
+        , m_polled(std::chrono::steady_clock::now())
+        , m_yielded(std::chrono::steady_clock::now())
+    {
+    }
+    ~InterruptibleEmitter() override
+    {
+        SAL_INFO("pdffast", "native-edit-emitter polls=" << m_polls);
+    }
+    void beginTag(const char* tag, const PropertyMap& properties) override
+    {
+        poll();
+        m_wrapped->beginTag(tag, properties);
+    }
+    void write(const OUString& text) override
+    {
+        poll();
+        m_wrapped->write(text);
+    }
+    void endTag(const char* tag) override
+    {
+        poll();
+        m_wrapped->endTag(tag);
+    }
+};
+}
 
 PDFIHybridAdaptor::PDFIHybridAdaptor( const uno::Reference< uno::XComponentContext >& xContext ) :
     m_xContext( xContext )
@@ -274,6 +359,7 @@ sal_Bool SAL_CALL PDFIRawAdaptor::importer( const uno::Sequence< beans::Property
     OUString aPwd;
     OUString aFilterOptions;
     OUString aCommands, aBinary;
+    bool bInterruptible = false;
     for( const beans::PropertyValue& rAttrib : rSourceData )
     {
         SAL_INFO("sdext.pdfimport", "importer Attrib: " << rAttrib.Name );
@@ -294,19 +380,35 @@ sal_Bool SAL_CALL PDFIRawAdaptor::importer( const uno::Sequence< beans::Property
             rAttrib.Value >>= aCommands;
         else if (rAttrib.Name == "LoongOfficePdfBinary")
             rAttrib.Value >>= aBinary;
+        else if (rAttrib.Name == "LoongOfficePdfInterruptible")
+            rAttrib.Value >>= bInterruptible;
 #endif
     }
     if (!xInput.is() && aCommands.isEmpty())
         return false;
 
     XmlEmitterSharedPtr pEmitter = createSaxEmitter(rHdl);
+    // Only the private recorded replay may be abandoned on user input; the
+    // ordinary import paths keep their existing atomic emission.
+    if (bInterruptible && !aCommands.isEmpty())
+        pEmitter = std::make_shared<InterruptibleEmitter>(pEmitter);
     bool bSuccess;
     if (!aCommands.isEmpty())
     {
         auto sink = std::make_shared<PDFIProcessor>(xStatus, m_xContext);
-        bSuccess = xpdf_ImportFromRecorded(aCommands, aBinary, sink, m_xContext);
+        bSuccess = xpdf_ImportFromRecorded(aCommands, aBinary, sink, m_xContext, bInterruptible);
         if (bSuccess)
-            sink->emit(*pEmitter, *m_pVisitorFactory);
+        {
+            try
+            {
+                sink->emit(*pEmitter, *m_pVisitorFactory);
+            }
+            catch (const ReplayInterrupted&)
+            {
+                SAL_INFO("sdext.pdfimport", "staged PDF replay interrupted by user input");
+                bSuccess = false;
+            }
+        }
     }
     else
         bSuccess = parse(xInput, xInteractionHandler,

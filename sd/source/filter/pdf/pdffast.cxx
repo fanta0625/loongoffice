@@ -80,16 +80,40 @@ namespace
 {
 using pdffast::TileKey;
 using Clock = std::chrono::steady_clock;
-// Explicit edit actions (mode switch, direct request) wait only briefly for
-// the input queue to drain before committing on the UI thread.
+// Every page activation (mode switch, click, UNO, navigation) waits only
+// briefly for the input queue to drain before committing on the UI thread.
+// The replay itself is interruptible: input that arrives while it runs
+// abandons it within a few milliseconds (LoongOfficePdfInterruptible), so
+// there is no need for a long quiet window before conversion starts.
 constexpr auto COMMIT_QUIET = std::chrono::milliseconds(120);
-// Navigation intents stay dormant while the user keeps flipping pages. The
-// transport and the UI-thread replay start only after this much input
-// silence, so scrolling never competes with page conversion. A page-by-page
-// browse pauses around a second per page; keep the window above that so
-// steady flipping does not trigger a replay (which blocks the UI thread).
-constexpr auto NAVIGATION_SETTLE = std::chrono::milliseconds(1200);
 constexpr auto REQUEST_DEBOUNCE = std::chrono::milliseconds(120);
+// Incremental commit: object insertion is spread over bounded UI-thread
+// slices so page flipping and scrolling never wait for a whole page. The
+// budget is one part of a frame; input between slices keeps priority.
+constexpr auto COMMIT_SLICE = std::chrono::milliseconds(8);
+// Staging was abandoned because user input arrived. The page is not broken;
+// its pending edit intent retries after the debounce.
+struct StagingInterrupted
+{
+};
+bool inputPending()
+{
+    // Non-dispatching peek at the local event queue only, mouse and keyboard.
+    // "Any input" would also include the Qt/KF6 backend's event-loop state
+    // (OTHER / !sleeping), which the replay pump flips itself; that would
+    // report input that does not exist. Undelivered input is covered by
+    // stagingInputPending()'s last-input timestamp.
+    return Application::AnyInput(VclInputFlags::MOUSE | VclInputFlags::KEYBOARD);
+}
+// The private replay (sdext) pumps the event loop while this thread is busy,
+// so input it dispatched is already consumed from the toolkit queue. Backends
+// which cannot peek at that queue (Qt/KF6) expose it only through the VCL
+// last-input timestamp. 50ms is well above a pump interval and far below the
+// 120ms COMMIT_QUIET window which precedes every replay.
+bool stagingInputPending()
+{
+    return inputPending() || Application::GetLastInputInterval() < 50;
+}
 std::size_t cost(const TileKey& key)
 {
     const auto padded = pdffast::tileWithGutter(key);
@@ -159,8 +183,10 @@ struct PdfFastDocument::Impl : public SfxListener
     {
         rtl::Reference<SdrGrafObj> original;
         Clock::time_point due;
-        // Navigation intent: never start conversion while the user is still
-        // flipping; wait for NAVIGATION_SETTLE of input silence.
+        // Navigation intent (SwitchPage): the gate stays Waiting (read-only
+        // preview, no wait cursor) while the page converts. Explicit intents
+        // (mode change, page click, UNO) use Preparing. Both convert after
+        // the same short debounce and both are abandoned on input.
         bool settle = false;
     };
     std::map<SdrView*, EditIntent> intents;
@@ -193,6 +219,38 @@ struct PdfFastDocument::Impl : public SfxListener
     };
     std::deque<PrefetchedEdit> prefetchedEdits;
     std::set<sal_uInt64> prefetchAttempted;
+    // Incremental UI-thread commit. Staging happens once; object insertion is
+    // sliced by COMMIT_SLICE and only runs while input is quiet, so a page
+    // flip never waits for the complete replay. Staged objects are inserted
+    // below the opaque PDF placeholder; removing the placeholder is the
+    // final one-turn swap.
+    struct Commit
+    {
+        rtl::Reference<SdrGrafObj> original;
+        // Page identity only: the SdrPage may be deleted between slices.
+        sal_uInt64 pageId = 0;
+        Page* entry = nullptr;
+        std::vector<rtl::Reference<SdrObject>> objects;
+        std::size_t next = 0;
+        sal_uInt32 originalPosition = 0;
+        sal_uInt64 metadataUs = 0;
+        sal_uInt64 stagingUs = 0;
+        sal_uInt64 insertUs = 0;
+        // Unlocking the model after a slice flushes deferred broadcasts and
+        // reformats edge objects document-wide; it is slice overhead too.
+        sal_uInt64 unlockUs = 0;
+        sal_uInt64 maxSliceUs = 0;
+        sal_uInt64 slices = 0;
+        Clock::time_point started{};
+    };
+    std::optional<Commit> commit;
+    bool startCommit(const rtl::Reference<SdrGrafObj>&, const pdffast::NativeImport::Result&);
+    bool advanceCommit();
+    bool insertCommitSlice(Commit&, bool unlimited);
+    void finalizeCommit();
+    void abortCommit(bool failure, const char* reason);
+    void finishCommitNow();
+    void completeCommitViews(const rtl::Reference<SdrGrafObj>&, sal_uInt64 pageId, bool ready);
     // Direction the user is traveling; the next request in that direction is
     // transported first.
     int navigationDirection = 1;
@@ -200,8 +258,26 @@ struct PdfFastDocument::Impl : public SfxListener
     bool prefetchEdits();
     std::vector<rtl::Reference<SdrObject>> stagePageObjects(
         const rtl::Reference<SdrGrafObj>& original,
-        const pdffast::NativeImport::Result& result);
+        const pdffast::NativeImport::Result& result, bool interruptible);
     std::optional<pdffast::NativeImport::Result> pendingEditResult;
+    // Transport result whose UI replay was abandoned on user input. For
+    // non-detached results its helper lease stays held, so the retry replays
+    // the same spool instead of waiting for another transport round trip.
+    std::optional<pdffast::NativeImport::Result> stagedResult;
+    bool stagedLease = false;
+    void dropStagedResult()
+    {
+        if (!stagedResult)
+            return;
+        stagedResult.reset();
+        if (stagedLease)
+        {
+            stagedLease = false;
+            importer->release();
+        }
+    }
+    // Set by startCommit when staging was abandoned because input arrived.
+    bool stagingInterrupted = false;
     Clock::time_point lastScroll{};
     Timer poll{ "Draw PDF tile delivery" };
     void wake()
@@ -301,6 +377,9 @@ struct PdfFastDocument::Impl : public SfxListener
 
     bool editPending(int page) const
     {
+        if (commit && commit->original.is()
+            && commit->original->GetGraphic().getPageNumber() == page)
+            return true;
         return std::any_of(intents.begin(), intents.end(), [&](const auto& intent) {
             return intent.second.original.is()
                    && intent.second.original->GetGraphic().getPageNumber() == page;
@@ -321,6 +400,10 @@ struct PdfFastDocument::Impl : public SfxListener
         intents.clear();
         prefetchedEdits.clear();
         prefetchAttempted.clear();
+        dropStagedResult();
+        // Leaving the edit mode drops a suspended commit too; the placeholder
+        // is still intact, so the page returns to its read-only preview.
+        abortCommit(false, "edit-mode-off");
         for (auto & [ view, gate ] : gates)
             if (gate.state != PdfFastDocument::EditState::Ready)
                 setGate(*view, PdfFastDocument::EditState::Ready);
@@ -479,6 +562,10 @@ struct PdfFastDocument::Impl : public SfxListener
 
     ~Impl()
     {
+        // The document resets this adapter before its pages die; staged
+        // objects still inserted must leave the page with it, and the released
+        // references must never outlive their page.
+        abortCommit(false, "shutdown");
         EndListeningAll();
         poll.Stop();
         metadataIdle.Stop();
@@ -490,9 +577,17 @@ struct PdfFastDocument::Impl : public SfxListener
     }
 
     rtl::Reference<SdrPage> importEditablePage(const Graphic& graphic,
-                                               const pdffast::NativeImport::Result& result)
+                                               const pdffast::NativeImport::Result& result,
+                                               bool interruptible)
     {
         using namespace css;
+        // Staging runs in one UI-thread turn; keep every sub-step timed so a
+        // page that feels slow can be attributed without a profiler. With
+        // interruptible set (interactive commit), the recorded replay polls
+        // for input and this function stops between its phases too.
+        const auto micros = [](auto duration) {
+            return std::chrono::duration_cast<std::chrono::microseconds>(duration).count();
+        };
         const auto link = graphic.GetSharedGfxLink();
         if (!link || graphic.getPageNumber() < 0)
             throw std::runtime_error("Missing native PDF page");
@@ -535,7 +630,15 @@ struct PdfFastDocument::Impl : public SfxListener
         auto* nativeShell
             = new DrawDocShell(SfxObjectCreateMode::EMBEDDED, true, DocumentType::Draw);
         SfxObjectShellLock shell(nativeShell);
-        comphelper::ScopeGuard close([&] { nativeShell->DoClose(); });
+        comphelper::ScopeGuard close([&] {
+            // Destroying the temporary import model is part of the atomic
+            // staging turn: thousands of imported objects are torn down here.
+            const auto closeStart = Clock::now();
+            nativeShell->DoClose();
+            SAL_INFO("pdffast", "native-edit-close pdf_page="
+                                    << graphic.getPageNumber() << " close_us="
+                                    << micros(Clock::now() - closeStart));
+        });
         if (!nativeShell->DoInitNew())
             throw std::runtime_error("Cannot initialize native PDF import document");
         const auto context = comphelper::getProcessComponentContext();
@@ -564,18 +667,32 @@ struct PdfFastDocument::Impl : public SfxListener
         // route back into the PDFium read-only filter when PDF Fast is enabled.
         // Replay only a completed helper job. Files, helper startup/parse and
         // pipe waits happened on the transport worker; UNO/VCL stay on this thread.
+        uno::Sequence<beans::PropertyValue> replayProperties = comphelper::InitPropertySequence({
+            { "URL", uno::Any(inputUrl) },
+            { "LoongOfficePdfCommands", uno::Any(result.commands) },
+            { "LoongOfficePdfBinary", uno::Any(result.binary) },
+            { "FilterName", uno::Any(u"draw_pdf_import"_ustr) },
+            { "FilterOptions", uno::Any(u"LoongOfficePdfPage="_ustr
+                                        + OUString::number(graphic.getPageNumber() + 1)) },
+        });
+        if (interruptible)
+        {
+            // Private pdfimport switch: the replay polls for pending input and
+            // abandons itself instead of making a page flip wait for it. The
+            // property is never passed by ordinary PDF import.
+            replayProperties.realloc(replayProperties.getLength() + 1);
+            beans::PropertyValue property;
+            property.Name = "LoongOfficePdfInterruptible";
+            property.Value <<= true;
+            replayProperties.getArray()[replayProperties.getLength() - 1] = property;
+        }
         const auto started = Clock::now();
-        const bool imported = result.success
-                                  ? filter->filter(comphelper::InitPropertySequence({
-                                        { "URL", uno::Any(inputUrl) },
-                                        { "LoongOfficePdfCommands", uno::Any(result.commands) },
-                                        { "LoongOfficePdfBinary", uno::Any(result.binary) },
-                                        { "FilterName", uno::Any(u"draw_pdf_import"_ustr) },
-                                        { "FilterOptions", uno::Any(u"LoongOfficePdfPage="_ustr
-                                                                    + OUString::number(
-                                                                        graphic.getPageNumber() + 1)) },
-                                    }))
-                                  : filter->filter(fallbackProperties);
+        const bool imported = result.success ? filter->filter(replayProperties)
+                                             : filter->filter(fallbackProperties);
+        // The replay already stopped on input; stop before the remaining
+        // staging phases too instead of paying for objects nobody will use.
+        if (interruptible && stagingInputPending())
+            throw StagingInterrupted();
         auto& nativeDoc = *nativeShell->GetDoc();
         const auto count = nativeDoc.GetSdPageCount(PageKind::Standard);
         SAL_INFO("pdffast", "native-edit-import backend="
@@ -594,10 +711,19 @@ struct PdfFastDocument::Impl : public SfxListener
         // PDF styles have no external semantic identity. Materialize them using
         // Draw's own style-to-hard-attributes implementation before crossing
         // models; otherwise a same-name destination style can change rendering.
+        const auto burnInStart = Clock::now();
         nativeDoc.BurnInStyleSheetAttributes();
+        if (interruptible && stagingInputPending())
+            throw StagingInterrupted(); // before cloning thousands of objects
+        const auto burnInUs = micros(Clock::now() - burnInStart);
+        const auto cloneStart = Clock::now();
         auto staged = nativeDoc.GetSdPage(0, PageKind::Standard)->CloneSdrPage(doc);
+        const auto cloneUs = micros(Clock::now() - cloneStart);
         if (!staged.is())
             throw std::runtime_error("Cannot stage native PDF page objects");
+        if (interruptible && stagingInputPending())
+            throw StagingInterrupted();
+        const auto flattenStart = Clock::now();
         // Never retain the temporary document through a master-page reference.
         if (staged->TRG_HasMasterPage())
             staged->TRG_ClearMasterPage();
@@ -615,23 +741,41 @@ struct PdfFastDocument::Impl : public SfxListener
         }
         pageProperties.SetStyleSheet(nullptr);
         pageProperties.PutItemSet(pageAttributes);
+        const auto flattenUs = micros(Clock::now() - flattenStart);
 
         // Native page cloning preserves geometry, groups and connector links.
         // Map layer IDs by name, without Paste()'s recentering or layer override.
+        const auto layerStart = Clock::now();
         auto& targetLayers = doc.GetLayerAdmin();
         const auto& sourceLayers = nativeDoc.GetLayerAdmin();
+        std::map<SdrLayerID, SdrLayerID> layerIds;
         SdrObjListIter objects(staged.get(), SdrIterMode::DeepWithGroups);
         while (objects.IsMore())
         {
             auto* object = objects.Next();
-            const auto* layer = sourceLayers.GetLayerPerID(object->GetLayer());
-            if (!layer)
-                throw std::runtime_error("Missing native PDF object layer");
-            auto* target = targetLayers.GetLayer(layer->GetName());
-            if (!target)
-                target = targetLayers.NewLayer(layer->GetName());
-            object->SetLayer(target->GetID());
+            auto mapped = layerIds.find(object->GetLayer());
+            if (mapped == layerIds.end())
+            {
+                const auto* layer = sourceLayers.GetLayerPerID(object->GetLayer());
+                if (!layer)
+                    throw std::runtime_error("Missing native PDF object layer");
+                auto* target = targetLayers.GetLayer(layer->GetName());
+                if (!target)
+                    target = targetLayers.NewLayer(layer->GetName());
+                mapped = layerIds.emplace(object->GetLayer(), target->GetID()).first;
+            }
+            // The staged page is standalone and not displayed: SetLayer would
+            // broadcast one ObjectChange into the live document per object (and
+            // create a ViewContact for each), which dominated staging on pages
+            // with thousands of objects. Insertion broadcasts normally later.
+            object->NbcSetLayer(mapped->second);
         }
+        const auto layerUs = micros(Clock::now() - layerStart);
+        SAL_INFO("pdffast", "native-edit-staging pdf_page="
+                                << graphic.getPageNumber() << " burnin_us=" << burnInUs
+                                << " clone_us=" << cloneUs << " flatten_us=" << flattenUs
+                                << " layer_us=" << layerUs
+                                << " objects=" << staged->GetObjCount());
         return staged;
     }
 
@@ -748,7 +892,7 @@ struct PdfFastDocument::Impl : public SfxListener
                 add(entry.first, true);
         cache.protect(std::move(visible), std::move(previews));
         std::size_t spare = cache.spareForSpeculation();
-        if (!preparing && !running.is() && intents.empty())
+        if (!preparing && !commit && !running.is() && intents.empty())
             for (const auto& entry : viewports)
                 for (const auto& key : entry.second.adjacent)
                     if (cost(key) <= spare && !cache.contains(key))
@@ -769,7 +913,7 @@ struct PdfFastDocument::Impl : public SfxListener
                     add(key, true);
                 }
         }
-        if (!preparing && !running.is() && intents.empty())
+        if (!preparing && !commit && !running.is() && intents.empty())
             for (const auto& entry : viewports)
                 if (!entry.second.zoom.pending(now))
                     for (const auto& key : entry.second.adjacentSharp)
@@ -789,7 +933,7 @@ struct PdfFastDocument::Impl : public SfxListener
 
 IMPL_LINK_NOARG(PdfFastDocument::Impl, ReadMetadata, Timer*, void)
 {
-    if (preparing || running.is() || !intents.empty() || !session->idle())
+    if (preparing || commit || running.is() || !intents.empty() || !session->idle())
         return; // Delivery restarts the idle after interactive work.
     // Only visible pages get their links and annotations during interaction.
     for (const auto & [ device, view ] : devices)
@@ -1163,6 +1307,9 @@ void PdfFastDocument::PrepareCurrentPage(SdrView& view)
     const auto* pageView = view.GetSdrPageView();
     if (!pageView || pageView->GetPage()->IsMasterPage())
         return;
+    // Synchronous barrier: a suspended incremental commit is finished here
+    // rather than raced by a second replay of the same page.
+    m_impl->finishCommitNow();
     m_impl->preparePage(*pageView->GetPage(), &view);
 }
 
@@ -1215,9 +1362,11 @@ void PdfFastDocument::RequestCurrentPage(SdrView& view, const Link<bool, void>& 
     auto* entry = impl.findPage(*pageView->GetPage());
     if (!entry || entry->prepared)
         return;
-    entry->failed = false; // An explicit revisit/edit action is a retry.
-    // Navigation requests stay dormant (Waiting) until input settles; only an
-    // explicit edit action blocks the page and starts conversion right away.
+    entry->failed = false; // Revisiting the page is a retry.
+    // Navigation keeps the page in its read-only preview (Waiting, no wait
+    // cursor); an explicit edit action blocks it (Preparing). Both start
+    // conversion after the same short debounce, and the replay abandons
+    // itself as soon as input arrives, so browsing never waits for it.
     impl.setGate(view, settle ? EditState::Waiting : EditState::Preparing);
     impl.intents[&view] = { entry->original, Clock::now() + REQUEST_DEBOUNCE, settle };
     // Remove stale high-resolution PDF work immediately. The conversion
@@ -1251,6 +1400,7 @@ void PdfFastDocument::ForgetView(const SdrView& view)
     {
         impl.prefetchedEdits.clear();
         impl.prefetchAttempted.clear();
+        impl.dropStagedResult();
         if (impl.runningPrefetch)
             impl.importer->cancel();
     }
@@ -1259,6 +1409,12 @@ void PdfFastDocument::ForgetView(const SdrView& view)
 
 bool PdfFastDocument::Impl::processEdits()
 {
+    // The private replay pumps the event loop while this thread is busy, so a
+    // nested call (Deliver timer, EditCompleted) can arrive mid-staging. It
+    // must not advance or abort the commit the outer frame is still building;
+    // this is deferred until staging has finished and rescheduled then.
+    if (preparing)
+        return true;
     // View destruction unregisters synchronously. Never retain page pointers in
     // jobs: the original object's current model membership is authoritative.
     for (auto it = intents.begin(); it != intents.end();)
@@ -1274,6 +1430,25 @@ bool PdfFastDocument::Impl::processEdits()
         }
         else
             ++it;
+    }
+    // A suspended incremental commit is advanced first; slices are bounded and
+    // pause whenever input arrives, so flips never wait for the whole replay.
+    if (commit)
+    {
+        // A request for a different page wins over the partially inserted one,
+        // navigation included: the user is already looking elsewhere, so the
+        // remaining slices must not delay that page's conversion. Its
+        // placeholder is still complete, so dropping the staged objects keeps
+        // the page valid and editing responsive.
+        const bool superseded = std::any_of(intents.begin(), intents.end(), [&](const auto& intent) {
+            return intent.second.original != commit->original;
+        });
+        if (!superseded)
+        {
+            advanceCommit();
+            return true;
+        }
+        abortCommit(false, "superseded");
     }
     for (auto it = prefetchedEdits.begin(); it != prefetchedEdits.end();)
     {
@@ -1291,35 +1466,26 @@ bool PdfFastDocument::Impl::processEdits()
         }
         if (wanted)
         {
-            const bool settle
-                = std::any_of(intents.begin(), intents.end(), [&](const auto& intent) {
-                      return intent.second.original == it->original && intent.second.settle;
-                  });
-            if (inputQuiet(settle ? NAVIGATION_SETTLE : COMMIT_QUIET))
+            if (inputQuiet(COMMIT_QUIET))
             {
                 auto cached = std::move(*it);
                 it = prefetchedEdits.erase(it);
-                SAL_INFO("pdffast", "native-edit-prefetch-hit page="
-                                        << cached.result.page << " settle=" << settle);
-                // The dormant navigation gate becomes busy only now, when the
-                // commit (and its UI-thread cost) actually starts.
-                if (settle)
-                    for (const auto& intent : intents)
-                        if (intent.second.original == cached.original)
-                            setGate(*intent.first, PdfFastDocument::EditState::Preparing);
-                const bool ready = preparePage(*page, nullptr, &cached.result);
-                for (auto intent = intents.begin(); intent != intents.end();)
-                    if (intent->second.original == cached.original)
-                    {
-                        setGate(*intent->first, ready ? PdfFastDocument::EditState::Ready
-                                                      : PdfFastDocument::EditState::Failed);
-                        intent = intents.erase(intent);
-                    }
-                    else
-                        ++intent;
-                cached.original->ActionChanged();
+                SAL_INFO("pdffast", "native-edit-prefetch-hit page=" << cached.result.page);
+                // A speculative transport may still run for another page; it
+                // must not hold the helper while this page commits.
+                if (running.is() && running != cached.original)
+                    importer->cancel();
+                startCommit(cached.original, cached.result);
+                if (stagingInterrupted)
+                {
+                    // Input abandoned the replay. The spool is detached, so no
+                    // lease is held; the intent replays it once input settles.
+                    dropStagedResult();
+                    stagedResult = std::move(cached.result);
+                    stagedLease = false;
+                }
                 schedule();
-                continue;
+                return true;
             }
         }
         ++it;
@@ -1336,12 +1502,8 @@ bool PdfFastDocument::Impl::processEdits()
             importer->cancel();
         if (!pendingEditResult)
             pendingEditResult = importer->takeResult();
-        const bool settle
-            = wanted && std::any_of(intents.begin(), intents.end(), [&](const auto& intent) {
-                  return intent.second.original == running && intent.second.settle;
-              });
         if (pendingEditResult && wanted && pendingEditResult->success
-            && !inputQuiet(settle ? NAVIGATION_SETTLE : COMMIT_QUIET))
+            && !inputQuiet(COMMIT_QUIET))
             return true;
         if (pendingEditResult)
         {
@@ -1349,10 +1511,16 @@ bool PdfFastDocument::Impl::processEdits()
             pendingEditResult.reset();
             auto original = running;
             running.clear();
-            comphelper::ScopeGuard release([&] { importer->release(); });
+            // The helper lease is released when the result is consumed, except
+            // when input abandons the replay: then the spool is retained so
+            // the retry does not need another transport round trip.
+            bool keepLease = false;
+            comphelper::ScopeGuard release([&] {
+                if (!keepLease)
+                    importer->release();
+            });
             auto* page = original->getSdrPageFromSdrObject();
             const auto link = original->GetGraphic().GetSharedGfxLink();
-            bool ready = false;
             if (runningPrefetch && !wanted && editMode && intents.empty() && page
                 && &page->getSdrModelFromSdrPage() == &doc && result->success && result->storage)
             {
@@ -1371,25 +1539,27 @@ bool PdfFastDocument::Impl::processEdits()
                 if (!result->success)
                     SAL_WARN("pdffast", "Native page transport failed, using Draw fallback: "
                                               << result->error);
-                // Promote the dormant navigation gate only now: the wait
-                // cursor must track the actual UI-thread commit, not the
-                // quiet period before it.
-                if (settle)
-                    for (const auto& intent : intents)
-                        if (intent.second.original == original)
-                            setGate(*intent.first, PdfFastDocument::EditState::Preparing);
-                ready = preparePage(*page, nullptr, &*result);
-                if (auto* entry = findPage(*page))
-                    entry->failed = !ready;
+                // A navigation gate stays Waiting until startCommit promotes
+                // it: the wait cursor must track the actual UI-thread commit,
+                // not the background replay.
+                startCommit(original, *result);
+                if (stagingInterrupted)
+                {
+                    dropStagedResult();
+                    stagedResult = std::move(*result);
+                    stagedLease = true;
+                    keepLease = true;
+                }
                 original->ActionChanged();
+                schedule();
+                return true;
             }
             // Complete/fail only this intent; edits made elsewhere while the
             // worker ran keep their undo history and current modified state.
             for (auto it = intents.begin(); it != intents.end();)
                 if (it->second.original == original)
                 {
-                    setGate(*it->first, ready ? PdfFastDocument::EditState::Ready
-                                              : PdfFastDocument::EditState::Failed);
+                    setGate(*it->first, PdfFastDocument::EditState::Failed);
                     it = intents.erase(it);
                 }
                 else
@@ -1400,33 +1570,69 @@ bool PdfFastDocument::Impl::processEdits()
         }
     }
     if (!running.is())
+    {
+        // Drop a retained replay source that no pending intent targets any
+        // more, releasing its helper lease so a fresh transport can start.
+        if (stagedResult
+            && std::none_of(intents.begin(), intents.end(), [&](const auto& intent) {
+                   return intent.second.original->GetGraphic().getPageNumber()
+                          == stagedResult->page;
+               }))
+            dropStagedResult();
         for (const auto& entry : intents)
-            // A navigation intent must not even start its transport while the
-            // user is still flipping pages: nothing PDF-related runs during
-            // interaction, only after the view settles.
+        {
+            const auto original = entry.second.original;
+            const int page = original->GetGraphic().getPageNumber();
+            if (stagedResult && stagedResult->page == page)
+            {
+                // The helper already produced this page; replay the retained
+                // spool instead of asking for another transport round trip.
+                // Wait for quiet so the retry is not interrupted again at once.
+                if (inputQuiet(COMMIT_QUIET))
+                {
+                    auto result = std::move(*stagedResult);
+                    stagedResult.reset();
+                    stagingInterrupted = false;
+                    startCommit(original, result);
+                    if (stagingInterrupted)
+                    {
+                        // Keep the spool for the next attempt; a held lease
+                        // (stagedLease) stays held too.
+                        stagedResult = std::move(result);
+                    }
+                    else if (stagedLease)
+                    {
+                        stagedLease = false;
+                        importer->release();
+                    }
+                    schedule();
+                    return true;
+                }
+                continue;
+            }
             if (Clock::now() >= entry.second.due
-                && (!entry.second.settle || inputQuiet(NAVIGATION_SETTLE))
                 && std::none_of(prefetchedEdits.begin(), prefetchedEdits.end(),
                                 [&](const auto& cached) {
                                     return cached.original == entry.second.original;
                                 }))
             {
-                const int page = entry.second.original->GetGraphic().getPageNumber();
                 if (importer->request(page))
                 {
-                    running = entry.second.original;
+                    running = original;
                     runningPage = page;
                     runningPrefetch = false;
                 }
                 break;
             }
+        }
+    }
     const bool background = prefetchEdits();
     return running.is() || !intents.empty() || background;
 }
 
 bool PdfFastDocument::Impl::prefetchEdits()
 {
-    if (!editMode || gates.empty() || preparing
+    if (!editMode || gates.empty() || preparing || commit
         || (doc.GetDocSh() && (doc.GetDocSh()->IsReadOnly() || doc.GetDocSh()->IsReadOnlyUI())))
         return false;
     if (running.is() || !intents.empty())
@@ -1505,6 +1711,9 @@ IMPL_LINK_NOARG(PdfFastDocument::Impl, EditCompleted, void*, void)
 
 bool PdfFastDocument::PrepareForSave()
 {
+    // An unfinished incremental commit must be part of the saved document;
+    // complete it before the full synchronous conversion below.
+    m_impl->finishCommitNow();
     comphelper::ScopeGuard refresh([&] {
         for (const auto& gate : m_impl->gates)
         {
@@ -1518,6 +1727,7 @@ bool PdfFastDocument::PrepareForSave()
     });
     m_impl->intents.clear();
     m_impl->prefetchedEdits.clear();
+    m_impl->dropStagedResult();
     if (!EnsureAllMetadata())
         return false;
     // A regular ODG must remain fully editable without this PDF-only adapter.
@@ -1537,6 +1747,8 @@ const std::shared_ptr<const std::vector<sal_uInt8>>& PdfFastDocument::GetSourceD
 const SdrGrafObj* PdfFastDocument::GetUnchangedPageGraphic(const SdrPage& page,
                                                            const SdrPageView& view)
 {
+    // Export sees a complete page: finish a suspended commit first.
+    m_impl->finishCommitNow();
     // Notes still need native Draw annotation output. Unchanged links are copied
     // once by the existing external-page writer; shape replay is suppressed.
     const auto* sdPage = dynamic_cast<const SdPage*>(&page);
@@ -1689,8 +1901,409 @@ PdfFastDocument::GetPagePreview(const SdrPage& page, const Size& size, Bitmap& b
     return PreviewResult::Pending;
 }
 
+void PdfFastDocument::Impl::completeCommitViews(const rtl::Reference<SdrGrafObj>& original,
+                                                sal_uInt64 pageId, bool ready)
+{
+    for (auto it = intents.begin(); it != intents.end();)
+        if (it->second.original == original)
+        {
+            setGate(*it->first, ready ? PdfFastDocument::EditState::Ready
+                                      : PdfFastDocument::EditState::Failed);
+            it = intents.erase(it);
+        }
+        else
+            ++it;
+    // Views that navigated onto the committing page after its intent was
+    // dropped still hold a read-only gate; release them with the page.
+    for (auto & [ view, gate ] : gates)
+    {
+        auto* pageView = view->GetSdrPageView();
+        if (pageView && pageView->GetPage()->GetUniqueID() == pageId
+            && gate.state != PdfFastDocument::EditState::Ready)
+            setGate(*view, ready ? PdfFastDocument::EditState::Ready
+                                 : PdfFastDocument::EditState::Failed);
+    }
+}
+
+bool PdfFastDocument::Impl::startCommit(const rtl::Reference<SdrGrafObj>& original,
+                                        const pdffast::NativeImport::Result& result)
+{
+    stagingInterrupted = false;
+    if (commit || !original.is())
+        return false;
+    auto* page = original->getSdrPageFromSdrObject();
+    if (!page || &page->getSdrModelFromSdrPage() != &doc || page->IsMasterPage())
+    {
+        completeCommitViews(original, 0, false);
+        return false;
+    }
+    auto* entry = findPage(*page);
+    if (!entry || entry->prepared)
+    {
+        completeCommitViews(original, entry ? entry->pageId : page->GetUniqueID(), true);
+        return false;
+    }
+    if (!dynamic_cast<SdPage*>(page))
+    {
+        entry->failed = true;
+        completeCommitViews(original, entry->pageId, false);
+        return false;
+    }
+    const auto started = Clock::now();
+    const auto metadataStart = Clock::now();
+    const bool metadataOk = ensureMetadata(*page);
+    const auto metadataUs
+        = std::chrono::duration_cast<std::chrono::microseconds>(Clock::now() - metadataStart)
+              .count();
+    if (!metadataOk)
+    {
+        entry->failed = true;
+        completeCommitViews(original, entry->pageId, false);
+        SAL_WARN("pdffast", "Native page conversion skipped, metadata failed: page="
+                                << original->GetGraphic().getPageNumber());
+        return false;
+    }
+    // Staging (filter replay + clone) still runs in one UI-thread turn, but
+    // the replay checks for pending input and abandons itself within a few
+    // milliseconds; object insertion is sliced between event-loop turns.
+    const bool wasPreparing = preparing;
+    preparing = true;
+    comphelper::ScopeGuard resetPreparing([&] { preparing = wasPreparing; });
+    const bool changed = doc.IsChanged();
+    const bool modified = doc.GetDocSh() && doc.GetDocSh()->IsModified();
+    const bool undo = doc.IsUndoEnabled();
+    comphelper::ScopeGuard restore([&] {
+        doc.EnableUndo(undo);
+        doc.SetChanged(changed);
+        if (auto* shell = doc.GetDocSh())
+            shell->SetModified(modified);
+    });
+    doc.EnableUndo(false);
+    // Catch silent changes to raw pages before capturing the editable baseline.
+    if (page->GetObjCount() != 1 || primitives(*original) != entry->sourceContent)
+        markDirty(*entry);
+    const auto originalRect = original->GetLogicRect();
+    SAL_INFO("pdffast",
+             "native-edit-begin page="
+                 << page->GetPageNum() << " pdf_page=" << original->GetGraphic().getPageNumber()
+                 << " x=" << originalRect.Left() << " y=" << originalRect.Top()
+                 << " width=" << originalRect.GetWidth() << " height=" << originalRect.GetHeight());
+    // Other windows and pages retain their own raster demand during import.
+    for (auto viewport = viewports.begin(); viewport != viewports.end();)
+        if ((!viewport->second.native
+             && viewport->second.preview.page == original->GetGraphic().getPageNumber())
+            || std::any_of(viewport->second.adjacent.begin(), viewport->second.adjacent.end(),
+                           [&](const TileKey& key) {
+                               return key.page == original->GetGraphic().getPageNumber();
+                           }))
+            viewport = viewports.erase(viewport);
+        else
+            ++viewport;
+    schedule();
+    commit.emplace();
+    commit->original = original;
+    commit->pageId = entry->pageId;
+    commit->entry = entry;
+    commit->originalPosition = original->GetOrdNum();
+    commit->metadataUs = metadataUs;
+    commit->started = started;
+    const auto stagingStart = Clock::now();
+    bool staged = false;
+    try
+    {
+        commit->objects = stagePageObjects(original, result, true);
+        staged = true;
+    }
+    catch (const StagingInterrupted&)
+    {
+        stagingInterrupted = true;
+    }
+    catch (const css::uno::Exception& error)
+    {
+        SAL_WARN("pdffast", "Native page staging failed: " << error.Message);
+    }
+    catch (const std::exception& error)
+    {
+        SAL_WARN("pdffast", "Native page staging failed: " << error.what());
+    }
+    commit->stagingUs
+        = std::chrono::duration_cast<std::chrono::microseconds>(Clock::now() - stagingStart)
+              .count();
+    if (!staged)
+    {
+        commit.reset();
+        if (stagingInterrupted)
+        {
+            // User input arrived while the page was being replayed. Nothing is
+            // broken: stay in the read-only preview without a wait cursor and
+            // let the intent retry after the debounce. The transport result may
+            // have been retained, so the retry need not replan everything.
+            for (auto & [ view, intent ] : intents)
+                if (intent.original == original)
+                {
+                    intent.due = Clock::now() + REQUEST_DEBOUNCE;
+                    setGate(*view, PdfFastDocument::EditState::Waiting);
+                }
+            SAL_INFO("pdffast", "native-edit-interrupt pdf_page="
+                                    << original->GetGraphic().getPageNumber());
+            schedule();
+            return false;
+        }
+        entry->failed = true;
+        completeCommitViews(original, entry->pageId, false);
+        schedule();
+        return false;
+    }
+    // The staging page is gone once staging returns; rebind presentation
+    // callbacks now instead of at the end, so no suspended slice ever holds a
+    // dangling callback.
+    const auto rebindStart = Clock::now();
+    if (auto* stagedTarget = dynamic_cast<SdPage*>(page))
+        for (const auto& object : commit->objects)
+        {
+            SdrObjListIter children(*object, SdrIterMode::DeepWithGroups);
+            while (children.IsMore())
+            {
+                auto* child = children.Next();
+                if (child->GetUserCall() && child->GetUserCall() != stagedTarget)
+                    child->SetUserCall(stagedTarget);
+            }
+        }
+    SAL_INFO("pdffast", "native-edit-rebind pdf_page="
+                            << original->GetGraphic().getPageNumber()
+                            << " objects=" << commit->objects.size() << " rebind_us="
+                            << std::chrono::duration_cast<std::chrono::microseconds>(
+                                   Clock::now() - rebindStart)
+                                   .count());
+    // Promote a Waiting navigation gate only now: the wait cursor must track
+    // the actual UI-thread commit, not the background replay.
+    for (auto & [ view, gate ] : gates)
+    {
+        auto* pageView = view->GetSdrPageView();
+        if (pageView && pageView->GetPage()->GetUniqueID() == commit->pageId
+            && gate.state != PdfFastDocument::EditState::Preparing)
+            setGate(*view, PdfFastDocument::EditState::Preparing);
+    }
+    // The first slice runs now; input was quiet when the caller decided to
+    // commit, and later slices pause as soon as the user interacts again.
+    advanceCommit();
+    return true;
+}
+
+bool PdfFastDocument::Impl::insertCommitSlice(Commit& current, bool unlimited)
+{
+    auto* page = current.original.is() ? current.original->getSdrPageFromSdrObject() : nullptr;
+    if (!page || page->GetUniqueID() != current.pageId
+        || &page->getSdrModelFromSdrPage() != &doc)
+        return false;
+    if (current.next >= current.objects.size())
+        return true;
+    const bool wasPreparing = preparing;
+    preparing = true;
+    comphelper::ScopeGuard resetPreparing([&] { preparing = wasPreparing; });
+    const bool changed = doc.IsChanged();
+    const bool modified = doc.GetDocSh() && doc.GetDocSh()->IsModified();
+    const bool undo = doc.IsUndoEnabled();
+    const bool wasLocked = doc.isLocked();
+    comphelper::ScopeGuard restore([&] {
+        const auto unlockStart = Clock::now();
+        doc.setLock(wasLocked);
+        current.unlockUs
+            += sal_uInt64(std::chrono::duration_cast<std::chrono::microseconds>(
+                              Clock::now() - unlockStart)
+                              .count());
+        doc.EnableUndo(undo);
+        doc.SetChanged(changed);
+        if (auto* shell = doc.GetDocSh())
+            shell->SetModified(modified);
+    });
+    doc.EnableUndo(false);
+    doc.setLock(true);
+    const auto started = Clock::now();
+    try
+    {
+        while (current.next < current.objects.size())
+        {
+            // Insert below the opaque PDF placeholder: the visible page stays
+            // the complete raster preview until the final one-turn swap.
+            page->InsertObject(current.objects[current.next].get(),
+                               current.originalPosition + current.next);
+            ++current.next;
+            if (!unlimited && Clock::now() - started >= COMMIT_SLICE)
+                break;
+        }
+    }
+    catch (const css::uno::Exception& error)
+    {
+        SAL_WARN("pdffast", "Native page insert failed: " << error.Message);
+        return false;
+    }
+    catch (const std::exception& error)
+    {
+        SAL_WARN("pdffast", "Native page insert failed: " << error.what());
+        return false;
+    }
+    const auto elapsed = sal_uInt64(
+        std::chrono::duration_cast<std::chrono::microseconds>(Clock::now() - started).count());
+    current.insertUs += elapsed;
+    current.maxSliceUs = std::max(current.maxSliceUs, elapsed);
+    ++current.slices;
+    return true;
+}
+
+void PdfFastDocument::Impl::finalizeCommit()
+{
+    if (!commit)
+        return;
+    auto& current = *commit;
+    auto* page = current.original.is() ? current.original->getSdrPageFromSdrObject() : nullptr;
+    if (!page || page->GetUniqueID() != current.pageId
+        || &page->getSdrModelFromSdrPage() != &doc)
+    {
+        abortCommit(true, "page-gone");
+        return;
+    }
+    const bool wasPreparing = preparing;
+    preparing = true;
+    comphelper::ScopeGuard resetPreparing([&] { preparing = wasPreparing; });
+    const bool changed = doc.IsChanged();
+    const bool modified = doc.GetDocSh() && doc.GetDocSh()->IsModified();
+    const bool undo = doc.IsUndoEnabled();
+    comphelper::ScopeGuard restore([&] {
+        doc.EnableUndo(undo);
+        doc.SetChanged(changed);
+        if (auto* shell = doc.GetDocSh())
+            shell->SetModified(modified);
+    });
+    doc.EnableUndo(false);
+    // The one-turn reveal: the staged objects are complete and already sit
+    // below the placeholder, so removing the raster handout is the swap. The
+    // removal broadcasts like preparePage's; never suppress it with setLock.
+    page->RemoveObject(current.original->GetOrdNum());
+    current.entry->prepared = true; // A blank native page is a valid editable page too.
+    const auto rememberStart = Clock::now();
+    rememberContent(*current.entry, *page);
+    const auto rememberUs
+        = std::chrono::duration_cast<std::chrono::microseconds>(Clock::now() - rememberStart)
+              .count();
+    // Page geometry, background and annotations already belong to the live
+    // Draw document. Materialization replaces only the source graphic;
+    // importing must preserve page-format changes and edits made elsewhere.
+    page->GetViewContact().ActionChanged();
+    const auto original = current.original;
+    const auto pageId = current.pageId;
+    const auto objectCount = page->GetObjCount();
+    SAL_INFO("pdffast",
+             "native-edit-prepare page="
+                 << page->GetPageNum() << " success=1 objects=" << objectCount
+                 << " metadata_us=" << current.metadataUs << " staging_us=" << current.stagingUs
+                 << " insert_us=" << current.insertUs << " unlock_us=" << current.unlockUs
+                 << " slices=" << current.slices << " max_slice_us=" << current.maxSliceUs
+                 << " remember_us=" << rememberUs
+                 << " total_us="
+                 << std::chrono::duration_cast<std::chrono::microseconds>(Clock::now()
+                                                                          - current.started)
+                        .count());
+    commit.reset();
+    completeCommitViews(original, pageId, true);
+    schedule();
+}
+
+void PdfFastDocument::Impl::abortCommit(bool failure, const char* reason)
+{
+    if (!commit)
+        return;
+    auto current = std::move(*commit);
+    commit.reset();
+    auto* page = current.original.is() ? current.original->getSdrPageFromSdrObject() : nullptr;
+    const bool valid = page && page->GetUniqueID() == current.pageId
+                       && &page->getSdrModelFromSdrPage() == &doc;
+    if (current.next)
+    {
+        // The placeholder was never removed: drop the partially inserted
+        // objects and leave the page as it was before the commit.
+        const bool wasPreparing = preparing;
+        preparing = true;
+        comphelper::ScopeGuard resetPreparing([&] { preparing = wasPreparing; });
+        const bool changed = doc.IsChanged();
+        const bool modified = doc.GetDocSh() && doc.GetDocSh()->IsModified();
+        const bool undo = doc.IsUndoEnabled();
+        comphelper::ScopeGuard restore([&] {
+            doc.EnableUndo(undo);
+            doc.SetChanged(changed);
+            if (auto* shell = doc.GetDocSh())
+                shell->SetModified(modified);
+        });
+        doc.EnableUndo(false);
+        if (valid)
+        {
+            for (auto object = current.objects.rbegin(); object != current.objects.rend();
+                 ++object)
+                if ((*object)->getSdrPageFromSdrObject() == page)
+                    page->NbcRemoveObject((*object)->GetOrdNum());
+            page->GetViewContact().ActionChanged();
+        }
+        else
+        {
+            // The page died with the staged objects it contained; anything it
+            // never received must not keep a callback into it.
+            for (const auto& object : current.objects)
+                if (object->GetUserCall())
+                    object->SetUserCall(nullptr);
+        }
+    }
+    if (current.entry && failure)
+        current.entry->failed = true;
+    SAL_INFO("pdffast", "native-edit-abort pdf_page="
+                            << current.original->GetGraphic().getPageNumber()
+                            << " inserted=" << current.next << " failed=" << failure
+                            << " reason=" << reason);
+    if (failure)
+        completeCommitViews(current.original, current.pageId, false);
+    schedule();
+}
+
+void PdfFastDocument::Impl::finishCommitNow()
+{
+    if (!commit)
+        return;
+    if (!insertCommitSlice(*commit, true))
+    {
+        abortCommit(true, "sync-insert-failed");
+        return;
+    }
+    finalizeCommit();
+}
+
+bool PdfFastDocument::Impl::advanceCommit()
+{
+    if (!commit)
+        return false;
+    auto& current = *commit;
+    auto* page = current.original.is() ? current.original->getSdrPageFromSdrObject() : nullptr;
+    // The page may have been deleted by the slide sorter while the commit was
+    // suspended between slices; never touch a stale page pointer.
+    if (!page || page->GetUniqueID() != current.pageId
+        || &page->getSdrModelFromSdrPage() != &doc)
+    {
+        abortCommit(true, "page-gone");
+        return false;
+    }
+    if (current.next < current.objects.size() && !inputQuiet(COMMIT_SLICE))
+        return true; // Input has priority; the next poll tick resumes.
+    if (!insertCommitSlice(current, false))
+    {
+        abortCommit(true, "insert-failed");
+        return false;
+    }
+    if (current.next == current.objects.size())
+        finalizeCommit();
+    return true;
+}
+
 std::vector<rtl::Reference<SdrObject>> PdfFastDocument::Impl::stagePageObjects(
-    const rtl::Reference<SdrGrafObj>& original, const pdffast::NativeImport::Result& result)
+    const rtl::Reference<SdrGrafObj>& original, const pdffast::NativeImport::Result& result,
+    bool interruptible)
 {
     const bool changed = doc.IsChanged();
     const bool modified = doc.GetDocSh() && doc.GetDocSh()->IsModified();
@@ -1702,13 +2315,20 @@ std::vector<rtl::Reference<SdrObject>> PdfFastDocument::Impl::stagePageObjects(
             shell->SetModified(modified);
     });
     doc.EnableUndo(false);
-    auto staged = importEditablePage(original->GetGraphic(), result);
+    auto staged = importEditablePage(original->GetGraphic(), result, interruptible);
     if (!staged)
         throw std::runtime_error("Missing staged PDF page");
+    const auto unlinkStart = Clock::now();
     std::vector<rtl::Reference<SdrObject>> objects;
     while (staged->GetObjCount())
         objects.push_back(staged->NbcRemoveObject(staged->GetObjCount() - 1));
     std::reverse(objects.begin(), objects.end());
+    SAL_INFO("pdffast", "native-edit-unlink pdf_page="
+                            << original->GetGraphic().getPageNumber()
+                            << " objects=" << objects.size() << " unlink_us="
+                            << std::chrono::duration_cast<std::chrono::microseconds>(
+                                   Clock::now() - unlinkStart)
+                                   .count());
     return objects;
 }
 
@@ -1731,6 +2351,8 @@ bool PdfFastDocument::Impl::preparePage(SdrPage& target, SdrView* view,
     {
         // Explicit save/tests retain a synchronous barrier. Normal navigation
         // uses RequestCurrentPage and never waits for helper work on the UI.
+        // A retained replay source holds the helper lease; release it first.
+        impl.dropStagedResult();
         if (impl.running.is())
         {
             impl.importer->cancel();
@@ -1802,8 +2424,10 @@ bool PdfFastDocument::Impl::preparePage(SdrPage& target, SdrView* view,
             throw std::runtime_error("Missing native Draw page");
         const auto originalPosition = it->original->GetOrdNum();
         const auto stagingStart = Clock::now();
+        // Synchronous barrier (save/tests): keep the replay atomic here so a
+        // stray mouse movement cannot abort a save or the public API.
         std::vector<rtl::Reference<SdrObject>> objects
-            = impl.stagePageObjects(it->original, *completed);
+            = impl.stagePageObjects(it->original, *completed, false);
         stagingUs = std::chrono::duration_cast<std::chrono::microseconds>(Clock::now() - stagingStart)
                         .count();
         bool committed = false;

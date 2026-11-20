@@ -464,8 +464,10 @@ private:
 
     /// return true if "Edit Hyperlink" in context menu should be disabled
     bool ShouldDisableEditHyperlink() const;
-    // `navigation` marks page changes while flipping pages: conversion stays
-    // dormant until the user settles, so scrolling is never blocked by it.
+    // `navigation` marks page changes while flipping pages: the page keeps its
+    // read-only preview (no wait cursor) while conversion runs. Either way the
+    // UI-thread replay abandons itself as soon as user input arrives, so a page
+    // flip is never blocked by it.
     void RequestPdfPage(bool navigation = false);
     OUString GetPdfStatusText() const;
 

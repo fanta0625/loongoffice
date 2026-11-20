@@ -1208,6 +1208,47 @@ CPPUNIT_TEST_FIXTURE(SdrPdfImportTest, testDeferredEditRequestTracksViewAndReadO
     CPPUNIT_ASSERT_EQUAL(undoCount, doc->GetSdrUndoManager()->GetUndoActionCount());
 }
 
+CPPUNIT_TEST_FIXTURE(SdrPdfImportTest, testNavigationConvertsWithoutExplicitEdit)
+{
+    EnvVarGuard preview("LO_IMPORT_USE_PDFIUM", "1");
+    loadFromFile(u"pdf/pdffast-native-pages.pdf");
+    auto* model = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(model);
+    auto* shell = model->GetDocShell();
+    auto* doc = shell->GetDoc();
+    CPPUNIT_ASSERT(sd::PdfFastDocument::Attach(*doc));
+    auto* fast = doc->GetPdfFastDocument();
+    shell->SetReadOnlyUI(false);
+    fast->ForgetView(*shell->GetViewShell()->GetDrawView());
+    SdrView view(*doc);
+    comphelper::ScopeGuard forget([&] { fast->ForgetView(view); });
+    auto* first = doc->GetSdPage(0, PageKind::Standard);
+    auto* second = doc->GetSdPage(1, PageKind::Standard);
+    rtl::Reference<SdrObject> firstOriginal = first->GetObj(0);
+    rtl::Reference<SdrObject> secondOriginal = second->GetObj(0);
+    auto pumpUntil = [&](auto condition) {
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(30);
+        while (!condition() && std::chrono::steady_clock::now() < deadline)
+        {
+            Application::Reschedule();
+            std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        }
+        CPPUNIT_ASSERT(condition());
+    };
+    view.ShowSdrPage(first);
+    fast->RequestCurrentPage(view);
+    pumpUntil([&] { return firstOriginal->getSdrPageFromSdrObject() != first; });
+    // A page change in edit mode converts without an explicit edit action, but
+    // the page stays a read-only preview (Waiting, no wait gate) until commit.
+    view.ShowSdrPage(second);
+    fast->RequestCurrentPage(view, {}, true);
+    CPPUNIT_ASSERT(fast->GetEditState(view) == sd::PdfFastDocument::EditState::Waiting);
+    CPPUNIT_ASSERT(view.GetSdrPageView()->IsReadOnly());
+    pumpUntil([&] { return secondOriginal->getSdrPageFromSdrObject() != second; });
+    CPPUNIT_ASSERT(fast->GetEditState(view) == sd::PdfFastDocument::EditState::Ready);
+    CPPUNIT_ASSERT(!view.GetSdrPageView()->IsReadOnly());
+}
+
 CPPUNIT_TEST_FIXTURE(SdrPdfImportTest, testAdjacentEditPrefetchDoesNotMaterializePages)
 {
     EnvVarGuard preview("LO_IMPORT_USE_PDFIUM", "1");

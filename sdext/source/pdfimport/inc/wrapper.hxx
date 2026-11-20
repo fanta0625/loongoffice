@@ -35,11 +35,19 @@ namespace com::sun::star {
 
 namespace pdfi
 {
+    // Cheap, non-dispatching peek: true when input or paint events are already
+    // queued or sitting in the display connection. Used to abandon a long
+    // UI-thread PDF replay so user input never waits for it.
+    bool inputPending();
+
     // Replay a completed native helper job on the UI thread. The caller owns
     // both immutable spool files until this function and PDFIProcessor::emit end.
+    // With interruptible set (private pdf-fast replay only), the command parse
+    // aborts as soon as inputPending() reports user activity.
     bool xpdf_ImportFromRecorded(const OUString& commands, const OUString& binary,
                                 const ContentSinkSharedPtr& sink,
-                                const css::uno::Reference<css::uno::XComponentContext>& context);
+                                const css::uno::Reference<css::uno::XComponentContext>& context,
+                                bool interruptible = false);
     bool xpdf_ImportFromFile( const OUString&                               rURL,
                               const ContentSinkSharedPtr&                        rSink,
                               const css::uno::Reference<
